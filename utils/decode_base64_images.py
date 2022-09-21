@@ -14,7 +14,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 def get_args():
     parser = ArgumentParser()
-    parser.add_argument('--input', type=str, default=r'E:\webqa\imgs.tsv')
+    parser.add_argument('--input', type=str, default=r'E:\webqa\imgs.tsv')  # 389750 images
     parser.add_argument('--output', type=str, default=r'E:\webqa\images')
     return parser.parse_args()
 
@@ -32,9 +32,9 @@ def main():
 
             try:
                 img = Image.open(BytesIO(base64.b64decode(img_base64)))
-                img.save(
-                    os.path.join(out_dir, f'{lineidx}.png')
-                )
+                outf = os.path.join(out_dir, f'{lineidx}.jpg')
+                if not os.path.exists(outf):
+                    img.convert('RGB').save(outf)
             except (OSError, ValueError) as e:
                 print(f'Cannot decode image {lineidx}: {e}')
 
