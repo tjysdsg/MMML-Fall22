@@ -47,7 +47,7 @@
 \begin{document}
 
     \twocolumn[
-        \icmltitle{WebQA Team 6, TBD}
+        \icmltitle{Visual Question Answering Using WebQA}
 
 % It is OKAY to include author information, even for blind
 % submissions: the style file will automatically remove it for you
@@ -65,13 +65,13 @@
         \icmlsetsymbol{equal}{*}
 
         \begin{icmlauthorlist}
-            \icmlauthor{Haofei Yu}{equal,cmu}
-            \icmlauthor{Jiyang Tang}{equal,cmu}
-            \icmlauthor{Ruiyi Wang}{equal,cmu}
-            \icmlauthor{Ziang Zhou}{equal,cmu}
+            \icmlauthor{Haofei Yu}{}
+            \icmlauthor{Jiyang Tang}{}
+            \icmlauthor{Ruiyi Wang}{}
+            \icmlauthor{Ziang Zhou}{}
         \end{icmlauthorlist}
 
-        \icmlaffiliation{cmu}{Team 6}
+% \icmlaffiliation{cmu}{xxx}
 
         \icmlkeywords{Machine Learning, ICML}
 
@@ -94,8 +94,9 @@
 
 
     \section{Introduction}\label{intro}
+    Visual Question Answering is an interesting task in the field of multimodal machine learning, achieving a rising number of datasets. Knowledge-based VQA is arousing more interest these days, expanding the simple question answering such as object identification and counting to the broader context of reasoning jointly from both images and languages. This line of research includes KB-VQA \citep{kbvqa} and OK-VQA \citep{okvqa}, which employed the image source as the query to search for supporting resources in the knowledge base. However, such QA systems ignored the knowledge present in the images and failed to treat the knowledge base as a multimodal collection of information. Following the nature of web search, \citet{webqa} proposed a novel dataset named WebQA, enabling multi-hop reasoning over multimodal resources that resembles the real-world scenarios of open-domain question answering. The failure of several start-of-the-art multimodal reasoning and text generation models on the WebQA dataset sheds light on possible directions such as retrieving images and text simultaneously before queries and integrating across the large information span of multimodal resources.
 
-    Remember to mention our github repository https://github.com/tjysdsg/MMML-Fall22
+    Given the challenges posed in WebQA, we are particularly interested in four research directions. The first is about evaluating and enhancing the robustness of VQA models. It is important to test the robustness of existing VQA models with adversarial examples, and we are also curious about whether a unified multimodal pre-trained model or a combination of multiple models is more robust to adversarial attack. The second is to refine the few-shot approach on the WebQA dataset. Given the failure of the GPT-3 model few-shot learning in this setting, we are interested in how to make better image context as input to GPT-3 as well as discovering a more powerful few-shot multimodal learner that better encodes visual information. The third focus is discovering the advantages of modality experts and stage-wise joint training. We would like to investigate under which architecture tackles the heavy information digestion and aggregation tasks best. And the last research question aims to enhance representation fusion with the cross-attention mechanism. It is worth experimenting with the cross-attention mechanism as an extra front-end module to early fuse the sequence. Our code will be presented at the GitHub repository: \url{https://github.com/tjysdsg/MMML-Fall22}
 
 
     \section{Experimental Setup}
@@ -105,7 +106,7 @@
     WebQA \cite{webqa} is a multimodal open-domain question answering benchmark.
     It focuses on the ability to extract and aggregate information from text and images.
     Its data is extracted from the internet and carefully designed so that the answers cannot be directly copied from
-    an existing questions or images, and that both the vision and text modalities must be used to correctly
+    existing questions or images, and that both the vision and text modalities must be used to correctly
     answer the questions.
 
     In most existing VQA benchmarks, a question is about a pair of images, thus making the image itself a query.
@@ -118,13 +119,13 @@
 
     Its task is formulated in two stages, source retrieval, and question answering.
     The model identifies the data sources to derive the answers during source retrieval.
-    This includes images and their descriptions.
+    This includes images and descriptions.
     During question answering, the model derives its answer from retrieved sources.
 
     \subsection{Data}
 
     WebQA's data is crowdsourced.
-    Each annotator are presented with six distinct but related images and they produce three question-answer pairs from these
+    Each annotator is presented with six distinct but related images and they produce three question-answer pairs from these
     images.
     Each pair requires one or two images out of the six to be answered correctly.
     Meanwhile, annotators are instructed to avoid questions that are simple facts, easily answered by a text-only or
@@ -141,7 +142,7 @@
     \begin{itemize}
         \item Question: Are both the National Museum of the American Indian in Washington, D.C., and the Xanadu House
         in Kissimmee, Florida the same color?
-        \item Standard Answer: Yes, both the National Museum of the American Indian in Washington, D.C., and the Xanadu
+        \item Standard Answer: Yes, both the National Museum of the American Indian in Washington, D.C. and the Xanadu
         House in Kissimmee, Florida is beige.
         \item Topic: Strange architecture
         \item Question Category: Yes/No
@@ -155,42 +156,103 @@
     Text input in the questions, answers, textual sources and image captions are tokenized by the \textbf{Bert-base-cased} \cite{bert} tokenizer.
 
     Images are represented with 100 regions produced by an object detection model.
-    The object detection model used is a variant of Faster RCNN with a ResNeXt-101 FPN backbone, the same one used in
+    The object detection model used is a variant of Faster RCNN with a ResNet-101 FPN backbone, the same one used in
     the VLP VQA task \cite{vlp}.
     The authors also experimented with the latest state-of-the-art image representations from VinVL \cite{VinVL}.
 
+    \subsection{Metrics}
+
+    Unlike traditional VQA \cite{antol2015vqa} datasets where answers are usually short, like words or phrases, WebQA is an open-domain question-answering problem that aims to generate complete sentences. Thus, fact-checking metrics will not be sufficient to evaluate the generated answer. Thus we plan to follow the metric settings of paper WebQA \cite{webqa}, selecting the metrics as fluency and accuracy. A novel metric in NLG tasks measures fluency, BARTScore \cite{yuan2021bartscore}, which has a few advancements: a) prioritizes semantic agreements b) tolerates operative word misplacement and short answers. c) penalize “extractive” generation, and d) be more sensitive to small but nontrivial word choices. According to WebQA, the fluency metric is shown in equation \ref{fluency}.
+
+    \begin{equation}
+        \label{fluency}
+        \textbf{FL}(c,R)=\max\left\{\min\left(1,\frac{BARTScore(r,c)}{BARTScore(r,r)}\right)\right\}_{r\in R}
+    \end{equation}
+
+    As for evaluating the outcome correctness, since no metric exists that can award the presence of critical entities, punish the presence of unrelated key entities and ignore related but trivial words, the WebQA authors decided to use a discretized strategy to measure the accuracy.
+    For straightforward questions categorized as color, shape, number, and yes/no questions, F1 scores will be chosen to represent the accuracy.
+    For open-ended questions, the keyword(s) in the standard answer is searched in the model output, and a recall score is calculated. See equation \ref{acc} for the discrete accuracy metric.
+
+    \begin{equation}
+        \label{acc}
+        \begin{cases}
+            \text{if }qc\in\text{[color,shape,number,Y/N]: } & F_1\\
+            \text{otherwise: } & \text{Recall}
+        \end{cases}
+    \end{equation}
+
+    Finally, the overall score measuring the generation quality of answers to questions is the average combined score across the testing samples.
+    The combined score is the multiplication of fluency and accuracy.
+
     \subsection{Baselines}
 
-    Baselines
+    There are two baseline setups for this dataset, a fine-tuned visual-language transformer, and a few-shot setup. In the first baseline, WebQA obtains textual embeddings from the \textbf{Bert-base-cased} \cite{bert} tokenizer and visual embeddings from 100 predicted regions using a Fast RCNN variant.
+    Then the two features are combined into a single sequence and fed into the encoder-decoder transformer model.
+    In the source retrieval stage, the model processes one candidate image and relevant text during each pass.
+    The sequence starts with a [CLS] token, followed by regions features, a [SEP] token, a list of word embeddings extracted from question text, and a final [STOP] token \cite{vlp}. And the output is the probability of selecting this candidate as a correct information source.
+    During question answering, the input sequence is similar except that the features are from the candidates selected in the source retrieval stage. Standard Masked Language Modeling \cite{bert} is used to train the model so we can decode the final answer by repeatedly adding [MASK] token to the end of the current output and performing bean searching.
 
-    \subsection{Results}
-
-    Metrics + results
+    The few-shot setup contains two stages: a zero-shot full-scale retrieval and a few-shot QA with GPT3 prompting \cite{PICa}. In the first stage, they performed both sparse \cite{bm25} and dense retrieval \cite{clip} to retrieve with better efficiency. They employed CLIP in the latter method to encode all image and text sources and questions and rank all sources by question-source similarity. In the second stage, they crafted two kinds of prefixes for image- and text-based sources and used GPT-3 to prompt answers to the questions.
 
 
     \section{Related Work}
 
-    \subsection{Multimodal Datasets}
+    \subsection{Multimodal QA Datasets}
+    Large quantities of multimodal datasets focus on Question Answering task. Different datasets, apart from the original VQA v1 \citep{antol2015vqa} and VQA v2 \citep{DBLP:journals/corr/GoyalKSBP16} dataset, focus on various aspects of this task and define various extended forms of visual question answering task. \par
 
-    \subsection{Pretraining Methods}
+    One line of research includes \citet{https://doi.org/10.48550/arxiv.2106.00245} and \citet{https://doi.org/10.48550/arxiv.2106.02280}. Such multimodal datasets are collected with Human-And-Model-in-the-Loop for evaluating the robustness of state-of-the-art VQA systems. The motivation of such datasets is to find out whether these models with relatively good performance are robust when encountering examples in the wild. SOTA VQA models are easily attacked by data collected with non-expert annotators.\par
 
-    \subsection{VQA}
+    Another line of research lies in extending the bimodal datasets to datasets that include three distinct modalities: text, images, and tables. With information from multiple modalities, such Question Answering datasets are considered to be more challenging and more sophisticated. MANYMODALQA \citep{DBLP:journals/corr/abs-2001-08034} collects data by scraping Wikipedia and
+    then utilize crowdsourcing to collect question-answer pairs. The questions in MANYMODALQA are ambiguous, in that the modality that contains the answer is not easily determined based solely on the question. \citet{chen-etal-2020-hybridqa} proposed HybridQA, a dataset that requires reasoning over tabular and textual data to improve the weakness of MANYMODALQA that it does not require integrating information across modalities. Another similar dataset following this research line is MULTIMODALQA(MMQA) \citep{DBLP:journals/corr/abs-2104-06039}, its question requires the model to do cross-modality reasoning and visual inference to get correct answers.\par
+
+    Other datasets aim to enrich the form of multimodal QA and imitate the human answering process in real life. Such datasets including WebQA \citep{webqa} are regarded as defining a more generalized multimodal QA task. \citet{okvqa} proposed the OK-VQA dataset and extended VQA with external knowledge and reasoning, which means the images alone are not sufficient to answer the questions. Both VQA and WebQA are knowledge-seeking question answering, but OK-VQA takes images as part of the query rather than the knowledge resource. MIMOQA \citep{singh-etal-2021-mimoqa} curated from two existing datasets, MS-MACRO \citep{DBLP:journals/corr/NguyenRSGTMD16} and NaturalQuestions \citep{47761}. This dataset is considered to be the first to work on multimodal input multimodal output QA, which belongs to one type of ambiguously open-domain task. MIMOQA still uses different major encoders for images and text. They call it visual and textual streams while WebQA encodes information in a more integrated way.
+
+    \subsection{Multimodal Pre-Training}
+    For better fine-tuning performance in downstream multimodal tasks like multimodal QA and image caption, a lot of large-scale pre-trained models have been proposed.\par
+
+    The recent milestone work for multimodal pre-training is CLIP \citep{clip}. CLIP uses the dual-encoder architecture to separately encode the image and text to get their representation. The simple pre-training task
+    of predicting which caption goes with which image is an efficient and scalable way to learn SOTA
+    image representations from scratch. It is proven that natural language
+    can be used to reference learned visual concepts.\par
+
+    Instead of using dual-encoder for image and text, VLBERT \citep{DBLP:journals/corr/abs-1908-08530} and VLP \citep{vlp} use fusion-encoder architecture. Such an architecture requires the model to jointly encode all possible image-text pairs to compute similarity scores for retrieval tasks. VLP uses BERT-style Masked Language Modeling to learn the contextualized vision-language representations. It predicts the masked words or image regions based on their intra-modality or cross-modality relationships on large amounts of image-text pairs.\par
+
+    Another method that is different from the previously mentioned two research lines is using the Mixture-of-Experts architecture for multimodal pre-training. \citet{VLMO} proposed VLMO that jointly learns a dual encoder and a fusion encoder with a modular Transformer network. Pre-trained VLMO can be fine-tuned as a fusion encoder for vision-language classification tasks, or used as a dual encoder for efficient image-text retrieval. It is jointly learned with three pre-training tasks, namely image-text contrastive learning, image-text matching, and masked language modeling, and takes advantage of both dual encoders and fusion encoders to gain better performance against CLIP.
+
+    \subsection{Visual Question Answering}
+    Free-form and open-ended VQA arises at the intersection of computer vision and natural language processing \cite{antol2015vqa}. Many lines of VQA research confine the answer space to fixed vocabulary and very short responses and their main focus is visual object recognition. Simple tasks such as counting and simple detection are used to evaluate the AI, which does not acquire external knowledge and reasoning \citep{visual7w}. So it is more interesting and important to understand the domain knowledge in the text and images and how they affect the final decisions. A new line of research is knowledge-based VQA, which integrates a knowledge base and retrieval methods into the dataset \citep{https://doi.org/10.48550/arxiv.1809.01124, kbvqa}. KB-VQA \citep{kbvqa} takes a step further by reasoning the knowledge obtained, mainly detecting relevant content in the images and relating it to the knowledge base where the question sentence as the query runs over the combined information of images and knowledge base. Furthermore, OK-VQA \citep{okvqa} requires the VQA to perform reasoning using unstructured knowledge, that is to require a model to determine what knowledge is necessary to generate answers and what query to retrieve information from an outside knowledge base. Now, one of the newest trends of knowledge-based VQA is the WebQA \citep{webqa}, which follows the nature of web search and requires the model to determine what knowledge to obtain from both the visual and language resources.
 
 
     \section{Research Ideas}
 
+    \subsection{Using Efficient and Effective Fine-tuning Techniques for Pre-Trained Multimodal Model}
+    With large-scale pre-trained multimodal models like CLIP \citep{clip} and VLP \citep{vlp}, it is convenient for researchers to fine-tune their data on downstream tasks. \citet{DBLP:journals/corr/abs-2106-01561} points out that decoupling the knowledge memorizing process and the QA finetune process can force the model to recall relevant knowledge
+    when question answering. Moreover, in the world of natural language processing, efficient fine-tuning methods like adapters or prefix-tuning are also thoroughly studied. When it comes to multimodal domain QA, it is natural for us to think about what kind of better fine-tuning methods can be applied to the pre-trained multimodal models.\par
+
+    For example, when fine-tuning on downstream tasks like multimodal QA, we can modify the generation target from pure answer to answer and its related evidence. If the evidence in the form of text or image is recovered as an auxiliary task during generation, the knowledge gained at the pre-training stage might be able to awaken for better generation. Moreover, setting an auxiliary task for generation can make modality bias controlling available.\par
+
+    Moreover, when considering efficient fine-tuning methods used for multimodal finetuning. \citet{https://doi.org/10.48550/arxiv.2208.02532} points out that techniques like adapters can be also transferred and used in the multimodal field of research to improve performance using a few extra parameters. It would be interesting to do research on WebQA to check whether we can efficiently transfer knowledge from the pre-training stage to our downstream multimodal QA task.
+
+    \subsection{Refining the few-shot approach on WebQA benchmarking}
+
+    \citet{webqa} established baseline models based on both fine-tuned and one/few-shot settings. In the few-shot approach, they experimented on the PICa model, the best model on OK-VQA \citep{PICa}. Following a similar method in OK-VQA \citep{okvqa}, they transformed an image into three segments, a wikipedia description, a caption generated by Oscar+ \citep{VinVL}, and a list of tags generated by Oscar+, since GPT-3 does not accept visual representations inherently \citep{GPT3}. Possible reasons for the unsatisfying performance of PICa across all the question categories include the different nature between OK-VQA and WebQA (OK-VQA uses images only as queries while WebQA aims to acquire knowledge from images), less powerful context information generated from the images via VinVL, and the potential incompetence of GPT-3 as a few-shot multimodal learner on WebQA. Therefore, under this research question, we are particularly interested in refining the few-shot benchmark on WebQA by 1) transforming images into context sentences with different image-to-text models or concatenating the image segments with output from multiple image-to-text models, and 2) by discovering more powerful few-shot multimodal learners that are tailored to abundant visual information.
+
+    Before investigating how different visual context sentences affect the performance of GPT-3, it is worth conducting a comparison study that only feeds text resources to GPT-3 to find out how much visual information is active and utilized during question answering. If that is the case, then it is more important to utilize a model that attends to images for few-shot visual question answering. If the image-based context information is promising, then more descriptive and well-rounded image-to-text models rather than just generating captions can be tested to improve the performance of GPT-3. For example, image paragraph captioning \citep{image_paragraph} and image storytelling can give more descriptive results.
+
+    The second way of refining the few-shot approach is to apply a more powerful few-shot learner that encodes meaningful information in the images. PICa model abandons the use of visual encoders in traditional few-shot multimodal learning such as the Frozen language models \citep{frozen}. Recently, a new model named Flamingo is able to condition a frozen language model on visual representations \citep{Flamingo}. Basically, it works by interleaving the pre-trained blocks from the pure language model and the blocks trained from scratch using the output of the Perceiver Resampler as input. We are interested in applying the Flamingo model to the WebQA few-shot learning.
+
     \subsection{Advantages of Modality Experts and Stage-wise Joint Training}
 
     \cite{VLMO} claims to take the advantages of both fusion encoders and dual-encoders that it can create deep
-    interactions between modalities and their representations while being able to utilize the fast amount of text-only
+    interactions between modalities and their representations while being able to utilize a vast amount of text-only
     or image-only training data.
     The authors also proposed a stage-wise training method to train these modality experts.
-    However, the authors only tested this model on datasets such as VQA, NLVR2, and others.
+    However, the authors only tested this model on datasets such as VQA 2.0 \cite{antol2015vqa}, NLVR2 \cite{nlvr2}, and others.
     Compared to WebQA, they are relatively simpler and have a lower requirement of the ability to digest multiple
     sources of text or image information.
-    For example, the VQA problem is simplified into a classification problem with 3129 possible answers.
+    For example, the VQA problem is simplified into a classification problem with 3129 possible answers. And each question is paired with only two images.
 
-    Therefore, we would like to test fusion-encoders and modality experts on WebQA under the same
+    Therefore, we would like to test fusion encoders and modality experts on WebQA under the same
     circumstances to see which of the three architectures handles heavy information digestion and aggregation tasks the best.
     In other words, we would like to verify that modality experts perform better not because they could be trained on
     more data but because its architecture and pretraining method are inherently better in the WebQA settings.
@@ -201,6 +263,17 @@
     Further, we can try removing the vision-language expert and adding a fusion gate after the vision- and
     language- expert to test if the vision-language expert can be simulated with a combination of two individual experts.
 
+    \subsection{Enhance Representation Fusion with Cross-attention Mechanism}
+    One of the distinguishable claims from WebQA is that they treat images and text as equally essential information sources. They not only retrieve sources with both modalities combined but aim to create a framework that treats image/text, image\&text as the same source of knowledge \cite{webqa}.
+
+    Another less integrated approach compared to WebQA is integrating representations from dual encoders for different modalities. They are different in that this approach sees visual and textual information as different modalities that may carry related information, where their task is to find a good way to learn a fused representation. They proposed their mechanism, yet not open-sourced, MExBERT, which is a two-stream attention-based structure \cite{singh-etal-2021-mimoqa}. It would become another patched network by several sub-networks if they did not introduce the cross-attention mechanism to prompt representation fusion between vision and textual streams.
+
+    The cross-attention mechanism, in general understanding, can mean mixing two different representation sequences. The earliest cross-attention mechanism can be found in Transformer \cite{transformer}, where the first token is generated from the decoder from encoder information. However, the cross-attention mechanism can extend this technique to different modalities. In the LXMERT \cite{lxmert}, the researchers applied cross-attention to attend to sequences of representations in different modalities to encourage representation fusion. Their application of cross-attention inspired the MIMOQA two-stream framework \cite{singh-etal-2021-mimoqa}, which is connected by a cross-attention block.
+
+    Although WebQA’s fine-tune approach claims that they study a unified knowledge space for image and text, they initialize representations separately, indicating that they still come from different knowledge sources at the beginning. Before they are patched and fed into the Unified Encoder-Decoder framework in VLP \cite{vlp}, the Cross-attention mechanism can be added as an extra front-end module to early fuse the [\textlangle
+    CLS\textrangle, \textlangle $f_{image}$\textrangle, \textlangle SEP\textrangle, \textlangle $f_{text}$\textrangle, \textlangle stop\textrangle] sequence.
+
+    \clearpage
 
     \bibliography{main}
     \bibliographystyle{icml2022}
