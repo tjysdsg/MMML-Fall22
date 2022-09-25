@@ -102,15 +102,62 @@
 
     \subsection{WebQA Benchmark}
 
-    Describe the benchmark + difference with others (strength)
+    WebQA \cite{webqa} is a multimodal open-domain question answering benchmark.
+    It focuses on the ability to extract and aggregate information from text and images.
+    Its data is extracted from the internet and carefully designed so that the answers cannot be directly copied from
+    an existing questions or images, and that both the vision and text modalities must be used to correctly
+    answer the questions.
+
+    In most existing VQA benchmarks, a question is about a pair of images, thus making the image itself a query.
+    However, images are a knowledge source based on which the machine learning models reason about the questions.
+    This can encourage the models to learn common sense from the data and answer questions better.
+    In addition, WebQA uses a new evaluation metric to encourage the answers to be in the form of natural language
+    sentences, instead of a word, a short sentence, or a choice from possible answers.
+    In other words, instead of producing a simple ``yes'' or ``no'' answer, the model needs to return a full
+    a fluent sentence that answers the question logically.
+
+    Its task is formulated in two stages, source retrieval, and question answering.
+    The model identifies the data sources to derive the answers during source retrieval.
+    This includes images and their descriptions.
+    During question answering, the model derives its answer from retrieved sources.
 
     \subsection{Data}
 
-    Raw data
+    WebQA's data is crowdsourced.
+    Each annotator are presented with six distinct but related images and they produce three question-answer pairs from these
+    images.
+    Each pair requires one or two images out of the six to be answered correctly.
+    Meanwhile, annotators are instructed to avoid questions that are simple facts, easily answered by a text-only or
+    image-only search, or tied to a specific image.
+    Then Hard Negative Mining is used to produce a set of hard negatives.
+    The questions are categorized into open and closed classes.
+    Closed classes include colors, shapes, numbers, and yes or no questions.
+    Open classes include open-ended questions.
+
+    In total, the data contains 34 thousand question-answer pairs with 390 thousand images.
+    The average length of questions is about 17.5 words while the average length of standard answers is around 12.5 words.
+
+    An example question-answer pair is listed below.
+    \begin{itemize}
+        \item Question: Are both the National Museum of the American Indian in Washington, D.C., and the Xanadu House
+        in Kissimmee, Florida the same color?
+        \item Standard Answer: Yes, both the National Museum of the American Indian in Washington, D.C., and the Xanadu
+        House in Kissimmee, Florida is beige.
+        \item Topic: Strange architecture
+        \item Question Category: Yes/No
+        \item 2 positive images and 16 negative images with relevant text
+    \end{itemize}
+
+    However, the images are not directly used in the baseline models, as discussed in the next section.
 
     \subsection{Feature Extraction}
 
-    RCNN features
+    Text input in the questions, answers, textual sources and image captions are tokenized by the \textbf{Bert-base-cased} \cite{bert} tokenizer.
+
+    Images are represented with 100 regions produced by an object detection model.
+    The object detection model used is a variant of Faster RCNN with a ResNeXt-101 FPN backbone, the same one used in
+    the VLP VQA task \cite{vlp}.
+    The authors also experimented with the latest state-of-the-art image representations from VinVL \cite{VinVL}.
 
     \subsection{Baselines}
 
@@ -132,11 +179,28 @@
 
     \section{Research Ideas}
 
-    \subsection{1234}
+    \subsection{Advantages of Modality Experts and Stage-wise Joint Training}
 
-    \subsection{}
+    \cite{VLMO} claims to take the advantages of both fusion encoders and dual-encoders that it can create deep
+    interactions between modalities and their representations while being able to utilize the fast amount of text-only
+    or image-only training data.
+    The authors also proposed a stage-wise training method to train these modality experts.
+    However, the authors only tested this model on datasets such as VQA, NLVR2, and others.
+    Compared to WebQA, they are relatively simpler and have a lower requirement of the ability to digest multiple
+    sources of text or image information.
+    For example, the VQA problem is simplified into a classification problem with 3129 possible answers.
 
-    Test citation \cite{mitchell80}
+    Therefore, we would like to test fusion-encoders and modality experts on WebQA under the same
+    circumstances to see which of the three architectures handles heavy information digestion and aggregation tasks the best.
+    In other words, we would like to verify that modality experts perform better not because they could be trained on
+    more data but because its architecture and pretraining method are inherently better in the WebQA settings.
+    More specifically, by adding modality expert modules to VLP's transformer blocks and using the stage-wise joint
+    training method of VLMO, we expect to see a performance increase in both source retrieval and question answering.
+    We also need to verify that this performance increase is not caused by the increased amount of learnable parameters,
+    so only the vision-language expert should be turned on during testing.
+    Further, we can try removing the vision-language expert and adding a fusion gate after the vision- and
+    language- expert to test if the vision-language expert can be simulated with a combination of two individual experts.
+
 
     \bibliography{main}
     \bibliographystyle{icml2022}
