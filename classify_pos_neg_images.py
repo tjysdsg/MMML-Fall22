@@ -4,9 +4,9 @@ import json
 from argparse import ArgumentParser
 from sklearn.pipeline import make_pipeline
 from rcnn_feats import RcnnFeatureLoader
-from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, roc_auc_score, accuracy_score
 
 
 def get_args():
@@ -59,38 +59,51 @@ def main():
     with open(args.data_json) as f:
         data: dict = json.load(f)
 
+    # all_image_ids = set()  # check if there is duplicates
     all_embeds = []
     labels = []
+    n_positive = 0
     for qid, d in list(data.items())[:args.N]:
         pos = d['img_posFacts']
         neg = d['img_negFacts']
 
         for fact in pos:
             try:
-                embedding = embedding_dataset.load(int(fact['image_id']), d['split'])
+                image_id = int(fact['image_id'])
+                # assert image_id not in all_image_ids
+                embedding = embedding_dataset.load(image_id, d['split'])
             except FileNotFoundError as e:
-                print(f"Skipping error: {e}")
+                # print(f"Skipping error: {e}")
                 continue
 
             all_embeds.append(embedding)
             labels.append(1)
+            n_positive += 1
 
-        for fact in neg:
+        for fact in neg[:2]:  # balance positive and negative
             try:
-                embedding = embedding_dataset.load(int(fact['image_id']), d['split'])
+                image_id = int(fact['image_id'])
+                # assert image_id not in all_image_ids
+                embedding = embedding_dataset.load(image_id, d['split'])
             except FileNotFoundError as e:
-                print(f"Skipping error: {e}")
+                # print(f"Skipping error: {e}")
                 continue
 
             all_embeds.append(embedding)
             labels.append(0)
+
+    print(f'Positive samples: {n_positive}/{len(labels)}[{n_positive / len(labels):.2f}]')
 
     from sklearn.model_selection import train_test_split
     X_train, X_test, y_train, y_test = train_test_split(all_embeds, labels, test_size=0.3)
 
     clf = make_pipeline(StandardScaler(), SGDClassifier(loss='hinge', max_iter=1000, tol=1e-3, n_jobs=-1))
     clf.fit(X_train, y_train)
-    print(clf.score(X_test, y_test))
+
+    y_pred = clf.predict(X_test)
+    print(f'Accuracy: {accuracy_score(y_test, y_pred)}')
+    print(f'AUC: {roc_auc_score(y_test, clf.decision_function(X_test))}')
+    print(classification_report(y_test, y_pred))
 
     # from sklearn.decomposition import PCA
     # pca = PCA(n_components=2)
