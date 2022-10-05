@@ -1,4 +1,3 @@
-import logging
 from argparse import ArgumentParser
 import os
 import torch
@@ -9,10 +8,9 @@ from torchvision import transforms
 from torchvision.io import read_image, ImageReadMode
 from torchvision.models import resnet50, ResNet50_Weights
 from torch.optim.lr_scheduler import StepLR
-from ignite.utils import convert_tensor
-from ignite.engine import Engine, Events, create_supervised_evaluator, create_supervised_trainer
-from ignite.metrics import RunningAverage, Accuracy, Precision, Recall, Loss
-from ignite.handlers import Checkpoint, DiskSaver, EarlyStopping, TerminateOnNan
+from ignite.engine import Events, create_supervised_evaluator, create_supervised_trainer
+from ignite.metrics import Accuracy, Precision, Recall, Loss
+from ignite.handlers import Checkpoint, DiskSaver
 
 
 def get_args():
@@ -140,28 +138,20 @@ def train(args):
 
     @trainer.on(Events.ITERATION_COMPLETED(every=10))
     def log_training_loss(trainer):
-        print(f"Epoch[{trainer.state.epoch}] Loss: {trainer.state.output:.2f}")
+        print(f"Epoch{trainer.state.epoch} loss: {trainer.state.output:.2f}")
 
     evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
 
     @trainer.on(Events.EPOCH_COMPLETED)
-    def epoch_ends(trainer):
-        evaluator.run(val_loader)
+    def log_test_results(trainer):
+        evaluator.run(test_loader)
         metrics = evaluator.state.metrics
-        print(f"Epoch: {trainer.state.epoch}  Avg accuracy: {metrics['Accuracy']:.2f} Avg loss: {metrics['Loss']:.2f}")
+        print(f"Epoch{trainer.state.epoch} test_acc: {metrics['Accuracy']:.2f}")
 
-    # store the best model
-    def default_score_fn(engine):
-        score = engine.state.metrics['Accuracy']
-        return score
-
+    # store models
     disk_saver = DiskSaver(dirname='exp', require_empty=False)
     best_model_handler = Checkpoint(to_save={'model': model}, save_handler=disk_saver)
     evaluator.add_event_handler(Events.COMPLETED, best_model_handler)
-
-    # early stopping
-    evaluator.add_event_handler(Events.COMPLETED,
-                                EarlyStopping(patience=10, score_function=default_score_fn, trainer=trainer))
 
     trainer.run(train_loader, max_epochs=100)
 
