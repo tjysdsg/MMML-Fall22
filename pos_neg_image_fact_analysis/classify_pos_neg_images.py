@@ -11,6 +11,7 @@ from torch.optim.lr_scheduler import StepLR
 from ignite.engine import Events, create_supervised_evaluator, create_supervised_trainer
 from ignite.metrics import Accuracy, Precision, Recall, Loss
 from ignite.handlers import Checkpoint, DiskSaver
+from ignite.contrib.handlers import TensorboardLogger, global_step_from_engine
 
 
 def get_args():
@@ -153,7 +154,24 @@ def train(args):
     best_model_handler = Checkpoint(to_save={'model': model}, save_handler=disk_saver)
     evaluator.add_event_handler(Events.COMPLETED, best_model_handler)
 
-    trainer.run(train_loader, max_epochs=100)
+    # setup tensorboard logger
+    tb_logger = TensorboardLogger(log_dir="exp/tensorboard")
+    tb_logger.attach_output_handler(
+        trainer,
+        event_name=Events.ITERATION_COMPLETED(every=10),
+        tag="training",
+        output_transform=lambda loss: {"batch_loss": loss},
+    )
+    tb_logger.attach_output_handler(
+        evaluator,
+        event_name=Events.EPOCH_COMPLETED,
+        tag='testing',
+        metric_names="all",
+        global_step_transform=global_step_from_engine(trainer),
+    )
+
+    trainer.run(train_loader, max_epochs=5)
+    tb_logger.close()
 
 
 def main():
