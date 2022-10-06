@@ -23,14 +23,15 @@ class RcnnFeatureLoader:
 
         self.data_dir = data_dir
 
-    def load_img_feats(self, img_id: int, split: str) -> (torch.Tensor, torch.Tensor, torch.Tensor):
+    def load_img_feats(self, embed_id: int, split: str) -> (torch.Tensor, torch.Tensor, torch.Tensor):
         """Load image RCNN features"""
-        filename = os.path.join(self.data_dir, split, f'{self.imgid_map[img_id]}.pkl')
+        filename = os.path.join(self.data_dir, split, f'{self.imgid_map[embed_id]}.pkl')
         with open(filename, 'rb') as f:
             feature = TorchCPUUnpickler(f).load()
 
-        # pred_classes, scores, image_size, num_instances
+        # pred_classes, image_size, num_instances
         img = feature['fc1_features'].detach().cpu().float()
         class_feats = feature['cls_features'].detach().cpu().float()
         boxes = feature['pred_boxes'].detach().cpu()
-        return img, class_feats, boxes
+        scores = feature['scores'].detach().cpu()
+        return img, class_feats, boxes, scores
