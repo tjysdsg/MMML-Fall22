@@ -40,3 +40,25 @@ TODO: too many topics
 
 ![img](results/embed_viz/embed_vs_topic.jpg)
 
+# 5. Visualizing RCNN Bounding Boxes and Class Labels
+
+## Issue 1: Too many boxes without setting a min threshold of class confidence scores
+
+![img](results/rcnn_boxes/too_many_boxes.jpg)
+
+## Issue 2: Overlapping bounding boxes
+
+Bounding boxes:
+
+```
+(448.99377, 477.71466, 635.1658, 581.03076)
+(435.38068, 448.46365, 656.35956, 587.0487)
+(16.218733, 483.51318, 105.696884, 578.6826)
+(16.918978, 497.22815, 103.425545, 581.5403)
+(164.58624, 19.04927, 177.57275, 34.461514)
+(77.49992, 65.20191, 744.53046, 572.20044)
+```
+
+![img](results/rcnn_boxes/overlapping_boxes.jpg)
+
+Other images are located [here](results/rcnn_boxes)

@@ -45,7 +45,7 @@ class EmbeddingClassifierDataset:
         if image_id in self.cached_ids:
             return np.load(cache_file)
 
-        embedding, _, _ = self.feat_loader.load_img_feats(image_id, split)
+        embedding, _, _, _ = self.feat_loader.load_img_feats(image_id, split)
         embedding = embedding.numpy().ravel()
 
         np.save(cache_file, embedding)
