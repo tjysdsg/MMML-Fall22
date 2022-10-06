@@ -8,15 +8,17 @@ export PYTHONPATH=$(pwd)
 
 # 1. Decode Images
 
-Run `utils/decode_base64_images.py`
+Run [`utils/decode_base64_images.py`](/utils/decode_base64_images.py)
 
 # 2. Create image subset
 
-Run `subset_pos_neg_image_facts.py`
+Run [`subset_pos_neg_image_facts.py`](subset_pos_neg_image_facts.py)
 
-Resulting `train.tsv` and `test.tsv`, they are already included in the repository
+This program creates [`train.tsv`](train.tsv)/[`test.tsv`](test.tsv)/[`val.tsv`](val.tsv)
 
 # 3. Run Positive/Negative Classifier
+
+Run [`classify_pos_neg_images.py`](classify_pos_neg_images.py)
 
 Training batch loss
 
@@ -28,7 +30,13 @@ Test epoch accuracy
 
 # 4. PCA Visualization of the RCNN Embeddings
 
-Run `visualize_embeddings.py`
+Run [`visualize_embeddings.py`](visualize_embeddings.py)
 
-![img](results/pos_neg_classification/training-batch-loss.png)
+![img](results/embed_viz/embed_vs_label.jpg)
+
+![img](results/embed_viz/embed_vs_question_type.jpg)
+
+TODO: too many topics
+
+![img](results/embed_viz/embed_vs_topic.jpg)
 

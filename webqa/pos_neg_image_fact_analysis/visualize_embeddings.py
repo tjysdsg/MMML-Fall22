@@ -110,18 +110,18 @@ def main():
 
     print("Plotting")
 
-    sns.scatterplot(x=xy[:, 0], y=xy[:, 1], hue=labels, s=3)
+    sns.scatterplot(x=xy[:, 0], y=xy[:, 1], hue=labels)
     plt.title("PCA of Image Embeddings vs. Positive/Negative")
     plt.savefig('embed_vs_label.jpg')
     plt.close('all')
 
-    sns.scatterplot(x=xy[:, 0], y=xy[:, 1], hue=question_types, s=3)
+    sns.scatterplot(x=xy[:, 0], y=xy[:, 1], hue=question_types)
     plt.title("PCA of Image Embeddings vs. Question Types")
     plt.savefig('embed_vs_question_type.jpg')
     plt.close('all')
 
     # FIXME: too many categories
-    sns.scatterplot(x=xy[:, 0], y=xy[:, 1], hue=topics, s=3)
+    sns.scatterplot(x=xy[:, 0], y=xy[:, 1], hue=topics)
     plt.title("PCA of Image Embeddings vs. Question Topics")
     plt.savefig('embed_vs_topic.jpg')
     plt.close('all')
