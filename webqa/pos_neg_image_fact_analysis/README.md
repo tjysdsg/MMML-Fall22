@@ -25,3 +25,10 @@ Training batch loss
 Test epoch accuracy
 
 ![img](results/pos_neg_classification/test-acc.png)
+
+# 4. PCA Visualization of the RCNN Embeddings
+
+Run `visualize_embeddings.py`
+
+![img](results/pos_neg_classification/training-batch-loss.png)
+
