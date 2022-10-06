@@ -402,6 +402,7 @@ fabric.properties
 
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
+*/*/.ipynb_checkpoints/*
 
 # IPython
 profile_default/
