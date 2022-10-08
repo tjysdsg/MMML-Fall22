@@ -1,6 +1,7 @@
 """Subset positive and negative images from question facts"""
 import json
 from argparse import ArgumentParser
+from collections import Counter
 
 
 def get_args():
@@ -29,9 +30,14 @@ def subset_data(facts: list, output_file: str, exclude_img_ids: set):
     image_id_set = set()
     labels = []
     n_positive = 0
+
+    topics = []
+    qcates = []
     for qid, d in facts:
         pos = d['img_posFacts']
         neg = d['img_negFacts']
+        topics.append(d['topic'])
+        qcates.append(d['Qcate'])
 
         for fact in pos:
             imgid = int(fact['image_id'])
@@ -55,6 +61,14 @@ def subset_data(facts: list, output_file: str, exclude_img_ids: set):
             labels.append(0)
 
     print(f'Positive samples: {n_positive}/{len(labels)}[{n_positive / len(labels):.2f}]')
+
+    # count topic frequencies
+    print(f'Uniq topic: {Counter(topics).keys()}')
+    print(f'Topic freq: {Counter(topics).values()}')
+
+    # count qcate frequencies
+    print(f'Uniq qcate: {Counter(qcates).keys()}')
+    print(f'qcate freq: {Counter(qcates).values()}')
 
     with open(output_file, 'w') as f:
         for i, image_id in enumerate(image_ids):
