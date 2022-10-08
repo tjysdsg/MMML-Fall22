@@ -4,7 +4,6 @@ import os
 from typing import Literal
 import torch
 import torch.nn as nn
-from ignite.utils import convert_tensor
 from torch import optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -29,7 +28,7 @@ def get_args():
                         help='Folder containing all image files')
 
     parser.add_argument('--pred-type', type=str, default='pos_neg', choices=['pos_neg', 'topics', 'qcate'])
-    parser.add_argument('--batch-size', type=int, default=32)
+    parser.add_argument('--batch-size', type=int, default=24)
     parser.add_argument('--exp', type=str, default='exp')
     return parser.parse_args()
 
@@ -277,7 +276,8 @@ def train(args):
 
     # store models
     disk_saver = DiskSaver(dirname='exp', require_empty=False)
-    best_model_handler = Checkpoint(to_save={'model': model}, save_handler=disk_saver)
+    to_save = {'trainer': trainer, 'model': model, 'optimizer': optimizer, 'lr_scheduler': lr_scheduler}
+    best_model_handler = Checkpoint(to_save=to_save, save_handler=disk_saver)
     evaluator.add_event_handler(Events.COMPLETED, best_model_handler)
 
     # setup tensorboard logger
@@ -296,7 +296,7 @@ def train(args):
         global_step_transform=global_step_from_engine(trainer),
     )
 
-    trainer.run(train_loader, max_epochs=5)
+    trainer.run(train_loader, max_epochs=100)
     tb_logger.close()
 
 
