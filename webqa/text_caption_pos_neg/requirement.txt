@@ -1,0 +1,8 @@
+sentence-transformers
+h5py
+numpy
+pandas
+tqdm
+seaborn
+matplotlib
+sklearn

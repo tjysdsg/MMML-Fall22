@@ -1,10 +1,15 @@
-## 0. `subData/`
+## 0. Environment
+```
+pip install -r requirement.txt
+```
+
+## 1. `subData/`
 Generated from [image objects selected by TJY](https://github.com/tjysdsg/MMML-Fall22/blob/main/webqa/pos_neg_image_fact_analysis/train.tsv), but integrated necessary label information. Find preparation code in `sbert.ipynb`.
 
-## 1. `sbertFeats/`
+## 2. `sbertFeats/`
 Extracted using [sentence-transformers](https://github.com/UKPLab/sentence-transformers). Features stored in `sbertFeats` (17MB). Find preparation code in `sbert.ipynb`
 
-## 2. `figs/`
+## 3. `figs/`
 use following command to generate image caption-based pca visualization
 ```
 python plot.py -h
