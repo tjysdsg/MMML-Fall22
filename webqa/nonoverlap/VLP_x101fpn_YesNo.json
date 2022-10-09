@@ -1,0 +1,302 @@
+{
+    "d5bbe3de0dba11ecb1e81171463288e9": {
+        "Q": "Does only one room in Graceland have light fixtures that hang from the ceiling ?",
+        "true_A": "More than one room in Graceland has light fixtures that hang from the ceiling.",
+        "pred_A": "No , one room in Graceland does not have light fixtures that hang from the ceiling .",
+        "manual_label": 0
+    },
+    "d5bbe94c0dba11ecb1e81171463288e9": {
+        "Q": "Does the Osman Shah Mosque have fewer than three support pillars ?",
+        "true_A": "The Osman Shah Mosque does not have fewer than three support pillars.",
+        "pred_A": "The Osman Shah Mosque does not have fewer than three support pillars .",
+        "manual_label": 1
+    },
+    "d5bd857c0dba11ecb1e81171463288e9": {
+        "Q": "Does Rep Joaquin Castro have a small mole on the right side of his face ?",
+        "true_A": "Rep. Joaquin Castro does, in fact, have a tiny mole on the right side of his face.",
+        "pred_A": "Rep Joaquin Castro has a small mole on the right side of his face .",
+        "manual_label": 1
+    },
+    "d5bd9b700dba11ecb1e81171463288e9": {
+        "Q": "Does the Bel - Tun player have a number on both his shorts and his shirt ?",
+        "true_A": "The Bel-Tun player has a number on both his shorts and his shirt.",
+        "pred_A": "Yes , the Bel - Tun player has a number on both his shorts and his shirt .",
+        "manual_label": 1
+    },
+    "d5bda2640dba11ecb1e81171463288e9": {
+        "Q": "Does Lycoperdon echinatum always grow on a log ?",
+        "true_A": "Lycoperdon echinatum does not always grow on a log.",
+        "pred_A": "Lycoperdon echinatum doesn ' t always grow on a log .",
+        "manual_label": 1
+    },
+    "d5be76800dba11ecb1e81171463288e9": {
+        "Q": "Do both the Fort Morgan City Hall and Fort Bragg City Hall have a set of stairs leading up to their entrance ?",
+        "true_A": "Both the Fort Morgan City Hall and Fort Bragg City Hall have a set of stairs leading up to their entrance.",
+        "pred_A": "Yes , both the Fort Morgan City Hall and Fort Bragg City Hall have a set of stairs leading up to their entrance .",
+        "manual_label": 1
+    },
+    "d5c00eaa0dba11ecb1e81171463288e9": {
+        "Q": "Are there more than 3 white lines on the track at the London Olympic Stadium ?",
+        "true_A": "There are more than 3 white lines on the track at the London Olympic Stadium.",
+        "pred_A": "Yes , there are more than 3 white lines on the track at the London Olympic Stadium .",
+        "manual_label": 1
+    },
+    "d5c053880dba11ecb1e81171463288e9": {
+        "Q": "Does the bridge of the woman in Buenos Aires have pillars in the water that are all exactly the same width ?",
+        "true_A": "The bridge of the woman in Buenos Aires does not have pillars in the water that are all exactly the same width.",
+        "pred_A": "The bridge of the woman in Buenos Aires has pillars in the water that are all exactly the same width .",
+        "manual_label": 0
+    },
+    "d5c0a6120dba11ecb1e81171463288e9": {
+        "Q": "Does each entry way of Le Petit Palais in France have the same number of columns on it ?",
+        "true_A": "Each entry way of Le Petit Palais in France does not have the same number of columns on it.",
+        "pred_A": "No , each entry way of Le Petit Palais in France does not have the same number of columns on it .",
+        "manual_label": 1
+    },
+    "d5c0f39c0dba11ecb1e81171463288e9": {
+        "Q": "Is the Sumatran orangutan ' s skin on it ' s face as smooth as the skin on the Theropithecus gelada ' s face ?",
+        "true_A": "The Sumatran orangutan's skin on its face is not as as smooth as the skin on the Theropithecus gelada's face.",
+        "pred_A": "The Sumatran orangutan ' s skin on its face is not as smooth as the skin on the Theropithecus gelada '",
+        "manual_label": 1
+    },
+    "d5c1a6700dba11ecb1e81171463288e9": {
+        "Q": "Do the trees appear as full in Poplars as they do in Jeune Fille Sur La Colline ?",
+        "true_A": "The trees do not appear as full in Poplars as they do in Jeune Fille Sur La Colline.",
+        "pred_A": "Yes , the trees appear as full in Poplars as they do in Jeune Fille Sur La Colline .",
+        "manual_label": 0
+    },
+    "d5c28e500dba11ecb1e81171463288e9": {
+        "Q": "Is Water Tower Place in Chicago visible from the John Hancock Tower ?",
+        "true_A": "Water Tower Place in Chicago is visible from the John Hancock Tower.",
+        "pred_A": "Water Tower Place in Chicago is visible from the John Hancock Tower .",
+        "manual_label": 1
+    },
+    "d5c29aa80dba11ecb1e81171463288e9": {
+        "Q": "Were both Seattle Great Wheel and the fourth of July fireworks at Washington near a water body ?",
+        "true_A": "Both Seattle Great Wheel and the fourth of July fireworks at Washington were near a water body.",
+        "pred_A": "Yes , both Seattle Great Wheel and the fourth of July fireworks at Washington were near a water body .",
+        "manual_label": 1
+    },
+    "d5c2d1760dba11ecb1e81171463288e9": {
+        "Q": "Is the Cincinnati Music Hall have columns inside and outside ?",
+        "true_A": "The Cincinnati Music Hall has columns inside and outside.",
+        "pred_A": "The Cincinnati Music Hall has columns inside and outside .",
+        "manual_label": 1
+    },
+    "d5c2f0f20dba11ecb1e81171463288e9": {
+        "Q": "Is Belvedere Castle in Central Park , New York taller than one story ?",
+        "true_A": "Belvedere Castle in Central Park, New York is taller than one story.",
+        "pred_A": "Belvedere Castle in Central Park , New York is taller than one story .",
+        "manual_label": 1
+    },
+    "d5c34d5e0dba11ecb1e81171463288e9": {
+        "Q": "Are there older looking buildings at Universal Studios ?",
+        "true_A": "There are older-looking buildings at Universal Studios",
+        "pred_A": "Yes , there are looking buildings at Universal Studios .",
+        "manual_label": 1
+    },
+    "d5c3524a0dba11ecb1e81171463288e9": {
+        "Q": "Are all the chairs in Courtroom 1 in the James R Browning Courthouse in San Francisco of the same type ?",
+        "true_A": "All the chairs in Courtroom 1 in the James R Browning Courthouse in San Francisco aren't the same type.",
+        "pred_A": "All the chairs in Courtroom 1 in the James R Browning Courthouse in San Francisco are not the same type .",
+        "manual_label": 1
+    },
+    "d5c36db60dba11ecb1e81171463288e9": {
+        "Q": "Does the Food Basics in Richmond Hill , Ontario have both an automatic door and a speedbump in front of its entrance ?",
+        "true_A": "The Food Basics in Richmond Hill, Ontario has both an automatic door and a speedbump in front of its entrance",
+        "pred_A": "Yes , the Food Basics in Richmond Hill , Ontario has both an automatic door and a speedbump in front of its entrance .",
+        "manual_label": 1
+    },
+    "d5c4113a0dba11ecb1e81171463288e9": {
+        "Q": "Are there at least 10 people and animals represented on the front doors of the Brooklyn Public Library ?",
+        "true_A": "There are at least 10 people and animals represented on the front doors of the Brooklyn Public Library.",
+        "pred_A": "Yes , there are at least 10 people and animals represented on the front doors of the Brooklyn Public Library .",
+        "manual_label": 1
+    },
+    "d5c415540dba11ecb1e81171463288e9": {
+        "Q": "Can you see the skyline from Mount Washington ?",
+        "true_A": "You can see the skyline from Mount Washington.",
+        "pred_A": "Yes , you can see the skyline from Mount Washington .",
+        "manual_label": 1
+    },
+    "d5c44ac40dba11ecb1e81171463288e9": {
+        "Q": "Are there three women depicted in both Master Of Female ' s Half - Length Concert of Women and Unknown maker ' s Woman Reading to a Girl ?",
+        "true_A": "Three women are not depicted in both Master Of Female 's Half-Length Concert of Women and Unknown maker's Woman Reading to a Girl.",
+        "pred_A": "Yes , there are three women depicted in both Master Of Female Half - Length Concert of Women and Unknown maker ' s Woman Reading to a Girl .",
+        "manual_label": 0
+    },
+    "d5c46bda0dba11ecb1e81171463288e9": {
+        "Q": "Are the lights in the center of the Smithsonian American Art Museum imbedded in the ceiling ?",
+        "true_A": "The lights in the center of the Smithsonian American Art Museum aren't imbedded in the ceiling.",
+        "pred_A": "Yes , the lights in the center of the Smithsonian American Art Museum are imbedded in the ceiling .",
+        "manual_label": 0
+    },
+    "d5c4dd4a0dba11ecb1e81171463288e9": {
+        "Q": "Both National College of Art and Design building and the Hualien Creative and Cultural Industries Park have their names inscribed on the front wall ?",
+        "true_A": "The National College of Art and Design building and the Hualien Creative and Cultural Industries Park don't have their names inscribed on the front wall.",
+        "pred_A": "Yes , both National College of Art and Design building and the Hualien Creative and Cultural Industries Park have their names inscribed on the front wall .",
+        "manual_label": 0
+    },
+    "d5c4f1cc0dba11ecb1e81171463288e9": {
+        "Q": "Are the spires on the St . James United Church in Montreal the same height ?",
+        "true_A": "The spires on the St. James United Church in Montreal are not the same height.",
+        "pred_A": "No , the spires on the St . James United Church in Montreal are not the same height .",
+        "manual_label": 1
+    },
+    "d5c509320dba11ecb1e81171463288e9": {
+        "Q": "Do all Baroque gold sculptures of the Virgin Mary have halos ?",
+        "true_A": "Not all Baroque gold sculptures of the Virgin Mary have halos.",
+        "pred_A": "Not all Baroque gold sculptures of the Virgin Mary have halos .",
+        "manual_label": 1
+    },
+    "d5c5405a0dba11ecb1e81171463288e9": {
+        "Q": "Are the petals of the White trumpet flower of the Desert Willow symmetrical ?",
+        "true_A": "The petals of the white trumpet flower of the Desert Willow are not symmetrical.",
+        "pred_A": "No , the petals of the White trumpet flower of the Desert Willow are not symmetrical .",
+        "manual_label": 1
+    },
+    "d5c58cb80dba11ecb1e81171463288e9": {
+        "Q": "Did the athlete for the women ' s 75kg event at the 2012 Olympics have more red weight plates on her bar than Kianoush Rostami at the 2016 Olympics ?",
+        "true_A": "The athlete for the women's 75kg event at the 2012 Olympics had fewer red weight plates on her bar than Kianoush Rostami at the 2016 Olympics.",
+        "pred_A": "No , the athlete for the women ' s 75kg event at the 2012 Olympics did not have more red weight plates on her bar than Kiano",
+        "manual_label": 1
+    },
+    "d5c5d2040dba11ecb1e81171463288e9": {
+        "Q": "Does The military museum of Yemen have fewer than four flags in front of its entrance ?",
+        "true_A": "The military museum of Yemen has at least four flags in front of its entrance.",
+        "pred_A": "No , the military museum of Yemen does not have fewer than four flags in front of its entrance .",
+        "manual_label": 1
+    },
+    "d5c66ef80dba11ecb1e81171463288e9": {
+        "Q": "Is the upper back of the Himalayan Monal the same colour as the head of the Resplendent Quetzal ?",
+        "true_A": "The upper back of the Himalayan Monal is the same colour as the head of the Resplendent Quetzal.",
+        "pred_A": "The upper back of the Himalayan Monal is not the same colour as the head of the Resplendent Quetzal .",
+        "manual_label": 0
+    },
+    "d5c6b69c0dba11ecb1e81171463288e9": {
+        "Q": "Are there less than 3 columns on the front of the National Museum of China ?",
+        "true_A": "There aren't less than 3 columns on the front of the National Museum of China.",
+        "pred_A": "There are not less than 3 columns on the front of the National Museum of China .",
+        "manual_label": 1
+    },
+    "d5c747740dba11ecb1e81171463288e9": {
+        "Q": "Does the Louvre place barriers around the objects on display ?",
+        "true_A": "The Louvre does place barriers around the objects on display.",
+        "pred_A": "Yes , the Louvre place barriers around the objects on display .",
+        "manual_label": 1
+    },
+    "d5c752dc0dba11ecb1e81171463288e9": {
+        "Q": "Does the ME Madrid Reina Victoria Hotel have more spires on its facade than the Madrid Communications Palace ?",
+        "true_A": "The ME Madrid Reina Victoria Hotel has fewer spires on its facade than the Madrid Communications Palace.",
+        "pred_A": "The ME Madrid Reina Victoria Hotel does not have more spires on its facade than the Madrid Communications Palace .",
+        "manual_label": 1
+    },
+    "d5c79abc0dba11ecb1e81171463288e9": {
+        "Q": "Are the tombstones in Civil War veterans graves , Rienzi Cemetery , Fond du Lac , Wisconsin all the same shape and size ?",
+        "true_A": "The tombstones in Civil War veterans graves, Rienzi Cemetery, Fond du Lac, Wisconsin are not all the same shape or size.",
+        "pred_A": "No , the tombstones in Civil War veterans graves , Rienzi Cemetery , Fond du Lac , Wisconsin are not all the same shape and size",
+        "manual_label": 1
+    },
+    "d5c7bd1c0dba11ecb1e81171463288e9": {
+        "Q": "Do Joe Smith and Goran Dragic shoot with the same hand ?",
+        "true_A": "Joe Smith and Goran Dragic do not shoot with the same hand.",
+        "pred_A": "Joe Smith and Goran Dragic shoot with the same hand .",
+        "manual_label": 0
+    },
+    "d5c816ea0dba11ecb1e81171463288e9": {
+        "Q": "Among the crowd of Kosmic Debris revelers on Frenchmen Street , were multiple people body - painted ?",
+        "true_A": "There were multiple people body-painted amongst the crowd of Kosmic Debris revelers on Frenchmen Street.",
+        "pred_A": "Yes , the crowd of Kosmic Debris revelers on Frenchmen Street had multiple people body - painted .",
+        "manual_label": 1
+    },
+    "d5c86e920dba11ecb1e81171463288e9": {
+        "Q": "Does the Castro Cinema on Castro Street in San Francisco , CA have both vertical and horizontal signs with the name of the cinema ?",
+        "true_A": "The Castro Cinema on Castro Street in San Francisco, CA has both vertical and horizontal signs with the name of the cinema.",
+        "pred_A": "Yes , the Castro Cinema on Castro Street in San Francisco , CA has both vertical and horizontal signs with the name of the cinema .",
+        "manual_label": 1
+    },
+    "d5c8a3b20dba11ecb1e81171463288e9": {
+        "Q": "Do all men and women wear headpieces during Traditional weddings at Meji - jingu ?",
+        "true_A": "Not all men and women wear headpieces during Traditional weddings at Meji-jingu.",
+        "pred_A": "Not all men and women wear headpieces during Traditional weddings at Meji - jingu .",
+        "manual_label": 1
+    },
+    "d5c908d40dba11ecb1e81171463288e9": {
+        "Q": "Are the claws of the Rufous - throated Antbird longer than its beak ?",
+        "true_A": "The claws of the Rufous-throated Antbird are not longer than its beak.",
+        "pred_A": "The claws of the Rufous - throated Antbird are not longer than its beak .",
+        "manual_label": 1
+    },
+    "d5c924d60dba11ecb1e81171463288e9": {
+        "Q": "Were the portraits outside Bundesarchiv building always there ?",
+        "true_A": "The portraits were not always there.",
+        "pred_A": "No , the portraits outside Bundesarchiv building were not always there .",
+        "manual_label": 1
+    },
+    "d5c93d400dba11ecb1e81171463288e9": {
+        "Q": "Do the Cotton Top Tamarin and the Northern Muriqui both have tufted crests on their heads ?",
+        "true_A": "The Cotton Top Tamarin and the Northern Muriqui don't both have tufted crests on their heads.",
+        "pred_A": "The Cotton Top Tamarin and the Northern Muriqui do not both have tufted crests on their heads .",
+        "manual_label": 1
+    },
+    "d5c9687e0dba11ecb1e81171463288e9": {
+        "Q": "Can I see banisters at the front of a building both on West Main Street in Covington , Virginia and West Main Street in Hillsboro , New Hampshire ?",
+        "true_A": "One can see banisters at the front of a building both on West Main Street in Covington, Virginia and West Main Street in Hillsboro, New Hampshire.",
+        "pred_A": "Yes , you can see banisters at the front of a building both on West Main Street in Covington , Virginia and West Main Street in Hills",
+        "manual_label": 1
+    },
+    "d5c9a1f40dba11ecb1e81171463288e9": {
+        "Q": "At the Navy Pier in Chicago , are the potted plants near the carousel larger than the potted plants outside of Navy Pier Beer Garden ?",
+        "true_A": "At the Navy Pier in Chicago, the potted plants near the carousel are not larger than the potted plants outside of Navy Pier Beer Garden.",
+        "pred_A": "Yes , the potted plants near the carousel are larger than the potted plants outside of Navy Pier Beer Garden .",
+        "manual_label": 0
+    },
+    "d5c9d93a0dba11ecb1e81171463288e9": {
+        "Q": "Are the numbers on the base of the Lion Statue on Generali building Jerusalem in Roman numerals ?",
+        "true_A": "The numbers on the base of the Lion Statue on Generali building in Jerusalem are Roman numerals.",
+        "pred_A": "The numbers on the base of the Lion Statue on Generali building Jerusalem are Roman numerals .",
+        "manual_label": 1
+    },
+    "d5ca63e60dba11ecb1e81171463288e9": {
+        "Q": "Are there air conditioners hanging from both the Master Apartments on the 103rd Street and the New York 1070 Park Avenue building ?",
+        "true_A": "There are air conditioners hanging from both the Master Apartments on the 103rd Street and the New York 1070 Park Avenue building.",
+        "pred_A": "Yes , there are air conditioners hanging from both the Master Apartments on the 103rd Street and the New York 1070 Park Avenue building .",
+        "manual_label": 1
+    },
+    "d5cac6c40dba11ecb1e81171463288e9": {
+        "Q": "Are there more blue shapes in the painting Suprematism with Blue Triangle and Black Square than in Kazimir Malevich ' s painting Suprametism ?",
+        "true_A": "There are not more blue shapes in the painting Suprematism with Blue Triangle and Black Square than in Kazimir Malevich's painting Suprametism.",
+        "pred_A": "No , there are not more blue shapes in the painting Suprematism with Blue Triangle and Black Square than in Kazimir Malevich '",
+        "manual_label": 1
+    },
+    "d5cac9b20dba11ecb1e81171463288e9": {
+        "Q": "Were there more medals awarded in the men ' s singles tennis event at the London Olympics compared to the 86 kg class of the men ' s freestyle wrestling event at the 2016 Olympics ?",
+        "true_A": "There wasn't more medals awarded in the men's singles tennis event at the London Olympics compared to the 86 kg class of the men's freestyle wrestling event at the 2016 Olympics.",
+        "pred_A": "No , there were not more medals awarded in the men ' s singles tennis event at the London Olympics compared to the 86 kg class of the men '",
+        "manual_label": 1
+    },
+    "d5cacd2c0dba11ecb1e81171463288e9": {
+        "Q": "Are the crosses at the the Assumption Cathedral in Vladimir supported by wires ?",
+        "true_A": "The crosses at the the Assumption Cathedral in Vladimir are supported by wires.",
+        "pred_A": "Yes , the crosses at the Assumption Cathedral in Vladimir are supported by wires .",
+        "manual_label": 1
+    },
+    "d5cb5f940dba11ecb1e81171463288e9": {
+        "Q": "Are the roofs of the Reichstag Building in Berlin and the Crooked House in Poland both domed ?",
+        "true_A": "The roofs of the Reichstag Building in Berlin and the Crooked House in Poland are not both domed.",
+        "pred_A": "No , the roofs of the Reichstag Building in Berlin and the Crooked House in Poland are not both domed .",
+        "manual_label": 1
+    },
+    "d5cc0b240dba11ecb1e81171463288e9": {
+        "Q": "Does both 1132 Belvin Street and 227 Mitchell Street in San Marcos , Texas have balusters on the second level of the front of the house ?",
+        "true_A": "Both 1132 Belvin Street and 227 Mitchell Street in San Marcos, Texas have balusters on the second level of the front of the house.",
+        "pred_A": "Yes , both 1132 Belvin Street and 227 Mitchell Street in San Marcos , Texas have balusters on the second level of the front of",
+        "manual_label": 1
+    },
+    "d5cccf5a0dba11ecb1e81171463288e9": {
+        "Q": "Does the Polyphemus Moth have more than two spots on its back ?",
+        "true_A": "The Polyphemus Moth has more than two spots on its back.",
+        "pred_A": "Yes , the Polyphemus Moth has more than two spots on its back .",
+        "manual_label": 1
+    }
+}

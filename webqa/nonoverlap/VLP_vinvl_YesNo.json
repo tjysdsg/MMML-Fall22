@@ -1,0 +1,302 @@
+{
+    "d5bd857c0dba11ecb1e81171463288e9": {
+        "Q": "Does Rep Joaquin Castro have a small mole on the right side of his face ?",
+        "true_A": "Rep. Joaquin Castro does, in fact, have a tiny mole on the right side of his face.",
+        "pred_A": "Yes , he has a small mole on the right side of his face .",
+        "manual_label": 1
+    },
+    "d5c00eaa0dba11ecb1e81171463288e9": {
+        "Q": "Are there more than 3 white lines on the track at the London Olympic Stadium ?",
+        "true_A": "There are more than 3 white lines on the track at the London Olympic Stadium.",
+        "pred_A": "Yes , there are more than 3 white lines on the track at the London Olympic Stadium .",
+        "manual_label": 1
+    },
+    "d5c0a4aa0dba11ecb1e81171463288e9": {
+        "Q": "Do trees block the etching in the entrance of FAU Davie Campus ?",
+        "true_A": "Trees are blocking some of the etching above the entrance.",
+        "pred_A": "Yes , trees block the etching in the entrance of FAU Davie Campus .",
+        "manual_label": 1
+    },
+    "d5c28e500dba11ecb1e81171463288e9": {
+        "Q": "Is Water Tower Place in Chicago visible from the John Hancock Tower ?",
+        "true_A": "Water Tower Place in Chicago is visible from the John Hancock Tower.",
+        "pred_A": "Yes , Water Tower Place in Chicago is visible from the John Hancock Tower .",
+        "manual_label": 1
+    },
+    "d5c28ea00dba11ecb1e81171463288e9": {
+        "Q": "Can I find a gun depicted on the Civil War memorials in both Bethel , Maine and at Greenwood Cemetery in O ' Hara Township , Pennsylvania ?",
+        "true_A": "A gun can be found depicted on the Civil War memorials in both Bethel, Maine, and at Greenwood Cemetery in O'Hara Township, Pennsylvania.",
+        "pred_A": "Yes , there is a gun depicted on the Civil War memorials in both Bethel , Maine and at Greenwood Cemetery in O ' Hara Township , Pennsylvania .",
+        "manual_label": 1
+    },
+    "d5c29be80dba11ecb1e81171463288e9": {
+        "Q": "Are they any open top boat tours that travel past the George pub in London ?",
+        "true_A": "There are open top boat tours that travel past the George pub in London.",
+        "pred_A": "Yes , there are open top boat tours that travel past the George pub in London .",
+        "manual_label": 1
+    },
+    "d5c2b3120dba11ecb1e81171463288e9": {
+        "Q": "Are there more than 6 pillars on the buiding of the Monte Carlo ?",
+        "true_A": "There are more than 6 pillars on the building of the Monte Carlo.",
+        "pred_A": "Yes , there are more than six pillars on the buiding of the Monte Carlo .",
+        "manual_label": 1
+    },
+    "d5c2b45c0dba11ecb1e81171463288e9": {
+        "Q": "The Penny Post plaque is of the same color and circular design as the lion in Chinatown London ?",
+        "true_A": "The Penny Post plaque is not the same color and circular design as the lion in Chinatown London.",
+        "pred_A": "No , the Penny Post plaque is not the same color and circular design as the lion in Chinatown London .",
+        "manual_label": 1
+    },
+    "d5c2ceb00dba11ecb1e81171463288e9": {
+        "Q": "Did the players on the Argentina squad all wear the same color cleats during the 2014 FIFA World Cup final ?",
+        "true_A": "The players did not all wear the same color cleats.",
+        "pred_A": "No , the players on the Argentina squad did not all wear the same color cleats during the 2014 FIFA World Cup final .",
+        "manual_label": 1
+    },
+    "d5c2dbc60dba11ecb1e81171463288e9": {
+        "Q": "Does Food Basics in Markham havE the same font for their sign letters as Rabba Fine Foods in Etobicoke ?",
+        "true_A": "Rabba Fine Foods in Etobicoke and Food Basics in Markham use different fonts for their signs.",
+        "pred_A": "No , Food Basics in Markham havE does not have the same font for their sign letters .",
+        "manual_label": 1
+    },
+    "d5c2ed0a0dba11ecb1e81171463288e9": {
+        "Q": "Are buildings visible from every sport in the Central park ?",
+        "true_A": "Buildings are not visible from every spot in Central Park.",
+        "pred_A": "No , buildings are not visible from every sport in the Central park .",
+        "manual_label": 1
+    },
+    "d5c2f0f20dba11ecb1e81171463288e9": {
+        "Q": "Is Belvedere Castle in Central Park , New York taller than one story ?",
+        "true_A": "Belvedere Castle in Central Park, New York is taller than one story.",
+        "pred_A": "Yes , Belvedere Castle in Central Park , New York is taller than one story .",
+        "manual_label": 1
+    },
+    "d5c2f2aa0dba11ecb1e81171463288e9": {
+        "Q": "Does Finicky ' s have more than one image of a hot dog on their exterior signage ?",
+        "true_A": "Finicky's has more than one image of a hot dog on their exterior signage.",
+        "pred_A": "Yes , there is more than one image of a hot dog on their exterior signage .",
+        "manual_label": 1
+    },
+    "d5c347fa0dba11ecb1e81171463288e9": {
+        "Q": "Is the Despicable Me : Minion Mayhem main house at Universal Studios Japan taller than the surrounding houses ?",
+        "true_A": "The Despicable Me: Minion Mayhem main house at Universal Studios in Japan is taller than the surrounding houses it.",
+        "pred_A": "Yes , the Despicable Me : Minion Mayhem main house at Universal Studios Japan is taller than the surrounding houses .",
+        "manual_label": 1
+    },
+    "d5c36db60dba11ecb1e81171463288e9": {
+        "Q": "Does the Food Basics in Richmond Hill , Ontario have both an automatic door and a speedbump in front of its entrance ?",
+        "true_A": "The Food Basics in Richmond Hill, Ontario has both an automatic door and a speedbump in front of its entrance",
+        "pred_A": "Yes , the Food Basics in Richmond Hill , Ontario has both an automatic door and a speedbump in front of its entrance .",
+        "manual_label": 1
+    },
+    "d5c381520dba11ecb1e81171463288e9": {
+        "Q": "Is there more than one set of doors on the front of the Wise Plum Street Temple and Cincinnati ?",
+        "true_A": "There are more than one set of doors on the front of the Wise Plum Street Temple and Cincinnati.",
+        "pred_A": "Yes , there is more than one set of doors on the front of the Wise Plum Street Temple and Cincinnati .",
+        "manual_label": 1
+    },
+    "d5c3abe60dba11ecb1e81171463288e9": {
+        "Q": "Does the sign on the Safeway Food & Drug in Maryland have the same color as the sign on the Metro at Parkway Mall ?",
+        "true_A": "The sign on the Safeway Food & Drug in Maryland does not have the same color as the sign on the Metro at Parkway Mall.",
+        "pred_A": "No , the sign on the Safeway Food & Drug in Maryland does not have the same color as the sign on the Metro at Parkway Mall .",
+        "manual_label": 1
+    },
+    "d5c41b940dba11ecb1e81171463288e9": {
+        "Q": "Are there any trees near the New York Life Building which are taller than the building ?",
+        "true_A": "There are not any trees near the New York Life Building that are taller than the building itself.",
+        "pred_A": "Yes , there are trees taller than the building .",
+        "manual_label": 0
+    },
+    "d5c4288c0dba11ecb1e81171463288e9": {
+        "Q": "Are the windows on all sides of Plum Street Temple in Cincinnati the same shape ?",
+        "true_A": "The windows on all sides of Plum Street Temple in Cincinnati are not the same shape",
+        "pred_A": "No , the windows are not the same shape .",
+        "manual_label": 1
+    },
+    "d5c43bc40dba11ecb1e81171463288e9": {
+        "Q": "Do the Great Ceremonial House at Disney ' s Polynesian Village Resort and Trader Sam ' s Grog Grotto at the Polynesian Village Resort both feature decorative hanging lights ?",
+        "true_A": "The Great Ceremonial House at Disney's Polynesian Village Resort and Trader Sam's Grog Grotto at the Polynesian Village Resort both have lights hanging from the ceiling decorated with ropes.",
+        "pred_A": "Yes , the Great Ceremonial House at Disney ' s Polynesian Village Resort and Trader Sam ' s Grog Grotto at",
+        "manual_label": 0
+    },
+    "d5c509d20dba11ecb1e81171463288e9": {
+        "Q": "Does the Hockey Hall of Fame building have a single story ?",
+        "true_A": "The Hockey Hall of Fame building has more than one story.",
+        "pred_A": "Yes , the Hockey Hall of Fame building has a single story .",
+        "manual_label": 0
+    },
+    "d5c5447e0dba11ecb1e81171463288e9": {
+        "Q": "Is all of the outdoor seating at Shaw House on Orchard Road covered by umbrellas ?",
+        "true_A": "Some of the outdoor seating at Shaw House on Orchard Road is not covered by umbrellas.",
+        "pred_A": "No , not all of the outdoor seating at Shaw House on Orchard Road is covered by umbrellas .",
+        "manual_label": 1
+    },
+    "d5c577140dba11ecb1e81171463288e9": {
+        "Q": "Do both the 42 \u2013 43 King ' s Road building and the 131 King ' s Road building have handrails on the edge of the roof visible from the front of the building ?",
+        "true_A": "The 42\u201343 King's Road building and the 131 King's Road building do not share handrails on the edge of the roof visible from the front of the building.",
+        "pred_A": "Yes , both the 42 \u2013 43 King ' s Road building and the 131 King ' s Road building have handrails on the edge of the roof",
+        "manual_label": 0
+    },
+    "d5c6d3b60dba11ecb1e81171463288e9": {
+        "Q": "Did more than one female skier pair their beanie with the colour of their country at the Vancouver 2010 Winter Olympics ?",
+        "true_A": "More than one female skier paired their beanie with the color of their country at the Vancouver 2010 Winter Olympics.",
+        "pred_A": "Yes , more than one female skier pair their beanie with the color of their country at the Vancouver 2010 Winter Olympics .",
+        "manual_label": 1
+    },
+    "d5c70a3e0dba11ecb1e81171463288e9": {
+        "Q": "Does the three - toed kingfisher have a pointed beak ?",
+        "true_A": "The three-toed kingfisher has a pointed beak.",
+        "pred_A": "Yes , the three - toed kingfisher has a pointed beak .",
+        "manual_label": 1
+    },
+    "d5c71bdc0dba11ecb1e81171463288e9": {
+        "Q": "Do the flowers on both the Plumeria and the Herbaceous peony grow in bunches on the same stem ?",
+        "true_A": "The flowers on the Herbaceous peony do not grow in bunches on the same stem.",
+        "pred_A": "No , the flowers on both the Plumeria and the Herbaceous peony do not grow in bunches on the same stem .",
+        "manual_label": 1
+    },
+    "d5c74bd40dba11ecb1e81171463288e9": {
+        "Q": "Are the exteriors of the St . Aloysius Church and the St Aloysius College both blue and white ?",
+        "true_A": "The exteriors are not both blue and white.",
+        "pred_A": "No , the exteriors of the St . Aloysius Church and the St Aloysius College are not both blue and white .",
+        "manual_label": 1
+    },
+    "d5c79abc0dba11ecb1e81171463288e9": {
+        "Q": "Are the tombstones in Civil War veterans graves , Rienzi Cemetery , Fond du Lac , Wisconsin all the same shape and size ?",
+        "true_A": "The tombstones in Civil War veterans graves, Rienzi Cemetery, Fond du Lac, Wisconsin are not all the same shape or size.",
+        "pred_A": "No , the tombstones in Civil War veterans graves , Rienzi Cemetery , Fond du Lac , Wisconsin are not all the same shape and size",
+        "manual_label": 1
+    },
+    "d5c7b10a0dba11ecb1e81171463288e9": {
+        "Q": "Do the 1916 McKinley Birthplace Memorial uncirculated dollar and the 1913 - D Barber half dollar have the same text present at the top of their respective obverse sides ?",
+        "true_A": "The 1916 McKinley Birthplace Memorial uncirculated dollar and the 1913-D Barber half dollar do not have the same text present at the top of their respective obverse sides.",
+        "pred_A": "No , the 1916 McKinley Birthplace Memorial uncirculated dollar and the 1913 - D Barber half dollar do not have the same text present at the",
+        "manual_label": 1
+    },
+    "d5c874a00dba11ecb1e81171463288e9": {
+        "Q": "Does a female eclectus parrot have claws thinner than its beak ?",
+        "true_A": "A female eclectus parrot has claws thinner than its beak.",
+        "pred_A": "Yes , the female eclectus parrot has claws thinner than its beak .",
+        "manual_label": 1
+    },
+    "d5c89e120dba11ecb1e81171463288e9": {
+        "Q": "Does ABC Mart at Shibuya Center Gai have both vertical and horizontal signage ?",
+        "true_A": "ABC Mart at Shibuya Center Gai has both vertical and horizontal signage.",
+        "pred_A": "Yes , ABC Mart at Shibuya Center Gai has both vertical and horizontal signage .",
+        "manual_label": 1
+    },
+    "d5c8e14c0dba11ecb1e81171463288e9": {
+        "Q": "Are there more windows on the second floor of the The Little Mermaid Restaurant in Solvang , California than on the second floor of the Bavarian Inn Lodge in Michigan ?",
+        "true_A": "There are not more windows on the second floor of the The Little Mermaid Restaurant in Solvang, California than on the second floor of the Bavarian Inn Lodge in Michigan.",
+        "pred_A": "No , there are not more windows on the second floor of the The Little Mermaid Restaurant in Solvang , California than on the second floor of",
+        "manual_label": 1
+    },
+    "d5c936d80dba11ecb1e81171463288e9": {
+        "Q": "Do both the large red damselfly and the common blue damselfly have black stripes between their thorax segments ?",
+        "true_A": "Both the large red damselfly and the common blue damselfly have black stripes between their thorax segments.",
+        "pred_A": "Yes , the large red damselfly and the common blue damselfly have black stripes between their thorax segments .",
+        "manual_label": 1
+    },
+    "d5c954240dba11ecb1e81171463288e9": {
+        "Q": "Does the Pholiota mushroom have a wider stem in relation to its cap than the stem of a Artomyces pyxidatus to its tip ?",
+        "true_A": "The Pholiota mushroom doesn't have a wider stem in relation to its cap than the stem of a Artomyces pyxidatus to its tip.",
+        "pred_A": "Yes , the Pholiota mushroom has a wider stem in relation to its cap than the stem of a Artomyces pyxidatus to its",
+        "manual_label": 0
+    },
+    "d5c960d60dba11ecb1e81171463288e9": {
+        "Q": "Is the wattled crane ' s wattle longer than its beak ?",
+        "true_A": "The wattled crane's wattle is not longer than it's beak.",
+        "pred_A": "No , the wattled crane ' s wattle is not longer than its beak .",
+        "manual_label": 1
+    },
+    "d5c9687e0dba11ecb1e81171463288e9": {
+        "Q": "Can I see banisters at the front of a building both on West Main Street in Covington , Virginia and West Main Street in Hillsboro , New Hampshire ?",
+        "true_A": "One can see banisters at the front of a building both on West Main Street in Covington, Virginia and West Main Street in Hillsboro, New Hampshire.",
+        "pred_A": "Yes , there are banisters at the front of a building both on West Main Street in Covington , Virginia and West Main Street in Hillsboro",
+        "manual_label": 1
+    },
+    "d5c9c3140dba11ecb1e81171463288e9": {
+        "Q": "Are there more than three swords visible in the rape of the sabines painting by Jacques Stella ?",
+        "true_A": "There are more than three swords visible in the rape of the sabines painting by Jacques Stella.",
+        "pred_A": "Yes , there are more than three swords visible in the rape of the sabines painting by Jacques Stella .",
+        "manual_label": 1
+    },
+    "d5c9d93a0dba11ecb1e81171463288e9": {
+        "Q": "Are the numbers on the base of the Lion Statue on Generali building Jerusalem in Roman numerals ?",
+        "true_A": "The numbers on the base of the Lion Statue on Generali building in Jerusalem are Roman numerals.",
+        "pred_A": "The numbers on the base of the Lion Statue on Generali building Jerusalem are Roman numerals .",
+        "manual_label": 1
+    },
+    "d5c9fec40dba11ecb1e81171463288e9": {
+        "Q": "Does the Sydney Olympic Park Basketball Centre have more windows underneath the two basketball advertisements than the Shougang steel factory has on the same side as the Olympic rings ?",
+        "true_A": "The Sydney Olympic Park Basketball Centre doesn't have more windows underneath the two basketball advertisements than the Shougang steel factory has on the same side as the Olympic rings.",
+        "pred_A": "No , the Sydney Olympic Park Basketball Centre does not have more windows underneath the two basketball advertisements than the Shougang steel factory has on the same",
+        "manual_label": 1
+    },
+    "d5ca3d9e0dba11ecb1e81171463288e9": {
+        "Q": "Do the 1928 Studebaker and the Maserati Boomerang both have large round front headlights ?",
+        "true_A": "The 1928 Studebaker and the Maserati Boomerang do not both have large round front headlights.",
+        "pred_A": "The 1928 Studebaker and the Maserati Boomerang do not both have large round front headlights .",
+        "manual_label": 1
+    },
+    "d5ca6fda0dba11ecb1e81171463288e9": {
+        "Q": "Is there a sidewalk going under the Eiffel Tower ?",
+        "true_A": "There is a sidewalk going under the Eiffel Tower.",
+        "pred_A": "Yes , there is a sidewalk going under the Eiffel Tower .",
+        "manual_label": 1
+    },
+    "d5ca84480dba11ecb1e81171463288e9": {
+        "Q": "Can a Cardinal flower and a poinsettia flower be the same color ?",
+        "true_A": "A.Cardinal flower and a Poinsettia flower can be the same color.",
+        "pred_A": "Yes , a Cardinal flower and a poinsettia flower can be the same color .",
+        "manual_label": 1
+    },
+    "d5ca9d700dba11ecb1e81171463288e9": {
+        "Q": "Do the commercial buildings on the west side of the Z\u00f3calo and the Mexico City Museum have balconies ?",
+        "true_A": "Commercial buildings on the west side of the Z\u00f3calo and the Mexico City Museum have balconies",
+        "pred_A": "The commercial buildings on the west side of the Zocaloo and the Mexico City Museum do not have balconies .",
+        "manual_label": 0
+    },
+    "d5caa11c0dba11ecb1e81171463288e9": {
+        "Q": "Do the Mongolian Armed Forces engineers with the 017 Construction Regiment and the Guatemalan army both wear front - facing billed hats ?",
+        "true_A": "The Mongolian Armed Forces engineers with the 017 Construction Regiment and the Guatemalan army do not both wear front-facing billed hats.",
+        "pred_A": "Yes , the Mongolian Armed Forces engineers with the 017 Construction Regiment and the Guatemalan army both wear front - facing billed hats .",
+        "manual_label": 0
+    },
+    "d5cac6c40dba11ecb1e81171463288e9": {
+        "Q": "Are there more blue shapes in the painting Suprematism with Blue Triangle and Black Square than in Kazimir Malevich ' s painting Suprametism ?",
+        "true_A": "There are not more blue shapes in the painting Suprematism with Blue Triangle and Black Square than in Kazimir Malevich's painting Suprametism.",
+        "pred_A": "Yes , there are more blue shapes in the painting Suprematism with Blue Triangle and Black Square than in Kazimir Malevich ' s",
+        "manual_label": 0
+    },
+    "d5cb8e9c0dba11ecb1e81171463288e9": {
+        "Q": "Has the cross just above the archway of main entrance on the facade of the Berlin Cathedral always been there ?",
+        "true_A": "The cross just above the archway of main entrance on the fa\u00e7ade of the Berlin Cathedral has not always been there.",
+        "pred_A": "No , the cross is not always been there .",
+        "manual_label": 1
+    },
+    "d5cc04580dba11ecb1e81171463288e9": {
+        "Q": "Was there an Olympic emblem on the gold medal ribbon in both the 2012 and 1964 Olympics ?",
+        "true_A": "There was not an Olympic emblem on both the gold medal ribbon in the 2012 and 1964 Olympics.",
+        "pred_A": "Yes , there was an Olympic emblem on the gold medal ribbon in both the 2012 and 1964 Olympics .",
+        "manual_label": 0
+    },
+    "d5cccf5a0dba11ecb1e81171463288e9": {
+        "Q": "Does the Polyphemus Moth have more than two spots on its back ?",
+        "true_A": "The Polyphemus Moth has more than two spots on its back.",
+        "pred_A": "Yes , the Polyphemus Moth has more than two spots on its back .",
+        "manual_label": 1
+    },
+    "d5cd41740dba11ecb1e81171463288e9": {
+        "Q": "Are all rooms in the Carnavalet Museum painted red ?",
+        "true_A": "Not all rooms in the Carnavalet Museum are painted red.",
+        "pred_A": "No , not all of the rooms in the Carnavalet Museum are painted red .",
+        "manual_label": 1
+    },
+    "d5cd50880dba11ecb1e81171463288e9": {
+        "Q": "Are the lamp posts on Rainbow Bridge the same exact design as the lamp posts on the connecting Bridge to Rainbow Bridge ?",
+        "true_A": "The lamp posts on Rainbow Bridge are not the same exact design as the lamp posts on the connecting bridge to Rainbow Bridge.",
+        "pred_A": "No , the lamp posts on Rainbow Bridge are not the same exact design as the lamp posts on the connecting Bridge to Rainbow Bridge .",
+        "manual_label": 1
+    }
+}
