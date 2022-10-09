@@ -4,6 +4,7 @@ import os
 from typing import Literal
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
@@ -11,7 +12,7 @@ from torchvision.io import read_image, ImageReadMode
 from torchvision.models import resnet50, ResNet50_Weights
 from torch.optim.lr_scheduler import StepLR
 from ignite.engine import Events, create_supervised_evaluator, create_supervised_trainer, Engine
-from ignite.metrics import Accuracy, Precision, Recall, Loss
+from ignite.metrics import Accuracy, Precision, Recall, Loss, Fbeta
 from ignite.handlers import Checkpoint, DiskSaver
 from ignite.contrib.handlers import TensorboardLogger, global_step_from_engine
 
@@ -246,8 +247,11 @@ def train(args):
     ).to(device)
 
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9, weight_decay=0.001, nesterov=True)
-    lr_scheduler = StepLR(optimizer, step_size=1, gamma=0.98)
-    criterion = nn.CrossEntropyLoss()
+    lr_scheduler = StepLR(optimizer, step_size=1, gamma=0.8)
+    if train_set.out_classes == 1:
+        criterion = nn.BCEWithLogitsLoss()
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     # create trainer
     trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
@@ -255,6 +259,7 @@ def train(args):
         'Loss': Loss(criterion),
         'Accuracy': Accuracy(),
         'Precision': Precision(average=True),
+        'F1': Fbeta(1),
         'Recall': Recall(average=True),
     }
 
@@ -272,7 +277,7 @@ def train(args):
     def log_test_results(trainer):
         evaluator.run(test_loader)
         metrics = evaluator.state.metrics
-        print(f"Epoch{trainer.state.epoch} test_acc: {metrics['Accuracy']:.2f}")
+        print(f"Epoch{trainer.state.epoch} test_acc: {metrics['Accuracy']:.2f} test_f1: {metrics['F1']}")
 
     # store models
     disk_saver = DiskSaver(dirname='exp', require_empty=False)
