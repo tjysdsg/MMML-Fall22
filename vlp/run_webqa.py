@@ -177,14 +177,18 @@ def get_dataloaders(args, device):
 
 def train(
         logger: logging.Logger, args,
-        model: BertForWebqa, device, optimizer, n_gpu: int, amp_handle,
+        model: BertForWebqa, device, optimizer, n_gpu: int,
         recover_step: int, global_step: int, t_total: int,
         train_dataloaders: List[DataLoader], train_dataloader_order: List[int],
 ):
+    if args.amp:
+        from apex import amp
+        model, optimizer = amp.initialize(model, optimizer, opt_level="O2")
+
     logger.info("========================\nStart training\n========================\n")
 
     if "img" in args.answer_provided_by:
-        logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
+        logger.info(f"use_img_meta = {args.use_img_meta}")
         logger.info(f"use_img_content = {args.use_img_content}")
         logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
         if args.use_x_distractors:
@@ -219,9 +223,6 @@ def train(
                     logger.info(f"\n nan exists in {param_tensor}")
             batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
             input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-            if args.fp16:
-                img = img.half()
-                vis_pe = vis_pe.half()
 
             conv_feats = img.data  # Bx100x2048
             vis_pe = vis_pe.data
@@ -285,15 +286,16 @@ def train(
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
 
-            if args.fp16:
-                optimizer.backward(loss)
-                if amp_handle:
-                    amp_handle._clear_cache()
+            if args.amp:
+                from apex import amp
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
             else:
                 loss.backward()
+
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 lr_this_step = args.learning_rate * warmup_linear(global_step / t_total, args.warmup_proportion)
-                if args.fp16:
+                if args.amp:
                     # modify learning rate with special warm up BERT uses
                     for param_group in optimizer.param_groups:
                         param_group['lr'] = lr_this_step
@@ -364,7 +366,7 @@ def main():
     # determine cpu or gpu
     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     n_gpu = torch.cuda.device_count()
-    logger.info(f"Device: {device} n_gpu: {n_gpu}, 16-bits training: {args.fp16}")
+    logger.info(f"Device: {device} n_gpu: {n_gpu}, amp: {args.amp}")
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError(
@@ -404,12 +406,6 @@ def main():
     # Total number of times we update the model's parameter, note we are using grad accum
     t_total = int(sum(loader_lengths) * args.num_train_epochs * 1. / args.gradient_accumulation_steps)
 
-    amp_handle = None
-    if args.fp16 and args.amp:
-        from apex import amp
-        amp_handle = amp.init(enable_caching=True)
-        logger.info("Enable fp16 with amp")
-
     # Prepare model
     recover_step = _get_max_epoch_model(args.ckpts_dir)
     if args.recover_step: recover_step = args.recover_step
@@ -439,7 +435,6 @@ def main():
             type_vocab_size=type_vocab_size, relax_projection=relax_projection,
             config_path=args.config_path, task_idx=task_idx_proj,
             max_position_embeddings=args.max_position_embeddings, label_smoothing=args.label_smoothing,
-            fp32_embedding=args.fp32_embedding,
             cache_dir=args.output_dir + '/.pretrained_model',
             drop_prob=args.drop_prob, max_len_img_cxt=args.max_len_img_cxt,
             fc7_weight_path=fc7_weight_path, fc7_bias_path=fc7_bias_path,
@@ -461,7 +456,6 @@ def main():
             type_vocab_size=type_vocab_size, relax_projection=relax_projection,
             config_path=args.config_path, task_idx=task_idx_proj,
             max_position_embeddings=args.max_position_embeddings, label_smoothing=args.label_smoothing,
-            fp32_embedding=args.fp32_embedding,
             cache_dir=args.output_dir + '/.pretrained_model',
             drop_prob=args.drop_prob, max_len_img_cxt=args.max_len_img_cxt,
             fc7_weight_path=fc7_weight_path, fc7_bias_path=fc7_bias_path,
@@ -470,12 +464,6 @@ def main():
         del model_recover
         torch.cuda.empty_cache()
 
-    if args.fp16:
-        model.half()
-        if args.fp32_embedding:
-            model.bert.embeddings.word_embeddings.float()
-            model.bert.embeddings.position_embeddings.float()
-            model.bert.embeddings.token_type_embeddings.float()
     model.to(device)
     if n_gpu > 1:
         model = torch.nn.DataParallel(model, device_ids=[1, 0])
@@ -490,21 +478,16 @@ def main():
         {'params': [p for n, p in param_optimizer if any(
             nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
-    if args.fp16:
+    if args.amp:
         try:
-            from pytorch_pretrained_bert.optimization_fp16 import FP16_Optimizer_State
             from apex.optimizers import FusedAdam
         except ImportError:
             raise ImportError(
-                "Please install apex from https://www.github.com/nvidia/apex to use distributed and fp16 training.")
+                "Please install apex from https://www.github.com/nvidia/apex to use mixed precision training.")
 
         optimizer = FusedAdam(optimizer_grouped_parameters,
                               lr=args.learning_rate,
                               bias_correction=False)  # FIXME: max_grad_norm=1.0
-        if args.loss_scale == 0:
-            optimizer = FP16_Optimizer_State(optimizer, dynamic_loss_scale=True)
-        else:
-            optimizer = FP16_Optimizer_State(optimizer, static_loss_scale=args.loss_scale)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
         # FIXME: use BertAdam?
@@ -522,16 +505,13 @@ def main():
         if hasattr(optim_recover, 'state_dict'):
             optim_recover = optim_recover.state_dict()
         optimizer.load_state_dict(optim_recover)
-        if args.loss_scale == 0:
-            logger.info("***** Recover optimizer: dynamic_loss_scale *****")
-            optimizer.dynamic_loss_scale = True
 
     logger.info("***** CUDA.empty_cache() *****")
     torch.cuda.empty_cache()
 
     if args.do_train:
         train(
-            logger, args, model, device, optimizer, n_gpu, amp_handle, recover_step, global_step, t_total,
+            logger, args, model, device, optimizer, n_gpu, recover_step, global_step, t_total,
             train_dataloaders, train_dataloader_order
         )
 
@@ -571,9 +551,6 @@ def main():
                         logger.info(f"\n nan exists in {param_tensor}")
                 batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
                 input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-                if args.fp16:
-                    img = img.half()
-                    vis_pe = vis_pe.half()
 
                 conv_feats = img.data  # Bx100x2048
                 vis_pe = vis_pe.data
@@ -665,9 +642,6 @@ def main():
                         logger.info(f"\n nan exists in {param_tensor}")
                 batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
                 input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-                if args.fp16:
-                    img = img.half()
-                    vis_pe = vis_pe.half()
 
                 conv_feats = img.data  # Bx100x2048
                 vis_pe = vis_pe.data
@@ -798,16 +772,7 @@ def get_args():
                         type=int,
                         default=8,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
-    parser.add_argument('--fp16', action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--fp32_embedding', action='store_true',
-                        help="Whether to use 32-bit float precision instead of 32-bit for embeddings")
-    parser.add_argument('--loss_scale', type=float, default=0,
-                        help="Loss scaling to improve fp16 numeric stability. Only used when fp16 set to True.\n"
-                             "0 (default value): dynamic loss scaling.\n"
-                             "Positive power of 2: static loss scaling value.\n")
-    parser.add_argument('--amp', action='store_true',
-                        help="Whether to use amp for fp16")
+    parser.add_argument('--amp', action='store_true', help="Whether to use amp")
     parser.add_argument('--from_scratch', action='store_true',
                         help="Initialize parameters with random values (i.e., training from scratch).")
     parser.add_argument('--new_segment_ids', action='store_true',

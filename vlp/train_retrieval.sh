@@ -19,7 +19,7 @@ python run_webqa.py \
   --answer_provided_by 'img' \
   --task_to_learn 'filter' \
   --use_x_distractors \
-  --amp --fp16 \
+  --amp \
   --new_segment_ids \
   --train_batch_size 128 \
   --num_workers 4 \
