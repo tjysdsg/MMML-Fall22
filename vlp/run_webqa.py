@@ -3,6 +3,9 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import logging
+
 from logger import get_logger
 import os
 import glob
@@ -24,8 +27,7 @@ from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from vlp.loader_utils import batch_list_to_batch_tensors
 import vlp.webqa_loader as webqa_loader
 import matplotlib.pyplot as plt
-from datetime import datetime
-from pytz import timezone
+from typing import List
 
 
 def _get_max_epoch_model(output_dir):
@@ -171,6 +173,171 @@ def get_dataloaders(args, device):
             train_dataloaders.append(train_dataloader)
 
     return train_dataloaders
+
+
+def train(
+        logger: logging.Logger, args,
+        model: BertForWebqa, device, optimizer, n_gpu: int, amp_handle,
+        recover_step: int, global_step: int, t_total: int,
+        train_dataloaders: List[DataLoader], train_dataloader_order: List[int],
+):
+    logger.info("========================\nStart training\n========================\n")
+
+    if "img" in args.answer_provided_by:
+        logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
+        logger.info(f"use_img_content = {args.use_img_content}")
+        logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+        if args.use_x_distractors:
+            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+    if "txt" in args.answer_provided_by:
+        logger.info("use_txt_fact = ", args.use_txt_fact)
+        logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+        if args.use_x_distractors:
+            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+
+    logger.info("***** Running training *****")
+    logger.info(f"  Batch size = {args.train_batch_size}")
+    logger.info(f"  Num steps = {t_total}")
+
+    model.train()
+    if recover_step:
+        start_epoch = recover_step + 1
+    else:
+        start_epoch = 1
+    for i_epoch in trange(start_epoch, args.num_train_epochs + 1, desc="Epoch"):
+        dataloader_iters = [iter(l) for l in train_dataloaders]
+        iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
+
+        qa_loss = []
+        filter_loss = []
+        loss_dict = [[], [], [], []]
+        scst_reward = []
+        for step, loader_idx in enumerate(iter_bar):
+            batch = next(dataloader_iters[loader_idx])
+            for param_tensor in model.state_dict():
+                if torch.isnan(model.state_dict()[param_tensor]).any().item():
+                    logger.info(f"\n nan exists in {param_tensor}")
+            batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
+            input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
+            if args.fp16:
+                img = img.half()
+                vis_pe = vis_pe.half()
+
+            conv_feats = img.data  # Bx100x2048
+            vis_pe = vis_pe.data
+            loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
+                               attention_mask=input_mask,
+                               masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
+                               filter_label=filter_label, logit_mask=logit_mask, context=context,
+                               cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
+                               masked_pos=masked_pos, masked_weights=masked_weights,
+                               task_idx=task_idx,
+                               drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0)
+            mean_reward = loss_tuple[0].new(1).fill_(0)
+
+            # disable pretext_loss_deprecated for now
+            masked_lm_loss, cls_loss = loss_tuple
+            if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
+                masked_lm_loss = masked_lm_loss.mean()
+                cls_loss = cls_loss.mean()
+            loss = masked_lm_loss + cls_loss
+            # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
+            iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
+            qa_loss.append(masked_lm_loss.item())
+            filter_loss.append(cls_loss.item())
+            loss_dict[loader_idx].append(loss.item())
+            scst_reward.append(mean_reward.item())
+            # logger.info("\n ---------------------- loss.grad ------------------------ \n")
+            # for name, parms in model.named_parameters():
+            # logger.info('-->name:', name, '-->grad_requirs:',parms.requires_grad, ' -->grad_value:',parms.grad)
+
+            if step % 100 == 0:
+                logger.info(
+                    f"Epoch {i_epoch}, Iter {step}, Loss {np.mean(qa_loss):.2f}, "
+                    f"Filter {np.mean(filter_loss):.2f}, Mean R {np.mean(scst_reward):.3f}\n"
+                )
+
+            # if args.enable_visdom:
+            #     if vis_window['iter'] is None:
+            #         vis_window['iter'] = vis.line(
+            #             X=np.tile(np.arange((i_epoch - 1) * nbatches + step,
+            #                                 (i_epoch - 1) * nbatches + step + 1), (1, 1)).T,
+            #             Y=np.column_stack((np.asarray([np.mean(loss_dict[0])]),)),
+            #             opts=dict(title='Training Loss',
+            #                       xlabel='Training Iteration',
+            #                       ylabel='Loss',
+            #                       legend=['total'])
+            #         )
+            #     else:
+            #         vis.line(
+            #             X=np.tile(np.arange((i_epoch - 1) * nbatches + step,
+            #                                 (i_epoch - 1) * nbatches + step + 1), (1, 1)).T,
+            #             Y=np.column_stack((np.asarray([np.mean(loss_dict[0])]),)),
+            #             opts=dict(title='Training Loss',
+            #                       xlabel='Training Iteration',
+            #                       ylabel='Loss',
+            #                       legend=['total']),
+            #             win=vis_window['iter'],
+            #             update='append'
+            #         )
+
+            # ensure that accumulated gradients are normalized
+            if args.gradient_accumulation_steps > 1:
+                loss = loss / args.gradient_accumulation_steps
+
+            if args.fp16:
+                optimizer.backward(loss)
+                if amp_handle:
+                    amp_handle._clear_cache()
+            else:
+                loss.backward()
+            if (step + 1) % args.gradient_accumulation_steps == 0:
+                lr_this_step = args.learning_rate * warmup_linear(global_step / t_total, args.warmup_proportion)
+                if args.fp16:
+                    # modify learning rate with special warm up BERT uses
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] = lr_this_step
+                optimizer.step()
+                optimizer.zero_grad()
+                global_step += 1
+
+        logger.info(qa_loss)
+        logger.info(filter_loss)
+        logger.info(loss_dict)
+
+        # Save a trained model
+        logger.info("** ** * Saving fine-tuned model and optimizer ** ** * ")
+        model_to_save = model.module if hasattr(
+            model, 'module') else model  # Only save the model it-self
+        output_model_file = os.path.join(
+            args.ckpts_dir, "model.{0}.bin".format(i_epoch))
+        output_optim_file = os.path.join(
+            args.ckpts_dir, "optim.{0}.bin".format(i_epoch))
+
+        torch.save(copy.deepcopy(model_to_save).cpu().state_dict(), output_model_file)
+        torch.save(optimizer.state_dict(), output_optim_file)
+
+        # Save loss curve
+        if args.save_loss_curve:
+            loss_idx = 0
+            if "filter" in args.task_to_learn and "txt" in args.answer_provided_by:
+                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "filter-txt",
+                                "-".join([args.task_to_learn, args.answer_provided_by]))
+                loss_idx += 1
+            if "filter" in args.task_to_learn and "img" in args.answer_provided_by:
+                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "filter-img",
+                                "-".join([args.task_to_learn, args.answer_provided_by]))
+                loss_idx += 1
+            if "qa" in args.task_to_learn and "txt" in args.answer_provided_by:
+                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "qa-txt",
+                                "-".join([args.task_to_learn, args.answer_provided_by]))
+                loss_idx += 1
+            if "qa" in args.task_to_learn and "img" in args.answer_provided_by:
+                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "qa-img",
+                                "-".join([args.task_to_learn, args.answer_provided_by]))
+                loss_idx += 1
+        logger.info("***** CUDA.empty_cache() *****")
+        torch.cuda.empty_cache()
 
 
 def main():
@@ -363,163 +530,10 @@ def main():
     torch.cuda.empty_cache()
 
     if args.do_train:
-        logger.info("========================\nStart training\n========================\n")
-        if "img" in args.answer_provided_by:
-            logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
-            logger.info(f"use_img_content = {args.use_img_content}")
-            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-            if args.use_x_distractors:
-                logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-        if "txt" in args.answer_provided_by:
-            logger.info("use_txt_fact = ", args.use_txt_fact)
-            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-            if args.use_x_distractors:
-                logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-
-        logger.info("***** Running training *****")
-        logger.info(f"  Batch size = {args.train_batch_size}")
-        logger.info(f"  Num steps = {t_total}")
-
-        model.train()
-        if recover_step:
-            start_epoch = recover_step + 1
-        else:
-            start_epoch = 1
-        for i_epoch in trange(start_epoch, args.num_train_epochs + 1, desc="Epoch"):
-            dataloader_iters = [iter(l) for l in train_dataloaders]
-            iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
-            nbatches = sum(loader_lengths)
-
-            qa_loss = []
-            filter_loss = []
-            loss_dict = [[], [], [], []]
-            scst_reward = []
-            for step, loader_idx in enumerate(iter_bar):
-                batch = next(dataloader_iters[loader_idx])
-                for param_tensor in model.state_dict():
-                    if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        logger.info(f"\n nan exists in {param_tensor}")
-                batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-                if args.fp16:
-                    img = img.half()
-                    vis_pe = vis_pe.half()
-
-                conv_feats = img.data  # Bx100x2048
-                vis_pe = vis_pe.data
-                loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
-                                   attention_mask=input_mask,
-                                   masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                                   filter_label=filter_label, logit_mask=logit_mask, context=context,
-                                   cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                                   masked_pos=masked_pos, masked_weights=masked_weights,
-                                   task_idx=task_idx,
-                                   drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0)
-                mean_reward = loss_tuple[0].new(1).fill_(0)
-
-                # disable pretext_loss_deprecated for now
-                masked_lm_loss, cls_loss = loss_tuple
-                if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
-                    masked_lm_loss = masked_lm_loss.mean()
-                    cls_loss = cls_loss.mean()
-                loss = masked_lm_loss + cls_loss
-                # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
-                iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
-                qa_loss.append(masked_lm_loss.item())
-                filter_loss.append(cls_loss.item())
-                loss_dict[loader_idx].append(loss.item())
-                scst_reward.append(mean_reward.item())
-                # logger.info("\n ---------------------- loss.grad ------------------------ \n")
-                # for name, parms in model.named_parameters():
-                # logger.info('-->name:', name, '-->grad_requirs:',parms.requires_grad, ' -->grad_value:',parms.grad)
-
-                if step % 100 == 0:
-                    logger.info(
-                        f"Epoch {i_epoch}, Iter {step}, Loss {np.mean(qa_loss):.2f}, "
-                        f"Filter {np.mean(filter_loss):.2f}, Mean R {np.mean(scst_reward):.3f}\n"
-                    )
-
-                if args.enable_visdom:
-                    if vis_window['iter'] is None:
-                        vis_window['iter'] = vis.line(
-                            X=np.tile(np.arange((i_epoch - 1) * nbatches + step,
-                                                (i_epoch - 1) * nbatches + step + 1), (1, 1)).T,
-                            Y=np.column_stack((np.asarray([np.mean(loss_dict[0])]),)),
-                            opts=dict(title='Training Loss',
-                                      xlabel='Training Iteration',
-                                      ylabel='Loss',
-                                      legend=['total'])
-                        )
-                    else:
-                        vis.line(
-                            X=np.tile(np.arange((i_epoch - 1) * nbatches + step,
-                                                (i_epoch - 1) * nbatches + step + 1), (1, 1)).T,
-                            Y=np.column_stack((np.asarray([np.mean(loss_dict[0])]),)),
-                            opts=dict(title='Training Loss',
-                                      xlabel='Training Iteration',
-                                      ylabel='Loss',
-                                      legend=['total']),
-                            win=vis_window['iter'],
-                            update='append'
-                        )
-
-                # ensure that accumulated gradients are normalized
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-
-                if args.fp16:
-                    optimizer.backward(loss)
-                    if amp_handle:
-                        amp_handle._clear_cache()
-                else:
-                    loss.backward()
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    lr_this_step = args.learning_rate * warmup_linear(global_step / t_total, args.warmup_proportion)
-                    if args.fp16:
-                        # modify learning rate with special warm up BERT uses
-                        for param_group in optimizer.param_groups:
-                            param_group['lr'] = lr_this_step
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_step += 1
-
-            logger.info(qa_loss)
-            logger.info(filter_loss)
-            logger.info(loss_dict)
-
-            # Save a trained model
-            logger.info("** ** * Saving fine-tuned model and optimizer ** ** * ")
-            model_to_save = model.module if hasattr(
-                model, 'module') else model  # Only save the model it-self
-            output_model_file = os.path.join(
-                args.ckpts_dir, "model.{0}.bin".format(i_epoch))
-            output_optim_file = os.path.join(
-                args.ckpts_dir, "optim.{0}.bin".format(i_epoch))
-
-            torch.save(copy.deepcopy(model_to_save).cpu().state_dict(), output_model_file)
-            torch.save(optimizer.state_dict(), output_optim_file)
-
-            # Save loss curve
-            if args.save_loss_curve:
-                loss_idx = 0
-                if "filter" in args.task_to_learn and "txt" in args.answer_provided_by:
-                    save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "filter-txt",
-                                    "-".join([args.task_to_learn, args.answer_provided_by]))
-                    loss_idx += 1
-                if "filter" in args.task_to_learn and "img" in args.answer_provided_by:
-                    save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "filter-img",
-                                    "-".join([args.task_to_learn, args.answer_provided_by]))
-                    loss_idx += 1
-                if "qa" in args.task_to_learn and "txt" in args.answer_provided_by:
-                    save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "qa-txt",
-                                    "-".join([args.task_to_learn, args.answer_provided_by]))
-                    loss_idx += 1
-                if "qa" in args.task_to_learn and "img" in args.answer_provided_by:
-                    save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "qa-img",
-                                    "-".join([args.task_to_learn, args.answer_provided_by]))
-                    loss_idx += 1
-            logger.info("***** CUDA.empty_cache() *****")
-            torch.cuda.empty_cache()
+        train(
+            logger, args, model, device, optimizer, n_gpu, amp_handle, recover_step, global_step, t_total,
+            train_dataloaders, train_dataloader_order
+        )
 
     elif args.val_loss:
         logger.info("--------------- Compute loss without grad ------------------")
