@@ -176,7 +176,6 @@ def get_dataloaders(args, device):
 def main():
     args = get_args()
 
-    log_txt_content = []
     args.max_seq_length = args.max_len_b + args.max_len_a + 3  # +3 for 2x[SEP] and [CLS]
     args.use_img_meta = not args.no_img_meta
     args.use_img_content = not args.no_img_content
@@ -187,19 +186,25 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.ckpts_dir, exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, "figs"), exist_ok=True)
-    json.dump(args.__dict__, open(os.path.join(
-        args.output_dir, 'opt.json'), 'w'), sort_keys=True, indent=2)
 
-    logger = get_logger(os.path.join(args.output_dir, args.log_file), __name__)
+    logger = get_logger(os.path.join(args.output_dir, args.log_file), __file__)
 
+    # dump running args
+    opt_json = os.path.join(args.output_dir, 'opt.json')
+    json.dump(args.__dict__, open(opt_json, 'w'), sort_keys=True, indent=2)
+    logger.info(f"Commandline args are saved in {opt_json}")
+
+    # determine cpu or gpu
     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     n_gpu = torch.cuda.device_count()
-    logger.info(f"device: {device} n_gpu: {n_gpu}, 16-bits training: {args.fp16}")
+    logger.info(f"Device: {device} n_gpu: {n_gpu}, 16-bits training: {args.fp16}")
 
     if args.gradient_accumulation_steps < 1:
-        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
-            args.gradient_accumulation_steps))
+        raise ValueError(
+            f"Invalid gradient_accumulation_steps parameter: {args.gradient_accumulation_steps}, should be >= 1"
+        )
 
+    # calc true batch size per iteration
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
     # fix random seed
@@ -215,10 +220,10 @@ def main():
         vis = visdom.Visdom(port=args.visdom_port, env=args.output_dir)
         vis_window = {'iter': None, 'score': None}
 
+    # prepare dataloaders
     train_dataloaders = get_dataloaders(args, device)
-
-    loader_lengths = [len(l) for l in train_dataloaders]
-    print("n_batches = ", sum(loader_lengths))
+    loader_lengths = [len(e) for e in train_dataloaders]
+    logger.info(f"n_batches = {sum(loader_lengths)}", )
 
     # train_dataloader_order randomly specifies which at each iteration which dataloader to retrieve a batch from,
     # in case multiple dataloaders (text+image) are used during training
@@ -227,16 +232,16 @@ def main():
     for i in range(len(loader_lengths)):
         train_dataloader_order.extend([i] * loader_lengths[i])
     random.shuffle(train_dataloader_order)
-    # print("\ntrain_dataloader_order = ", train_dataloader_order)
+    logger.info(f"\ntrain_dataloader_order = {train_dataloader_order}")
 
-    # The actual number of params updates
+    # Total number of times we update the model's parameter, note we are using grad accum
     t_total = int(sum(loader_lengths) * args.num_train_epochs * 1. / args.gradient_accumulation_steps)
 
     amp_handle = None
     if args.fp16 and args.amp:
         from apex import amp
         amp_handle = amp.init(enable_caching=True)
-        logger.info("enable fp16 with amp")
+        logger.info("Enable fp16 with amp")
 
     # Prepare model
     recover_step = _get_max_epoch_model(args.ckpts_dir)
@@ -258,11 +263,9 @@ def main():
     if not os.path.exists(fc7_weight_path) or not os.path.exists(fc7_bias_path):
         raise FileNotFoundError(f"Cannot find fc7_b.pkl and fc7_w.pkl under {args.detectron_dir}")
 
-    # Recover model
-    if (recover_step is None) and (args.model_recover_path is None):
-        print("----------------------- nothing to recover -------------------------")
-        log_txt_content.append("----------------------- nothing to recover -------------------------")
-        assert args.scst == False, 'must init from maximum likelihood training'
+    # Load model checkpoint
+    if recover_step is None and args.model_recover_path is None:
+        logger.info("----------------------- Nothing to recover -------------------------")
         _state_dict = {} if args.from_scratch else None
         model = BertForWebqa.from_pretrained(
             args.bert_model, state_dict=_state_dict, num_labels=cls_num_labels,
@@ -277,34 +280,25 @@ def main():
         global_step = 0
     else:
         if recover_step:
-            print("-------------------- recover from step {} -----------------------".format(recover_step))
-            log_txt_content.append(
-                "-------------------- recover from step {} -----------------------".format(recover_step))
-            logger.info("***** Recover model: %d *****", recover_step)
-            model_recover = torch.load(os.path.join(
-                args.ckpts_dir, "model.{0}.bin".format(recover_step)))
+            logger.info(f"***** Recover model from step {recover_step} *****")
+            model_recover = torch.load(os.path.join(args.ckpts_dir, "model.{0}.bin".format(recover_step)))
             # recover_step == number of epochs
-            global_step = math.floor(
-                recover_step * t_total * 1. / args.num_train_epochs)
-        elif args.model_recover_path:
-            log_txt_content.append("------------------ recover from path ----------------------")
-            print("***** Recover model: %s *****",
-                  args.model_recover_path)
+            global_step = math.floor(recover_step * t_total * 1. / args.num_train_epochs)
+        else:  # elif args.model_recover_path:
+            logger.info(f"***** Recover model from path: {args.model_recover_path} *****")
             model_recover = torch.load(args.model_recover_path)
             global_step = 0
-        if not args.scst:
-            model = BertForWebqa.from_pretrained(
-                args.bert_model, state_dict=model_recover, num_labels=cls_num_labels,
-                type_vocab_size=type_vocab_size, relax_projection=relax_projection,
-                config_path=args.config_path, task_idx=task_idx_proj,
-                max_position_embeddings=args.max_position_embeddings, label_smoothing=args.label_smoothing,
-                fp32_embedding=args.fp32_embedding,
-                cache_dir=args.output_dir + '/.pretrained_model',
-                drop_prob=args.drop_prob, max_len_img_cxt=args.max_len_img_cxt,
-                fc7_weight_path=fc7_weight_path, fc7_bias_path=fc7_bias_path,
-            )
-        else:
-            raise NotImplementedError
+
+        model = BertForWebqa.from_pretrained(
+            args.bert_model, state_dict=model_recover, num_labels=cls_num_labels,
+            type_vocab_size=type_vocab_size, relax_projection=relax_projection,
+            config_path=args.config_path, task_idx=task_idx_proj,
+            max_position_embeddings=args.max_position_embeddings, label_smoothing=args.label_smoothing,
+            fp32_embedding=args.fp32_embedding,
+            cache_dir=args.output_dir + '/.pretrained_model',
+            drop_prob=args.drop_prob, max_len_img_cxt=args.max_len_img_cxt,
+            fc7_weight_path=fc7_weight_path, fc7_bias_path=fc7_bias_path,
+        )
 
         del model_recover
         torch.cuda.empty_cache()
@@ -318,7 +312,7 @@ def main():
     model.to(device)
     if n_gpu > 1:
         model = torch.nn.DataParallel(model, device_ids=[1, 0])
-        print("\nn_gpu = ", n_gpu)
+        logger.info(f"\nn_gpu = {n_gpu}")
 
     # Prepare optimizer
     param_optimizer = list(model.named_parameters())
@@ -355,7 +349,7 @@ def main():
         # weight_decay = args.weight_decay)
 
     if recover_step and args.do_train:
-        logger.info("***** Recover optimizer: %d *****", recover_step)
+        logger.info(f"***** Recover optimizer: {recover_step} *****")
         optim_recover = torch.load(os.path.join(
             args.ckpts_dir, "optim.{0}.bin".format(recover_step)))
         if hasattr(optim_recover, 'state_dict'):
@@ -369,20 +363,22 @@ def main():
     torch.cuda.empty_cache()
 
     if args.do_train:
-        print("start training")
+        logger.info("========================\nStart training\n========================\n")
         if "img" in args.answer_provided_by:
-            print("use_img_meta = ", args.use_img_meta)
-            print("use_img_content = ", args.use_img_content)
-            print("\nimg Filter_max_choices: {}".format(args.img_filter_max_choices))
-            if args.use_x_distractors: print("\ntxt Filter_max_choices: {}".format(args.txt_filter_max_choices))
+            logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
+            logger.info(f"use_img_content = {args.use_img_content}")
+            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+            if args.use_x_distractors:
+                logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
         if "txt" in args.answer_provided_by:
-            print("use_txt_fact = ", args.use_txt_fact)
-            print("\ntxt Filter_max_choices: {}".format(args.txt_filter_max_choices))
-            if args.use_x_distractors: print("\nimg Filter_max_choices: {}".format(args.img_filter_max_choices))
+            logger.info("use_txt_fact = ", args.use_txt_fact)
+            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+            if args.use_x_distractors:
+                logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
 
         logger.info("***** Running training *****")
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", t_total)
+        logger.info(f"  Batch size = {args.train_batch_size}")
+        logger.info(f"  Num steps = {t_total}")
 
         model.train()
         if recover_step:
@@ -402,7 +398,7 @@ def main():
                 batch = next(dataloader_iters[loader_idx])
                 for param_tensor in model.state_dict():
                     if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        print("\n nan exists in ", param_tensor)
+                        logger.info(f"\n nan exists in {param_tensor}")
                 batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
                 input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
                 if args.fp16:
@@ -411,7 +407,6 @@ def main():
 
                 conv_feats = img.data  # Bx100x2048
                 vis_pe = vis_pe.data
-                # doesn't support scst training for not
                 loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
                                    attention_mask=input_mask,
                                    masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
@@ -434,9 +429,9 @@ def main():
                 filter_loss.append(cls_loss.item())
                 loss_dict[loader_idx].append(loss.item())
                 scst_reward.append(mean_reward.item())
-                # print("\n ---------------------- loss.grad ------------------------ \n")
+                # logger.info("\n ---------------------- loss.grad ------------------------ \n")
                 # for name, parms in model.named_parameters():
-                # print('-->name:', name, '-->grad_requirs:',parms.requires_grad, ' -->grad_value:',parms.grad)
+                # logger.info('-->name:', name, '-->grad_requirs:',parms.requires_grad, ' -->grad_value:',parms.grad)
 
                 if step % 100 == 0:
                     logger.info(
@@ -488,9 +483,9 @@ def main():
                     optimizer.zero_grad()
                     global_step += 1
 
-            print(qa_loss)
-            print(filter_loss)
-            print(loss_dict)
+            logger.info(qa_loss)
+            logger.info(filter_loss)
+            logger.info(loss_dict)
 
             # Save a trained model
             logger.info("** ** * Saving fine-tuned model and optimizer ** ** * ")
@@ -527,19 +522,19 @@ def main():
             torch.cuda.empty_cache()
 
     elif args.val_loss:
-        print("--------------- Compute loss without grad ------------------")
+        logger.info("--------------- Compute loss without grad ------------------")
         assert args.split == "val"
         if "img" in args.answer_provided_by:
-            print("use_img_meta = ", args.use_img_meta)
-            print("use_img_content = ", args.use_img_content)
-            print("\nimg Filter_max_choices: {}".format(args.img_filter_max_choices))
+            logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
+            logger.info(f"use_img_content = {args.use_img_content}")
+            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
         if "txt" in args.answer_provided_by:
-            print("use_txt_fact = ", args.use_txt_fact)
-            print("\ntxt Filter_max_choices: {}".format(args.txt_filter_max_choices))
+            logger.info(f"use_txt_fact = ", args.use_txt_fact)
+            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
 
         logger.info("***** Compute loss without grad *****")
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", t_total)
+        logger.info(f"  Batch size = {args.train_batch_size}")
+        logger.info(f"  Num steps = {t_total}")
 
         model.eval()
 
@@ -559,7 +554,7 @@ def main():
 
                 for param_tensor in model.state_dict():
                     if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        print("\n nan exists in ", param_tensor)
+                        logger.info(f"\n nan exists in {param_tensor}")
                 batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
                 input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
                 if args.fp16:
@@ -568,7 +563,6 @@ def main():
 
                 conv_feats = img.data  # Bx100x2048
                 vis_pe = vis_pe.data
-                # doesn't support scst training for not
                 loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
                                    attention_mask=input_mask,
                                    masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
@@ -592,18 +586,19 @@ def main():
                 scst_reward.append(mean_reward.item())
 
                 if step % 100 == 0:
-                    logger.info("Iter {}, Loss {:.2f}, Filter {:.2f}, Mean R {:.3f}\n".format(step, np.mean(qa_loss),
-                                                                                              np.mean(filter_loss),
-                                                                                              np.mean(scst_reward)))
+                    logger.info(
+                        f"Iter {step}, Loss {np.mean(qa_loss):.2f}, Filter {np.mean(filter_loss):.2f}, "
+                        f"Mean R {np.mean(scst_reward):.3f}\n"
+                    )
 
                 # ensure that accumlated gradients are normalized
                 if args.gradient_accumulation_steps > 1:
                     loss = loss / args.gradient_accumulation_steps
 
-            print(qa_loss)
-            print(filter_loss)
-            print(loss_dict)
-            print("Mean loss = ", np.mean([l for L in loss_dict for l in L]))
+            logger.info(qa_loss)
+            logger.info(filter_loss)
+            logger.info(loss_dict)
+            logger.info(f"Mean loss = {np.mean([l for L in loss_dict for l in L])}")
 
             logger.info("***** CUDA.empty_cache() *****")
             torch.cuda.empty_cache()
@@ -615,40 +610,32 @@ def main():
 
     else:  # inference mode
         if "img" in args.answer_provided_by:
-            print(args.use_img_meta)
-            print(args.use_img_content)
-            log_txt_content.append("use_img_content = {}".format(args.use_img_content))
-            log_txt_content.append("use_img_meta = {}".format(args.use_img_meta))
-            log_txt_content.append("\nimg Filter_max_choices: {}".format(
-                args.img_filter_max_choices))  ## when txt is included, modify here!
-            print("\nimg Filter_max_choices: {}".format(args.img_filter_max_choices))
-            if args.use_x_distractors: print("\ntxt Filter_max_choices: {}".format(args.txt_filter_max_choices))
+            logger.info(f"use_img_content = {args.use_img_content}")
+            logger.info(f"use_img_meta = {args.use_img_meta}")
+            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+            if args.use_x_distractors:
+                logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
 
         if "txt" in args.answer_provided_by:
-            print(args.use_txt_fact)
-            log_txt_content.append("use_txt_fact = {}".format(args.use_txt_fact))
-            log_txt_content.append("\ntxt Filter_max_choices: {}".format(
-                args.txt_filter_max_choices))  ## when txt is included, modify here!
-            print("\ntxt Filter_max_choices: {}".format(args.txt_filter_max_choices))
-            if args.use_x_distractors: print("\nimg Filter_max_choices: {}".format(args.img_filter_max_choices))
+            logger.info(f"use_txt_fact = {args.use_txt_fact}")
+            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+            if args.use_x_distractors:
+                logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
 
-        print("-------------------- Filter Inference mode ------------------------")
-        log_txt_content.append("-------------------- Filter Inference mode ------------------------")
-
-        log_txt_content.append("split = {}".format(args.split))
-        log_txt_content.append("use_num_samples = {}".format(args.use_num_samples))
+        logger.info("-------------------- Filter Inference mode ------------------------")
+        logger.info(f"split = {args.split}")
+        logger.info(f"use_num_samples = {args.use_num_samples}")
 
         th_list = [float(i) for i in args.filter_infr_th.split("|")]
         if not 0.7 in th_list: th_list.append(0.7)
-        print("\nThresholds: ", str(th_list))
-        log_txt_content.append("\nThresholds: {}".format(str(th_list)))
+        logger.info(f"\nThresholds: {str(th_list)}")
         model.eval()
 
         score_dict = dict([(th, {'pr': [], 're': [], 'f1': []}) for th in th_list])
         # for th in th_list:
         dataloader_iters = [iter(l) for l in train_dataloaders]
         total_samples = sum([len(l.dataset) for l in train_dataloaders])
-        print("\ntotal_samples = ", total_samples)
+        logger.info(f"\ntotal_samples = {total_samples}")
         iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
         nbatches = sum(loader_lengths)
 
@@ -661,7 +648,7 @@ def main():
                 batch = next(dataloader_iters[loader_idx])
                 for param_tensor in model.state_dict():
                     if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        print("\n nan exists in ", param_tensor)
+                        logger.info(f"\n nan exists in {param_tensor}")
                 batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
                 input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
                 if args.fp16:
@@ -670,8 +657,6 @@ def main():
 
                 conv_feats = img.data  # Bx100x2048
                 vis_pe = vis_pe.data
-
-                # doesn't support scst training for not
                 cur_batch_score, pred = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids,
                                               token_type_ids=segment_ids, attention_mask=input_mask,
                                               masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
@@ -703,14 +688,11 @@ def main():
                 score_dict[th]['pr'] = np.sum(score_dict[th]['pr']) / float(total_samples)
                 score_dict[th]['re'] = np.sum(score_dict[th]['re']) / float(total_samples)
                 score_dict[th]['f1'] = np.sum(score_dict[th]['f1']) / float(total_samples)
-                print("\nth = {}".format(th))
-                print("pr.mean = ", score_dict[th]['pr'])
-                print("re.mean = ", score_dict[th]['re'])
-                print("f1.mean = ", score_dict[th]['f1'])
-                log_txt_content.append("\nth = {}".format(th))
-                log_txt_content.append("pr.mean = {}".format(score_dict[th]['pr']))
-                log_txt_content.append("re.mean = {}".format(score_dict[th]['re']))
-                log_txt_content.append("f1.mean = {}".format(score_dict[th]['f1']))
+
+                logger.info(f"\nth = {th}")
+                logger.info(f"pr.mean = {score_dict[th]['pr']}")
+                logger.info(f"re.mean = {score_dict[th]['re']}")
+                logger.info(f"f1.mean = {score_dict[th]['f1']}")
         output_pkl = {}
         for e, c, l, p in zip(Example_ids, Choices, Filter_labels, Pred):
             output_pkl[e] = {"choices": c, "labels": l, "pred_scores": p}
@@ -727,12 +709,6 @@ def main():
 
         with open(os.path.join(args.output_dir, "{}.json".format(pkl_filename)), "w") as f:
             json.dump(output_pkl, f, indent=4)
-        with open(os.path.join(args.output_dir, "{}.txt".format(pkl_filename)), "w") as f:
-            f.write("\n")
-            f.write(datetime.now(tz=timezone('US/Eastern')).strftime("%y-%m-%d %H:%M:%S") + '\n')
-            f.write(pkl_filename)
-            f.write("\n")
-            f.write("\n".join(log_txt_content))
         torch.cuda.empty_cache()
 
 
@@ -891,8 +867,6 @@ def get_args():
     parser.add_argument('--relax_projection',
                         action='store_true',
                         help="Use different projection layers for tasks.")
-    parser.add_argument('--scst', action='store_true',
-                        help='Self-critical sequence training')
     return parser.parse_args()
 
 
