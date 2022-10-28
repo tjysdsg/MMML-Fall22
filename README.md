@@ -10,3 +10,11 @@
 ```bash
 ./utils/download_decode_images.sh
 ```
+
+## Extract RCNN features
+
+TODO
+
+## Run Retrieval and Question Answering Baseline on WebQA
+
+See [vlp/](vlp)
