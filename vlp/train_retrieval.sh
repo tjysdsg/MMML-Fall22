@@ -21,7 +21,7 @@ python run_webqa.py \
   --use_x_distractors \
   --amp \
   --new_segment_ids \
-  --train_batch_size 128 \
+  --train_batch_size 1 \
   --num_workers 4 \
   --max_pred 10 --mask_prob 1.0 \
   --learning_rate 3e-5 \

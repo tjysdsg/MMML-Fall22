@@ -349,9 +349,6 @@ def main():
             f"Invalid gradient_accumulation_steps parameter: {args.gradient_accumulation_steps}, should be >= 1"
         )
 
-    # calc true batch size per iteration
-    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
-
     # fix random seed
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -709,7 +706,8 @@ def get_args():
     parser.add_argument("--train_batch_size",
                         default=64,
                         type=int,
-                        help="Total batch size for training.")
+                        help="Batch size. This is the actual batch size during training."
+                             "Model parameters are updated every (train_batch_size * grad_accumulation_steps) batches")
     parser.add_argument("--learning_rate", default=3e-5, type=float,
                         help="The initial learning rate for Adam.")
     parser.add_argument("--label_smoothing", default=0, type=float,
