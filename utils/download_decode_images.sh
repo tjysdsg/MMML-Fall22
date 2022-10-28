@@ -35,4 +35,4 @@ if [ ! -f imgs.tsv ]; then
 fi
 
 # decode images
-python utils/decode_base64_images.py --input=imgs.tsv --output=images
+python ../utils/decode_base64_images.py --input=imgs.tsv --output=images
