@@ -258,30 +258,6 @@ def train(
                     f"Filter {np.mean(filter_loss):.2f}, Mean R {np.mean(scst_reward):.3f}\n"
                 )
 
-            # if args.enable_visdom:
-            #     if vis_window['iter'] is None:
-            #         vis_window['iter'] = vis.line(
-            #             X=np.tile(np.arange((i_epoch - 1) * nbatches + step,
-            #                                 (i_epoch - 1) * nbatches + step + 1), (1, 1)).T,
-            #             Y=np.column_stack((np.asarray([np.mean(loss_dict[0])]),)),
-            #             opts=dict(title='Training Loss',
-            #                       xlabel='Training Iteration',
-            #                       ylabel='Loss',
-            #                       legend=['total'])
-            #         )
-            #     else:
-            #         vis.line(
-            #             X=np.tile(np.arange((i_epoch - 1) * nbatches + step,
-            #                                 (i_epoch - 1) * nbatches + step + 1), (1, 1)).T,
-            #             Y=np.column_stack((np.asarray([np.mean(loss_dict[0])]),)),
-            #             opts=dict(title='Training Loss',
-            #                       xlabel='Training Iteration',
-            #                       ylabel='Loss',
-            #                       legend=['total']),
-            #             win=vis_window['iter'],
-            #             update='append'
-            #         )
-
             # ensure that accumulated gradients are normalized
             if args.gradient_accumulation_steps > 1:
                 loss = loss / args.gradient_accumulation_steps
@@ -382,12 +358,6 @@ def main():
     torch.manual_seed(args.seed)
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
-
-    # plotting loss, optional
-    if args.enable_visdom:
-        import visdom
-        vis = visdom.Visdom(port=args.visdom_port, env=args.output_dir)
-        vis_window = {'iter': None, 'score': None}
 
     # prepare dataloaders
     train_dataloaders = get_dataloaders(args, device)
@@ -509,13 +479,13 @@ def main():
     logger.info("***** CUDA.empty_cache() *****")
     torch.cuda.empty_cache()
 
-    if args.do_train:
+    if args.do_train:  # run training
         train(
             logger, args, model, device, optimizer, n_gpu, recover_step, global_step, t_total,
             train_dataloaders, train_dataloader_order
         )
 
-    elif args.val_loss:
+    elif args.do_val:  # run validation on data
         logger.info("--------------- Compute loss without grad ------------------")
         assert args.split == "val"
         if "img" in args.answer_provided_by:
@@ -536,7 +506,6 @@ def main():
             dataloader_iters = [iter(l) for l in train_dataloaders]
 
             iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
-            nbatches = sum(loader_lengths)
 
             qa_loss = []
             filter_loss = []
@@ -599,7 +568,7 @@ def main():
                     recover_step, args.use_num_samples, args.answer_provided_by, args.task_to_learn))
                 f.write(str(np.mean([l for L in loss_dict for l in L])))
 
-    else:  # inference mode
+    elif args.do_predict:  # inference mode
         if "img" in args.answer_provided_by:
             logger.info(f"use_img_content = {args.use_img_content}")
             logger.info(f"use_img_meta = {args.use_img_meta}")
@@ -628,7 +597,6 @@ def main():
         total_samples = sum([len(l.dataset) for l in train_dataloaders])
         logger.info(f"\ntotal_samples = {total_samples}")
         iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
-        nbatches = sum(loader_lengths)
 
         Pred = []
         Choices = []
@@ -704,20 +672,23 @@ def get_args():
     parser = argparse.ArgumentParser()
 
     # General
+    parser.add_argument("--do_train", action='store_true', help="Whether to run training")
+    parser.add_argument("--do_val", action='store_true', help="Whether to run validation")
+    parser.add_argument("--do_predict", action='store_true', help="Whether to run prediction")
+
     parser.add_argument("--bert_model", default="bert-base-cased", type=str,
                         help="Bert pre-trained model selected in the list: bert-base-cased, bert-large-cased.")
-    parser.add_argument("--config_path", default=None, type=str,
-                        help="Bert config file path.")
+    parser.add_argument("--config_path", default=None, type=str, help="Bert config file path.")
     parser.add_argument("--ckpts_dir",
-                        default='/data/yingshac/MMMHQA/ckpts/no_model_name_specified/',
+                        required=True,
                         type=str,
                         help="The output directory where checkpoints will be written.")
     parser.add_argument("--output_dir",
-                        default='light_output/no_model_name_specified/',
+                        required=True,
                         type=str,
                         help="The output directory where the model predictions and loss curves.")
     parser.add_argument("--log_file",
-                        default="training.log",
+                        default="run.log",
                         type=str,
                         help="The output directory where the log will be written.")
     parser.add_argument("--model_recover_path",
@@ -731,9 +702,7 @@ def get_args():
                              "see https://github.com/LuoweiZhou/VLP#-misc and "
                              "https://dl.fbaipublicfiles.com/ActivityNet-Entities/ActivityNet-Entities/detectron_weights.tar.gz"
                         )
-    parser.add_argument("--do_train",
-                        action='store_true',
-                        help="Whether to run training. This should ALWAYS be set to True.")
+
     parser.add_argument("--do_lower_case",
                         action='store_true',
                         help="Set this flag if you are using an uncased model.")
@@ -817,7 +786,6 @@ def get_args():
     parser.add_argument("--recover_ori_ckpt", action='store_true',
                         help="Whether to load original VLP checkpoint")
     parser.add_argument("--recover_step", type=int, default=None)
-    parser.add_argument("--val_loss", action='store_true')
 
     parser.add_argument('--no_img_meta', action='store_true')
     parser.add_argument('--no_img_content', action='store_true')
@@ -828,11 +796,9 @@ def get_args():
     parser.add_argument("--output_suffix", default="", type=str)
 
     # Others for VLP
-    parser.add_argument('--enable_visdom', action='store_true')
     parser.add_argument('--save_loss_curve', action='store_true')
     parser.add_argument('--split', type=str, default=['train', 'val', 'test'])
     parser.add_argument('--Qcate', type=str, default=['all'])
-    parser.add_argument('--file_valid_jpgs', default='/mnt/dat/COCO/annotations/coco_valid_jpgs.json', type=str)
     parser.add_argument('--sche_mode', default='warmup_linear', type=str,
                         help="warmup_linear | warmup_constant | warmup_cosine")
     parser.add_argument('--drop_prob', default=0.1, type=float)
@@ -840,8 +806,6 @@ def get_args():
     parser.add_argument('--vis_mask_prob', default=0, type=float)
     parser.add_argument('--max_drop_worst_ratio', default=0, type=float)
     parser.add_argument('--drop_after', default=6, type=int)
-
-    parser.add_argument('--enable_butd', action='store_true', help='set to take in region features')
 
     parser.add_argument('--relax_projection',
                         action='store_true',

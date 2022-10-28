@@ -42,10 +42,7 @@ import torch.nn.functional as F
 from .file_utils import cached_path
 from .loss import LabelSmoothingLoss
 
-# import visdom
-
 logger = logging.getLogger(__name__)
-# vis = visdom.Visdom(port=8888, env='vlp')
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased.tar.gz",
