@@ -56,7 +56,7 @@ def main():
             image_id = imgid_map[image_id]
 
             image_feature_path = os.path.join(args.feat_dir, f"{split}/{image_id}.pkl")
-            if os.path.exists(image_feature_path):
+            if not os.path.exists(image_feature_path):
                 img_exist = False
                 break
 
@@ -65,7 +65,7 @@ def main():
             image_id = imgid_map[image_id]
 
             image_feature_path = os.path.join(args.feat_dir, f"{split}/{image_id}.pkl")
-            if os.path.exists(image_feature_path):
+            if not os.path.exists(image_feature_path):
                 img_exist = False
                 break
 
