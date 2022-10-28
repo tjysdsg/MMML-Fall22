@@ -339,16 +339,14 @@ def main():
 
         optimizer = FusedAdam(optimizer_grouped_parameters,
                               lr=args.learning_rate,
-                              bias_correction=False,
-                              max_grad_norm=1.0)
+                              bias_correction=False)  # FIXME: max_grad_norm=1.0
         if args.loss_scale == 0:
-            optimizer = FP16_Optimizer_State(
-                optimizer, dynamic_loss_scale=True)
+            optimizer = FP16_Optimizer_State(optimizer, dynamic_loss_scale=True)
         else:
-            optimizer = FP16_Optimizer_State(
-                optimizer, static_loss_scale=args.loss_scale)
+            optimizer = FP16_Optimizer_State(optimizer, static_loss_scale=args.loss_scale)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        # FIXME: use BertAdam?
         # optimizer = BertAdam(optimizer_grouped_parameters,
         # lr=args.learning_rate,
         # warmup=args.warmup_proportion,
@@ -575,11 +573,11 @@ def main():
                 vis_pe = vis_pe.data
                 # doesn't support scst training for not
                 loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
-                                   attention_mask=input_mask, \
+                                   attention_mask=input_mask,
                                    masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                                   filter_label=filter_label, logit_mask=logit_mask, context=context, \
+                                   filter_label=filter_label, logit_mask=logit_mask, context=context,
                                    cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                                   masked_pos=masked_pos, masked_weights=masked_weights, \
+                                   masked_pos=masked_pos, masked_weights=masked_weights,
                                    task_idx=task_idx, drop_worst_ratio=0)
                 mean_reward = loss_tuple[0].new(1).fill_(0)
 

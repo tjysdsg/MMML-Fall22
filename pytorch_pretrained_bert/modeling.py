@@ -172,13 +172,6 @@ class BertConfig(object):
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
-# FIXME: this will be overridden by definition of BertLayerNorm below
-try:
-    from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
-except ImportError:
-    pass
-
-
 class BertLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-5):
         """Construct a layernorm module in the TF style (epsilon inside the square root)."""
@@ -252,6 +245,12 @@ class BertEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+
+# FIXME
+#   try:
+#       from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
+#   except ImportError:
+#       pass
 
 class BertSelfAttention(nn.Module):
     def __init__(self, config):
