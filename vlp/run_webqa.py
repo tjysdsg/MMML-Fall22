@@ -3,12 +3,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+from logger import get_logger
 import os
-
-os.environ['MASTER_ADDR'] = 'localhost'
-import sys
-import logging
 import glob
 import math
 import json
@@ -20,10 +16,9 @@ import torch
 import torch.multiprocessing as mp
 
 mp.set_start_method('spawn', force=True)
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader
 import random
 import copy
-from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertForWebqa
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from vlp.loader_utils import batch_list_to_batch_tensors
@@ -68,53 +63,8 @@ def save_loss_curve(loss, i_epoch, output_dir, task, all_tasks):
     plt.savefig(os.path.join(output_dir, "figs/" + title + ".jpg"))
 
 
-def main():
-    args = get_args()
-
-    log_txt_content = []
-    args.max_seq_length = args.max_len_b + args.max_len_a + 3  # +3 for 2x[SEP] and [CLS]
-    args.use_img_meta = not args.no_img_meta
-    args.use_img_content = not args.no_img_content
-    args.use_txt_fact = not args.no_txt_fact
-    assert args.len_vis_input == 100, "run main: only support 100 region features per image"
-
-    # output config
-    os.makedirs(args.output_dir, exist_ok=True)
-    os.makedirs(args.ckpts_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, "figs"), exist_ok=True)
-    json.dump(args.__dict__, open(os.path.join(
-        args.output_dir, 'opt.json'), 'w'), sort_keys=True, indent=2)
-
-    logging.basicConfig(
-        filename=os.path.join(args.output_dir, args.log_file),
-        filemode='w',
-        format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-        datefmt='%m/%d/%Y %H:%M:%S',
-        level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    n_gpu = torch.cuda.device_count()
-    logger.info(f"device: {device} n_gpu: {n_gpu}, 16-bits training: {args.fp16}")
-
-    if args.gradient_accumulation_steps < 1:
-        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
-            args.gradient_accumulation_steps))
-
-    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
-
-    # fix random seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
-
-    # plotting loss, optional
-    if args.enable_visdom:
-        import visdom
-        vis = visdom.Visdom(port=args.visdom_port, env=args.output_dir)
-        vis_window = {'iter': None, 'score': None}
+def get_dataloaders(args, device):
+    from pytorch_pretrained_bert.tokenization import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained(
         args.bert_model, do_lower_case=args.do_lower_case, cache_dir=args.output_dir + '/.pretrained_model'
@@ -220,9 +170,59 @@ def main():
                                                         batch_list_to_batch_tensors)
             train_dataloaders.append(train_dataloader)
 
-    loader_lengths = [len(l) for l in train_dataloaders]
-    print("\nnbatches = ", sum(loader_lengths))
+    return train_dataloaders
 
+
+def main():
+    args = get_args()
+
+    log_txt_content = []
+    args.max_seq_length = args.max_len_b + args.max_len_a + 3  # +3 for 2x[SEP] and [CLS]
+    args.use_img_meta = not args.no_img_meta
+    args.use_img_content = not args.no_img_content
+    args.use_txt_fact = not args.no_txt_fact
+    assert args.len_vis_input == 100, "run main: only support 100 region features per image"
+
+    # output config
+    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(args.ckpts_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, "figs"), exist_ok=True)
+    json.dump(args.__dict__, open(os.path.join(
+        args.output_dir, 'opt.json'), 'w'), sort_keys=True, indent=2)
+
+    logger = get_logger(os.path.join(args.output_dir, args.log_file), __name__)
+
+    device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    n_gpu = torch.cuda.device_count()
+    logger.info(f"device: {device} n_gpu: {n_gpu}, 16-bits training: {args.fp16}")
+
+    if args.gradient_accumulation_steps < 1:
+        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
+            args.gradient_accumulation_steps))
+
+    args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
+
+    # fix random seed
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if n_gpu > 0:
+        torch.cuda.manual_seed_all(args.seed)
+
+    # plotting loss, optional
+    if args.enable_visdom:
+        import visdom
+        vis = visdom.Visdom(port=args.visdom_port, env=args.output_dir)
+        vis_window = {'iter': None, 'score': None}
+
+    train_dataloaders = get_dataloaders(args, device)
+
+    loader_lengths = [len(l) for l in train_dataloaders]
+    print("n_batches = ", sum(loader_lengths))
+
+    # train_dataloader_order randomly specifies which at each iteration which dataloader to retrieve a batch from,
+    # in case multiple dataloaders (text+image) are used during training
+    # If there is only one dataloader, the training loop is equivalent to `for i, batch in enumerate(dataloder):`
     train_dataloader_order = []
     for i in range(len(loader_lengths)):
         train_dataloader_order.extend([i] * loader_lengths[i])
@@ -248,8 +248,9 @@ def main():
     type_vocab_size = 6 if args.new_segment_ids else 2
     relax_projection = 4 if args.relax_projection else 0
     task_idx_proj = 3  # harded to be 3 # if args.tasks == 'img2txt' else 0
-    mask_word_id, eos_word_ids, pad_word_ids = tokenizer.convert_tokens_to_ids(
-        ["[MASK]", "[SEP]", "[PAD]"])  # index in BERT vocab: 103, 102, 0
+
+    # index in BERT vocab: 103, 102, 0
+    # mask_word_id, eos_word_ids, pad_word_ids = tokenizer.convert_tokens_to_ids(["[MASK]", "[SEP]", "[PAD]"])
 
     # check if detectron weights and bias files are present
     fc7_weight_path = os.path.join(args.detectron_dir, 'fc7_w.pkl')
@@ -314,7 +315,6 @@ def main():
             model.bert.embeddings.word_embeddings.float()
             model.bert.embeddings.position_embeddings.float()
             model.bert.embeddings.token_type_embeddings.float()
-    print("model.to(device)")
     model.to(device)
     if n_gpu > 1:
         model = torch.nn.DataParallel(model, device_ids=[1, 0])
@@ -383,7 +383,6 @@ def main():
         logger.info("***** Running training *****")
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", t_total)
-        logger.info("  Loader length = %d", len(train_dataloader))
 
         model.train()
         if recover_step:
@@ -391,7 +390,6 @@ def main():
         else:
             start_epoch = 1
         for i_epoch in trange(start_epoch, args.num_train_epochs + 1, desc="Epoch"):
-            print(i_epoch)
             dataloader_iters = [iter(l) for l in train_dataloaders]
             iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
             nbatches = sum(loader_lengths)
@@ -542,7 +540,6 @@ def main():
         logger.info("***** Compute loss without grad *****")
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", t_total)
-        logger.info("  Loader length = %d", len(train_dataloader))
 
         model.eval()
 
