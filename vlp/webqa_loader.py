@@ -1,4 +1,5 @@
 import random
+import io
 from random import randint, shuffle, choices
 from random import random as rand
 import pickle
@@ -70,6 +71,27 @@ def get_image_feature_path(feature_folder: str, image_id: int):
         raise AssertionError(f"Can't find feature file for imageid = {image_id}")
 
     return image_feature_path
+
+
+class TorchCPUUnpickler(pickle.Unpickler):
+    """
+    Load pickled torch CUDA objects into CPU
+
+    Used to load image features without raising an error
+
+    Should be a drop-in replacement for pickle.load()
+
+    ```
+    with open('xxx.pkl', 'rb') as f:
+        feat = TorchCPUUnpickler(f).load()
+    ```
+    """
+
+    def find_class(self, module, name):
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
+        else:
+            return super().find_class(module, name)
 
 
 class webqaDataset_filter(Dataset):
@@ -635,12 +657,8 @@ class Preprocess4webqa(Pipeline):
                         input_ids.extend([0] * n_pad)
                         segment_ids.extend([0] * n_pad)
 
-                        try:
-                            with open(img_path, "rb") as f:
-                                features = pickle.load(f)
-                        except:
-                            print("can't load pickle file: ", img_path)
-                            raise
+                        with open(img_path, "rb") as f:
+                            features = TorchCPUUnpickler(f).load()
                         img = features['fc1_features'].detach().cpu().float()
                         cls_label = features['cls_features'].detach().cpu().float()
                         vis_pe = features['pred_boxes'].detach().cpu()
@@ -800,12 +818,8 @@ class Preprocess4webqa(Pipeline):
                     input_ids.extend([0] * n_pad)
                     segment_ids.extend([0] * n_pad)
 
-                    try:
-                        with open(img_path, "rb") as f:
-                            features = pickle.load(f)
-                    except:
-                        print("can't load pickle file: ", img_path)
-                        raise
+                    with open(img_path, "rb") as f:
+                        features = TorchCPUUnpickler(f).load()
                     img = features['fc1_features'].detach().cpu().float()
                     cls_label = features['cls_features'].detach().cpu().float()
                     vis_pe = features['pred_boxes'].detach().cpu()
@@ -1033,12 +1047,8 @@ class Preprocess4webqa(Pipeline):
                 vis_pe_list = []
                 for img_path in gold_feature_paths:
                     assert os.path.exists(img_path), "loader Processor: .pkl file doesn't exist! {}".format(img_path)
-                    try:
-                        with open(img_path, "rb") as f:
-                            features = pickle.load(f)
-                    except:
-                        print(img_path)
-                        raise
+                    with open(img_path, "rb") as f:
+                        features = TorchCPUUnpickler(f).load()
                     img = features['fc1_features'].detach().cpu().float()
                     cls_label = features['cls_features'].detach().cpu().float()
                     vis_pe = features['pred_boxes'].detach().cpu()
@@ -1267,12 +1277,8 @@ class Preprocess4webqaDecoder(Pipeline):
                 vis_pe_list = []
                 for img_path in gold_feature_paths:
                     assert os.path.exists(img_path), "loader Processor: .pkl file doesn't exist! {}".format(img_path)
-                    try:
-                        with open(img_path, "rb") as f:
-                            features = pickle.load(f)
-                    except:
-                        print(img_path)
-                        raise
+                    with open(img_path, "rb") as f:
+                        features = TorchCPUUnpickler(f).load()
                     img = features['fc1_features'].detach().cpu().float()
                     cls_label = features['cls_features'].detach().cpu().float()
                     vis_pe = features['pred_boxes'].detach().cpu()
