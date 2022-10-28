@@ -31,9 +31,9 @@ def main():
             lineidx, img_base64 = line.rstrip('\n').split()
 
             try:
-                img = Image.open(BytesIO(base64.b64decode(img_base64)))
                 outf = os.path.join(out_dir, f'{lineidx}.jpg')
-                if not os.path.exists(outf):
+                if not os.path.exists(outf):  # skip existing images
+                    img = Image.open(BytesIO(base64.b64decode(img_base64)))
                     img.convert('RGB').save(outf)
             except (OSError, ValueError) as e:
                 print(f'Cannot decode image {lineidx}: {e}')
