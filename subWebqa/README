@@ -1,0 +1,8 @@
+train:
+Counter({'YesNo': 2218, 'choose': 1755, 'Others': 1747, 'color': 1351, 'number': 1318, 'shape': 491})
+
+valid:
+Counter({'YesNo': 282, 'Others': 253, 'choose': 245, 'number': 182, 'color': 149, 'shape': 74})
+
+test:
+2003
