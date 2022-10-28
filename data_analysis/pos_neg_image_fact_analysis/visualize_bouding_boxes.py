@@ -2,7 +2,7 @@ import os
 import numpy as np
 from argparse import ArgumentParser
 from PIL import Image
-from webqa.rcnn_feats import RcnnFeatureLoader
+from data_analysis.rcnn_feats import RcnnFeatureLoader
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 import matplotlib as mpl

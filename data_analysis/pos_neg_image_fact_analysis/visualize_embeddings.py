@@ -3,7 +3,7 @@ import numpy as np
 import json
 from argparse import ArgumentParser
 from sklearn.decomposition import PCA
-from webqa.rcnn_feats import RcnnFeatureLoader
+from data_analysis.rcnn_feats import RcnnFeatureLoader
 from matplotlib import pyplot as plt
 import seaborn as sns
 
