@@ -1,8 +1,8 @@
 train:
-Counter({'YesNo': 2218, 'choose': 1755, 'Others': 1747, 'color': 1351, 'number': 1318, 'shape': 491})
+Counter({'YesNo': 2179, 'choose': 1721, 'Others': 1705, 'number': 1163, 'color': 1128, 'shape': 335})
 
 valid:
-Counter({'YesNo': 282, 'Others': 253, 'choose': 245, 'number': 182, 'color': 149, 'shape': 74})
+Counter({'YesNo': 321, 'Others': 295, 'choose': 279, 'number': 203, 'color': 152, 'shape': 55})
 
 test:
 2003
