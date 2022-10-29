@@ -71,7 +71,7 @@ def get_dataloaders(args, device):
     if args.max_position_embeddings:
         tokenizer.max_len = args.max_position_embeddings
 
-    processor = webqa_loader.Preprocess4webqa(
+    processor = webqa_loader.WebQADataSampleProcessor(
         args.max_pred, args.mask_prob,
         list(tokenizer.vocab.keys()), tokenizer.convert_tokens_to_ids,
         seed=args.seed, max_len=args.max_seq_length,
