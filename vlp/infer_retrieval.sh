@@ -2,14 +2,15 @@
 
 export PYTHONPATH=$(pwd)/../
 
+output_dir=exp/retrieval
+ckpts_dir=${output_dir}/ckpt
+
 webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
-dataset=data/webqa_subset.json
 rcnn_feat=$webqa_dir
 imgid_map=$webqa_dir/image_id_map_0328.pkl
 detectron_dir=$webqa_dir/baseline_finetuned/detectron_weights
 
-output_dir=exp/retrieval
-ckpts_dir=${output_dir}/ckpt
+dataset=../subWebqa/data/val_subWebqa.json
 
 ckpt_step=-1
 if [[ "$1" = "" ]]; then

@@ -4,14 +4,14 @@ export PYTHONPATH=$(pwd)/../
 
 output_dir=exp/retrieval
 ckpts_dir=${output_dir}/ckpt
-# TODO: dataset=/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json
-dataset=data/webqa_subset.json
 
 webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
 rcnn_feat=$webqa_dir
 imgid_map=$webqa_dir/image_id_map_0328.pkl
-model_ckpt=$webqa_dir/baseline_finetuned/retrieval_x101fpn/model.3.bin
 detectron_dir=$webqa_dir/baseline_finetuned/detectron_weights
+model_ckpt=$webqa_dir/baseline_finetuned/retrieval_x101fpn/model.3.bin
+
+dataset=../subWebqa/data/train_subWebqa.json
 
 python run_webqa.py \
   --do_train \
