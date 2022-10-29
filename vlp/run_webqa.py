@@ -224,8 +224,16 @@ def train(
             batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
             input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
 
+            # Each batch contains a single fact + question (+answer)
+
+            # Input of filter task:
+            #       Image: [CLS], [RCNN feats] [Image captions], [SEP], [Question] [Answer] [SEP]
+            #       Text: [CLS], [Text fact], [SEP], [Question] [Answer] [SEP]
+            # Input of QA task:
+            #       Image: [CLS], [RCNN feats] [Image captions], [SEP], [Question] [SEP]
+            #       Text: [CLS], [Text fact] [Image captions], [SEP], [Question] [SEP]
             conv_feats = img.data  # Bx100x2048
-            vis_pe = vis_pe.data
+            vis_pe = vis_pe.data  # positional embeddings
             loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
                                attention_mask=input_mask,
                                masked_lm_labels=masked_ids, do_filter_task=do_filter_task,

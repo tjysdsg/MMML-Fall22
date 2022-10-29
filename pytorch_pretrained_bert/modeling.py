@@ -1067,8 +1067,27 @@ class BertForWebqa(PreTrainedBertModel):
                 masked_lm_labels=None, do_filter_task=None, filter_label=None, logit_mask=None, context=None,
                 cxt_modality_label=None, next_sentence_label=None, masked_pos=None, masked_weights=None, task_idx=None,
                 drop_worst_ratio=0.2, filter_infr_th=None, tokenizer=None):
+        """
+        :param vis_feats: Image features
+        :param vis_pe: Image positional embeddings
+        :param input_ids:
+        :param token_type_ids:
+        :param attention_mask: Attention masks
+        :param masked_lm_labels:
+        :param do_filter_task: Filter or QA
+        :param filter_label: Filter labels, i.e. which fact to use
+        :param logit_mask:
+        :param context: Context type
+        :param cxt_modality_label:
+        :param next_sentence_label:
+        :param masked_pos:
+        :param masked_weights:
+        :param task_idx:
+        :param drop_worst_ratio:
+        :param filter_infr_th: Filter inference threshold, >=threshold will be regarded as a positive fact
+        :param tokenizer: Text tokenizer
+        """
 
-        ## TODO: track the change of context_is_img --> context, pass cxt_modality_label to BertEmbedding
         if context[0] in ['img', 'both'] and vis_feats.size()[-1] > 1:
             vis_feats = self.vis_embed(
                 vis_feats)  # image region features (NC1+NC2+ ... +NC_B, 100, hidden_size), NC = num_choices
@@ -1143,9 +1162,9 @@ class BertForWebqa(PreTrainedBertModel):
             # print("input_ids.size() = ", input_ids.size())
             # print("cxt_modality_label.size() = ", np.array(cxt_modality_label).size)
             # print("cxt_modality_label = ", cxt_modality_label)
-            if context[0] in ['img', 'both']: assert np.array(cxt_modality_label).size == vis_feats.size(
-                0) == vis_pe.size(0)
-            sequence_output, pooled_output = self.bert(vis_feats, vis_pe, input_ids, token_type_ids, \
+            if context[0] in ['img', 'both']:
+                assert np.array(cxt_modality_label).size == vis_feats.size(0) == vis_pe.size(0)
+            sequence_output, pooled_output = self.bert(vis_feats, vis_pe, input_ids, token_type_ids,
                                                        attention_mask, context[0], cxt_modality_label,
                                                        output_all_encoded_layers=False,
                                                        max_len_img_cxt=self.max_len_img_cxt)
@@ -1173,7 +1192,7 @@ class BertForWebqa(PreTrainedBertModel):
             cxt_modality_label = [i for i in range(len(cxt_modality_label)) if cxt_modality_label[i]]
             if context[0] in ['img', 'both']: assert np.array(cxt_modality_label).size == vis_feats.size(
                 0) == vis_pe.size(0)
-            sequence_output, pooled_output = self.bert(vis_feats, vis_pe, input_ids, token_type_ids, \
+            sequence_output, pooled_output = self.bert(vis_feats, vis_pe, input_ids, token_type_ids,
                                                        attention_mask, context[0], cxt_modality_label,
                                                        output_all_encoded_layers=False,
                                                        max_len_img_cxt=self.max_len_img_cxt)
@@ -1234,11 +1253,6 @@ class BertForWebqa(PreTrainedBertModel):
                 # print("\n")
                 time.sleep(2)
             return masked_lm_loss, cls_loss
-
-        return masked_lm_loss, cls_loss  # works better when combined with max_pred=1
-
-
-""" for webqa, based on VLP """
 
 
 class BertForWebqaDecoder(PreTrainedBertModel):

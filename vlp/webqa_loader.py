@@ -1220,7 +1220,7 @@ class Preprocess4webqaDecoder(Pipeline):
                 "Processor for decoder does not support filter task. \nFor filter task inference, please use run_webqa.py by setting args.do_train=False")
         else:
             if context in ['img', 'both']:
-                gold_feature_paths, distractor_feature_paths, gold_cxt_list, distractor_cxt_list, Q, _, do_filter_task, context, example_id = instance  # '_' as a placeholder for 'A'
+                gold_feature_paths, distractor_feature_paths, gold_cxt_list, distractor_cxt_list, Q, A, do_filter_task, context, example_id = instance
                 gold_feature_paths = gold_feature_paths[:2]
                 gold_cxt_list = gold_cxt_list[:2]
                 tokens_a = ['[UNK]'] * self.max_len_img_cxt
