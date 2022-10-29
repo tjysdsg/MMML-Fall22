@@ -232,8 +232,13 @@ def train(
             # Input of QA task:
             #       Image: [CLS], [RCNN feats] [Image captions], [SEP], [Question] [SEP]
             #       Text: [CLS], [Text fact] [Image captions], [SEP], [Question] [SEP]
-            conv_feats = img.data  # Bx100x2048
+            conv_feats = img.data  # B x 100 bounding boxes x 2048
             vis_pe = vis_pe.data  # positional embeddings
+
+            # input_ids contains the actual input sequence,
+            # but the tokens of image and text facts are marked as [UNK] at this stage,
+            # their values will be set to the sequence in BertEmbedding forward call
+
             loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
                                attention_mask=input_mask,
                                masked_lm_labels=masked_ids, do_filter_task=do_filter_task,

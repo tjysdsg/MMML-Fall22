@@ -223,16 +223,13 @@ class BertEmbeddings(nn.Module):
         position_embeddings = self.position_embeddings(position_ids)
 
         if context in ["img", "both"] and prev_is_None and vis_feats.size()[-1] > 1:
-            # TODO: fit the img feature chunk into words_embeddings with specified indices.
             # if len(cxt_modality_label) == 1: cxt_modality_label = [0]
             # print("cxt_modality_label = ", cxt_modality_label)
             words_embeddings[cxt_modality_label, 1:1 + max_len_img_cxt] = vis_feats
             position_embeddings[cxt_modality_label, 1:1 + max_len_img_cxt] = vis_pe
             # print(position_embeddings)
 
-            # words_embeddings = torch.cat((words_embeddings[:, :1], vis_feats, words_embeddings[:, max_len_img_cxt+1:]), dim=1)
             assert max_len_img_cxt == 200, 'only support region attn!'
-            # position_embeddings = torch.cat((position_embeddings[:, :1], vis_pe, position_embeddings[:, max_len_img_cxt+1:]), dim=1) # hacky...
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = words_embeddings + position_embeddings + token_type_embeddings
