@@ -224,7 +224,7 @@ def train(
             batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
             input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
 
-            # Each batch contains a single fact + question (+answer)
+            # Each batch contains img/text facts + question (+answer)
 
             # Input of filter task:
             #       Image: [CLS], [RCNN feats] [Image captions], [SEP], [Question] [Answer] [SEP]

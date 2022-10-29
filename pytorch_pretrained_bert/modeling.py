@@ -1154,11 +1154,6 @@ class BertForWebqa(PreTrainedBertModel):
                     th_dict[th] = [torch.sum(pr).item(), torch.sum(re).item(), torch.sum(f1).item()]
                 return th_dict, pred.detach().cpu()
 
-            # print("vis_pe.size() = ", vis_pe.size())
-            # print("vis_feats.size() = ", vis_feats.size())
-            # print("input_ids.size() = ", input_ids.size())
-            # print("cxt_modality_label.size() = ", np.array(cxt_modality_label).size)
-            # print("cxt_modality_label = ", cxt_modality_label)
             if context[0] in ['img', 'both']:
                 assert np.array(cxt_modality_label).size == vis_feats.size(0) == vis_pe.size(0)
             sequence_output, pooled_output = self.bert(vis_feats, vis_pe, input_ids, token_type_ids,
