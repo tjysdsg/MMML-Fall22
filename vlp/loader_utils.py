@@ -1,5 +1,44 @@
 from random import randint
+import os
+import io
 import torch
+import pickle
+
+
+class TorchCPUUnpickler(pickle.Unpickler):
+    """
+    Load pickled torch CUDA objects into CPU
+
+    Used to load image features without raising an error
+
+    Should be a drop-in replacement for pickle.load()
+
+    ```
+    with open('xxx.pkl', 'rb') as f:
+        feat = TorchCPUUnpickler(f).load()
+    ```
+    """
+
+    def find_class(self, module, name):
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
+        else:
+            return super().find_class(module, name)
+
+
+# FIXME: find a way to pre-determine which subset this image is, without guessing and using the file system
+def get_image_feature_path(feature_folder: str, image_id: int):
+    image_feature_path = None
+    for subset in ['dev', 'train', 'test']:
+        tmp = os.path.join(feature_folder, f"{subset}/{image_id}.pkl")
+        if os.path.exists(tmp):
+            image_feature_path = tmp
+            break
+
+    if image_feature_path is None:
+        raise AssertionError(f"Can't find feature file for imageid = {image_id}")
+
+    return image_feature_path
 
 
 def get_random_word(vocab_words):
