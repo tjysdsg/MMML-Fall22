@@ -1,11 +1,7 @@
-"""BERT finetuning runner."""
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
 import logging
-
 from logger import get_logger
 import os
 import glob
@@ -25,6 +21,7 @@ import copy
 from pytorch_pretrained_bert.modeling import BertForWebqa
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from vlp.loader_utils import batch_list_to_batch_tensors
+from vlp.webqa_dataset import WebQARetrievalDataset
 import vlp.webqa_loader as webqa_loader
 import matplotlib.pyplot as plt
 from typing import List
@@ -74,76 +71,72 @@ def get_dataloaders(args, device):
     if args.max_position_embeddings:
         tokenizer.max_len = args.max_position_embeddings
 
-    processor = webqa_loader.Preprocess4webqa(args.max_pred, args.mask_prob,
-                                              list(tokenizer.vocab.keys()), tokenizer.convert_tokens_to_ids,
-                                              seed=args.seed, max_len=args.max_seq_length,
-                                              len_vis_input=args.len_vis_input, max_len_a=args.max_len_a,
-                                              max_len_b=args.max_len_b,
-                                              max_len_img_cxt=args.max_len_img_cxt,
-                                              new_segment_ids=args.new_segment_ids,
-                                              truncate_config={'trunc_seg': args.trunc_seg,
-                                                               'always_truncate_tail': args.always_truncate_tail},
-                                              use_img_meta=args.use_img_meta, use_img_content=args.use_img_content,
-                                              use_txt_fact=args.use_txt_fact)
+    processor = webqa_loader.WebQADataSampleProcessor(
+        args.max_pred, args.mask_prob,
+        list(tokenizer.vocab.keys()), tokenizer.convert_tokens_to_ids,
+        seed=args.seed, max_len=args.max_seq_length,
+        len_vis_input=args.len_vis_input, max_len_a=args.max_len_a,
+        max_len_b=args.max_len_b,
+        max_len_img_cxt=args.max_len_img_cxt,
+        new_segment_ids=args.new_segment_ids,
+        truncate_config={
+            'trunc_seg': args.trunc_seg,
+            'always_truncate_tail': args.always_truncate_tail
+        },
+        use_img_meta=args.use_img_meta,
+        use_img_content=args.use_img_content,
+        use_txt_fact=args.use_txt_fact
+    )
 
     train_dataloaders = []
     if "filter" in args.task_to_learn:
         if "txt" in args.answer_provided_by:
-            if args.use_x_distractors:
-                train_dataset = webqa_loader.webqaDataset_filter_with_both(dataset_json_path=args.txt_dataset_json_path,
-                                                                           split=args.split, Qcate=args.Qcate,
-                                                                           batch_size=args.train_batch_size,
-                                                                           tokenizer=tokenizer,
-                                                                           feature_folder=args.feature_folder,
-                                                                           use_num_samples=args.use_num_samples,
-                                                                           processor=processor,
-                                                                           answer_provided_by='txt',
-                                                                           max_snippets=args.txt_filter_max_choices,
-                                                                           max_imgs=args.img_filter_max_choices,
-                                                                           imgid_map=args.image_id_map_path,
-                                                                           device=device)
-            else:
-                train_dataset = webqa_loader.webqaDataset_filter(dataset_json_path=args.txt_dataset_json_path,
-                                                                 split=args.split, Qcate=args.Qcate,
-                                                                 batch_size=args.train_batch_size, tokenizer=tokenizer,
-                                                                 use_num_samples=args.use_num_samples,
-                                                                 processor=processor,
-                                                                 filter_max_choices=args.txt_filter_max_choices,
-                                                                 device=device)
-
-            train_dataloader = _get_loader_from_dataset(train_dataset,
-                                                        args.train_batch_size, args.num_workers,
-                                                        batch_list_to_batch_tensors)
+            train_dataset = WebQARetrievalDataset(
+                dataset_json_path=args.txt_dataset_json_path,
+                split=args.split,
+                Qcate=args.Qcate,
+                batch_size=args.train_batch_size,
+                tokenizer=tokenizer,
+                feature_folder=args.feature_folder,
+                use_num_samples=args.use_num_samples,
+                processor=processor,
+                answer_provided_by='txt',
+                use_x_distractors=args.use_x_distractors,
+                max_snippets=args.txt_filter_max_choices,
+                max_imgs=args.img_filter_max_choices,
+                imgid_map=args.image_id_map_path,
+                device=device,
+            )
+            train_dataloader = _get_loader_from_dataset(
+                train_dataset,
+                args.train_batch_size,
+                args.num_workers,
+                batch_list_to_batch_tensors,
+            )
             train_dataloaders.append(train_dataloader)
 
         if "img" in args.answer_provided_by:
-            if args.use_x_distractors:
-                train_dataset = webqa_loader.webqaDataset_filter_with_both(dataset_json_path=args.img_dataset_json_path,
-                                                                           split=args.split, Qcate=args.Qcate,
-                                                                           batch_size=args.train_batch_size,
-                                                                           tokenizer=tokenizer,
-                                                                           feature_folder=args.feature_folder,
-                                                                           use_num_samples=args.use_num_samples,
-                                                                           processor=processor,
-                                                                           answer_provided_by='img',
-                                                                           max_snippets=args.txt_filter_max_choices,
-                                                                           max_imgs=args.img_filter_max_choices,
-                                                                           imgid_map=args.image_id_map_path,
-                                                                           device=device)
-            else:
-                train_dataset = webqa_loader.webqaDataset_filter_with_img(dataset_json_path=args.img_dataset_json_path,
-                                                                          split=args.split, Qcate=args.Qcate,
-                                                                          batch_size=args.train_batch_size,
-                                                                          tokenizer=tokenizer,
-                                                                          feature_folder=args.feature_folder,
-                                                                          use_num_samples=args.use_num_samples,
-                                                                          processor=processor,
-                                                                          filter_max_choices=args.img_filter_max_choices,
-                                                                          imgid_map=args.image_id_map_path,
-                                                                          device=device)
-            train_dataloader = _get_loader_from_dataset(train_dataset,
-                                                        args.train_batch_size, args.num_workers,
-                                                        batch_list_to_batch_tensors)
+            train_dataset = WebQARetrievalDataset(
+                dataset_json_path=args.img_dataset_json_path,
+                split=args.split,
+                Qcate=args.Qcate,
+                batch_size=args.train_batch_size,
+                tokenizer=tokenizer,
+                feature_folder=args.feature_folder,
+                use_num_samples=args.use_num_samples,
+                processor=processor,
+                answer_provided_by='img',
+                use_x_distractors=args.use_x_distractors,
+                max_snippets=args.txt_filter_max_choices,
+                max_imgs=args.img_filter_max_choices,
+                imgid_map=args.image_id_map_path,
+                device=device,
+            )
+            train_dataloader = _get_loader_from_dataset(
+                train_dataset,
+                args.train_batch_size, args.num_workers,
+                batch_list_to_batch_tensors,
+            )
             train_dataloaders.append(train_dataloader)
 
     if "qa" in args.task_to_learn:
@@ -218,20 +211,24 @@ def train(
         scst_reward = []
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
-            for param_tensor in model.state_dict():
-                if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                    logger.info(f"\n nan exists in {param_tensor}")
-            batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-            input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
+            batch = [t.to(device) if isinstance(t, torch.Tensor) else t for t in batch]
+            (
+                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
+                filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
+                example_ids
+            ) = batch
 
             # Each batch contains img/text facts + question (+answer)
 
             # Input of filter task:
-            #       Image: [CLS], [RCNN feats] [Image captions], [SEP], [Question] [Answer] [SEP]
-            #       Text: [CLS], [Text fact], [SEP], [Question] [Answer] [SEP]
+            # batch_size 1 float16
+            # sample: 1 fact question answer
+
+            #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [Answer] [SEP]
+            #       Text: [CLS], [[Text fact], [SEP] of each fact], [Question] [Answer] [SEP]
             # Input of QA task:
-            #       Image: [CLS], [RCNN feats] [Image captions], [SEP], [Question] [SEP]
-            #       Text: [CLS], [Text fact] [Image captions], [SEP], [Question] [SEP]
+            #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [SEP]
+            #       Text: [CLS], [[Text fact] of each fact], [SEP], [Question] [SEP]
             conv_feats = img.data  # B x 100 bounding boxes x 2048
             vis_pe = vis_pe.data  # positional embeddings
 
