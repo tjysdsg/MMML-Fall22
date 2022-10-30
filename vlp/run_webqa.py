@@ -383,12 +383,8 @@ def inference(
     logger.info(f"\ntotal_samples = {total_samples}")
     iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
 
-    pred_all = []
-    choice_all = []
-    example_ids_all = []
-    filter_labels_all = []
-
     model.eval()
+    res = {}  # {threshold: {question guid: prediction}}
     with torch.no_grad():
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
@@ -412,25 +408,35 @@ def inference(
                 filter_infr_th=th_list  # this will make the return value different from during training
             )
 
-            pred_all.append(pred)
-            filter_labels_all.append(filter_label.detach().cpu())
-            choice_all.extend(ori_choices)
-            example_ids_all.extend(example_ids)
-            if "filter" in args.task_to_learn:
-                for th in cur_batch_score:
-                    score_dict[th]['pr'].append(cur_batch_score[th][0])
-                    score_dict[th]['re'].append(cur_batch_score[th][1])
-                    score_dict[th]['f1'].append(cur_batch_score[th][2])
-                iter_bar.set_description('Iter={} loader_idx={} '.format(step, loader_idx))
-            else:
-                raise ValueError("Currently don't support qa task in inference mode")
+            # Note that for the test split, the number of facts can be bigger than
+            #   txt_filter_max_choices + img_filter_max_choices
 
-        pred_all = torch.cat(pred_all, dim=0)
-        pred_all = pred_all.numpy()
-        pred_all = [[f"{s:.4f}" for s in p] for p in pred_all]
-        filter_labels_all = torch.cat(filter_labels_all, dim=0)
-        filter_labels_all = filter_labels_all.numpy()
-        filter_labels_all = [[int(i[0]) for i in b] for b in filter_labels_all]
+            pred = pred.detach().cpu().numpy()  # (batch_size, num_choices)
+            for th in cur_batch_score:
+                pr = cur_batch_score[th][0]
+                re = cur_batch_score[th][1]
+                f1 = cur_batch_score[th][2]
+
+                score_dict[th]['pr'].append(pr)
+                score_dict[th]['re'].append(re)
+                score_dict[th]['f1'].append(f1)
+
+                logger.info(f"[th={th}]\tpr: {pr}\tre: {re}\tf1: {f1}")
+
+                for i, guid in enumerate(example_ids):
+                    pred_dict = dict(
+                        sources=[],
+                        answer='',
+                    )
+                    num_choices = pred.shape[1]
+                    for c in range(num_choices):
+                        if pred[i, c] > th:  # positive
+                            pred_dict['sources'].append(ori_choices[i][c])
+
+                    res.setdefault(th, {})[guid] = pred_dict
+
+            iter_bar.set_description('Iter={} loader_idx={} '.format(step, loader_idx))
+
         for th in th_list:
             score_dict[th]['pr'] = np.sum(score_dict[th]['pr']) / float(total_samples)
             score_dict[th]['re'] = np.sum(score_dict[th]['re']) / float(total_samples)
@@ -441,25 +447,10 @@ def inference(
             logger.info(f"re.mean = {score_dict[th]['re']}")
             logger.info(f"f1.mean = {score_dict[th]['f1']}")
 
-    # save result to files
-    output_pkl = {}
-    for e, c, l, p in zip(example_ids_all, choice_all, filter_labels_all, pred_all):
-        output_pkl[e] = {"choices": c, "labels": l, "pred_scores": p}
-    pkl_filename = f"{str(args.split)}_{args.use_num_samples}_step{recover_step}"
-
-    if "img" in args.answer_provided_by:
-        args.output_suffix = args.img_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
-        pkl_filename += f"_{'img'}_{args.img_filter_max_choices}_{args.use_img_content}_{args.use_img_meta}_"
-    if "txt" in args.answer_provided_by:
-        args.output_suffix = args.txt_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
-        pkl_filename += f"_{'txt'}_{args.txt_filter_max_choices}_{args.use_txt_fact}_"
-    pkl_filename += args.output_suffix
-
-    if args.use_x_distractors:
-        pkl_filename += "_unknown_modality"
-
-    with open(os.path.join(args.output_dir, "{}.json".format(pkl_filename)), "w") as f:
-        json.dump(output_pkl, f, indent=4)
+    # save result to files, you can submit this json file to the leaderboard
+    for th in th_list:
+        with open(os.path.join(args.output_dir, f"predictions_th{th}.json"), "w") as f:
+            json.dump(res[th], f, indent=2)
 
     torch.cuda.empty_cache()
 

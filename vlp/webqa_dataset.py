@@ -182,20 +182,13 @@ class WebQARetrievalDataset(Dataset):
 
         # make sure number of gold+negative facts is <= self.max_imgs or self.max_snippets
         # if not, remove extra negative facts, keeping all positive facts
-        if self.answer_provided_by == 'img':
-            sample_size = self.max_imgs - len(gold_img_and_caps)
-            sample_size = min(sample_size, len(distractor_img_and_caps))
+        # txt
+        distractor_text_facts = distractor_text_facts[:self.max_snippets - len(gold_text_facts)]
+        # img
+        distractor_img_and_caps = distractor_img_and_caps[:self.max_imgs - len(gold_img_and_caps)]
 
-            distractor_img_and_caps = distractor_img_and_caps[:sample_size]
-            distractor_text_facts = distractor_text_facts[:self.max_snippets]
-        elif self.answer_provided_by == 'txt':
-            sample_size = self.max_snippets - len(gold_text_facts)
-            sample_size = min(sample_size, len(distractor_text_facts))
-
-            distractor_text_facts = distractor_text_facts[:sample_size]
-            distractor_img_and_caps = distractor_img_and_caps[:self.max_imgs]
-        else:
-            raise ValueError("Invalid answer modality. args.answer_provided_by must be one of {'img', 'txt'}")
+        # NOTE: for test split, all facts are kept in gold_xxx_facts
+        # Therefore, the number of facts might be bigger than self.max_snippets + self.max_imgs
 
         # postprocess
         instance = (
