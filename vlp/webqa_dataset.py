@@ -81,8 +81,9 @@ class WebQARetrievalDataset(Dataset):
         # load all samples
         count = 0
         for i, datum in dataset.items():
-            if datum['split'] in split:
-                if datum['Qcate'] in self.Qcate:
+            data_split = datum['split']
+            if data_split in split:
+                if data_split == 'test' or datum['Qcate'] in self.Qcate:
                     if use_num_samples == -1 or count < use_num_samples:
                         Guid = datum['Guid']
                         Q = self.tokenizer.tokenize(datum['Q'].replace('"', ""))
@@ -102,7 +103,8 @@ class WebQARetrievalDataset(Dataset):
 
                         # at least one type of gold fact and one type of distractor fact
                         assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
-                        assert len(distractor_text_facts) > 0 or len(distractor_img_and_caps) > 0
+                        if data_split != 'test':
+                            assert len(distractor_text_facts) > 0 or len(distractor_img_and_caps) > 0
 
                         # ========================
                         self.instance_list.append(
