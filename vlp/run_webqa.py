@@ -411,7 +411,6 @@ def inference(
             # Note that for the test split, the number of facts can be bigger than
             #   txt_filter_max_choices + img_filter_max_choices
 
-            pred = pred.detach().cpu().numpy()  # (batch_size, num_choices)
             for th in cur_batch_score:
                 pr = cur_batch_score[th][0]
                 re = cur_batch_score[th][1]
@@ -421,16 +420,16 @@ def inference(
                 score_dict[th]['re'].append(re)
                 score_dict[th]['f1'].append(f1)
 
-                logger.info(f"[th={th}]\tpr: {pr}\tre: {re}\tf1: {f1}")
-
                 for i, guid in enumerate(example_ids):
                     pred_dict = dict(
                         sources=[],
                         answer='',
                     )
-                    num_choices = pred.shape[1]
+                    num_choices = pred[th].shape[1]
                     for c in range(num_choices):
-                        if pred[i, c] > th:  # positive
+                        # pred[th].shape: (batch_size, num_choices)
+                        # if pred[th][i, c] == 1
+                        if pred[th][i, c] > 0.5:  # positive, use 0.5 because the type is float
                             pred_dict['sources'].append(ori_choices[i][c])
 
                     res.setdefault(th, {})[guid] = pred_dict
