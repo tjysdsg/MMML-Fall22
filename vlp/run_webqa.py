@@ -168,6 +168,54 @@ def get_dataloaders(args, device):
     return train_dataloaders
 
 
+def model_forward_pass(model, batch, device, n_gpu, drop_worst_ratio=0):
+    batch = [t.to(device) if isinstance(t, torch.Tensor) else t for t in batch]
+    (
+        input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
+        filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
+        example_ids
+    ) = batch
+
+    # Each batch contains img/text facts + question (+answer)
+
+    # Input of filter task:
+    # batch_size 1 float16
+    # sample: 1 fact question answer
+
+    #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [Answer] [SEP]
+    #       Text: [CLS], [[Text fact], [SEP] of each fact], [Question] [Answer] [SEP]
+    # Input of QA task:
+    #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [SEP]
+    #       Text: [CLS], [[Text fact] of each fact], [SEP], [Question] [SEP]
+    conv_feats = img.data  # B x 100 bounding boxes x 2048
+    vis_pe = vis_pe.data  # positional embeddings
+
+    # input_ids contains the actual input sequence,
+    # but the tokens of image and text facts are marked as [UNK] at this stage,
+    # their values will be set to the sequence in BertEmbedding forward call
+
+    loss_tuple = model(
+        vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
+        attention_mask=input_mask,
+        masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
+        filter_label=filter_label, logit_mask=logit_mask, context=context,
+        cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
+        masked_pos=masked_pos, masked_weights=masked_weights,
+        task_idx=task_idx,
+        drop_worst_ratio=drop_worst_ratio
+    )
+    mean_reward = loss_tuple[0].new(1).fill_(0)
+
+    # disable pretext_loss_deprecated for now
+    masked_lm_loss, cls_loss = loss_tuple
+    if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
+        masked_lm_loss = masked_lm_loss.mean()
+        cls_loss = cls_loss.mean()
+    loss = masked_lm_loss + cls_loss
+
+    return loss, masked_lm_loss, cls_loss, mean_reward
+
+
 def train(
         logger: logging.Logger, args,
         model: BertForWebqa, device, optimizer, n_gpu: int,
@@ -211,47 +259,11 @@ def train(
         scst_reward = []
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
-            batch = [t.to(device) if isinstance(t, torch.Tensor) else t for t in batch]
-            (
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
-                filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
-                example_ids
-            ) = batch
+            loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+                model, batch, device, n_gpu,
+                drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0
+            )
 
-            # Each batch contains img/text facts + question (+answer)
-
-            # Input of filter task:
-            # batch_size 1 float16
-            # sample: 1 fact question answer
-
-            #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [Answer] [SEP]
-            #       Text: [CLS], [[Text fact], [SEP] of each fact], [Question] [Answer] [SEP]
-            # Input of QA task:
-            #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [SEP]
-            #       Text: [CLS], [[Text fact] of each fact], [SEP], [Question] [SEP]
-            conv_feats = img.data  # B x 100 bounding boxes x 2048
-            vis_pe = vis_pe.data  # positional embeddings
-
-            # input_ids contains the actual input sequence,
-            # but the tokens of image and text facts are marked as [UNK] at this stage,
-            # their values will be set to the sequence in BertEmbedding forward call
-
-            loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
-                               attention_mask=input_mask,
-                               masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                               filter_label=filter_label, logit_mask=logit_mask, context=context,
-                               cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                               masked_pos=masked_pos, masked_weights=masked_weights,
-                               task_idx=task_idx,
-                               drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0)
-            mean_reward = loss_tuple[0].new(1).fill_(0)
-
-            # disable pretext_loss_deprecated for now
-            masked_lm_loss, cls_loss = loss_tuple
-            if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
-                masked_lm_loss = masked_lm_loss.mean()
-                cls_loss = cls_loss.mean()
-            loss = masked_lm_loss + cls_loss
             # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
             iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
             qa_loss.append(masked_lm_loss.item())
@@ -511,7 +523,6 @@ def main():
 
         with torch.no_grad():
             dataloader_iters = [iter(l) for l in train_dataloaders]
-
             iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
 
             qa_loss = []
@@ -519,32 +530,11 @@ def main():
             loss_dict = [[], [], [], []]
             scst_reward = []
             for step, loader_idx in enumerate(iter_bar):
-
                 batch = next(dataloader_iters[loader_idx])
+                loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+                    model, batch, device, n_gpu, drop_worst_ratio=0
+                )
 
-                for param_tensor in model.state_dict():
-                    if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        logger.info(f"\n nan exists in {param_tensor}")
-                batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-
-                conv_feats = img.data  # Bx100x2048
-                vis_pe = vis_pe.data
-                loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
-                                   attention_mask=input_mask,
-                                   masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                                   filter_label=filter_label, logit_mask=logit_mask, context=context,
-                                   cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                                   masked_pos=masked_pos, masked_weights=masked_weights,
-                                   task_idx=task_idx, drop_worst_ratio=0)
-                mean_reward = loss_tuple[0].new(1).fill_(0)
-
-                # disable pretext_loss_deprecated for now
-                masked_lm_loss, cls_loss = loss_tuple
-                if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
-                    masked_lm_loss = masked_lm_loss.mean()
-                    cls_loss = cls_loss.mean()
-                loss = masked_lm_loss + cls_loss
                 # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
                 iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
                 qa_loss.append(masked_lm_loss.item())
@@ -558,16 +548,11 @@ def main():
                         f"Mean R {np.mean(scst_reward):.3f}\n"
                     )
 
-                # ensure that accumlated gradients are normalized
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-
             logger.info(qa_loss)
             logger.info(filter_loss)
             logger.info(loss_dict)
             logger.info(f"Mean loss = {np.mean([l for L in loss_dict for l in L])}")
 
-            logger.info("***** CUDA.empty_cache() *****")
             torch.cuda.empty_cache()
 
             with open(os.path.join(args.output_dir, "val_loss.txt"), "a") as f:
@@ -612,9 +597,6 @@ def main():
         with torch.no_grad():
             for step, loader_idx in enumerate(iter_bar):
                 batch = next(dataloader_iters[loader_idx])
-                for param_tensor in model.state_dict():
-                    if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        logger.info(f"\n nan exists in {param_tensor}")
                 batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
                 input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
 
