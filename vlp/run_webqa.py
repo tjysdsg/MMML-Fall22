@@ -340,6 +340,130 @@ def train(
         torch.cuda.empty_cache()
 
 
+def inference(
+        logger: logging.Logger,
+        args,
+        model: BertForWebqa,
+        device,
+        recover_step: int,
+        train_dataloaders: List[DataLoader],
+        train_dataloader_order: List[int],
+):
+    if "img" in args.answer_provided_by:
+        logger.info(f"use_img_content = {args.use_img_content}")
+        logger.info(f"use_img_meta = {args.use_img_meta}")
+        logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+        if args.use_x_distractors:
+            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+
+    if "txt" in args.answer_provided_by:
+        logger.info(f"use_txt_fact = {args.use_txt_fact}")
+        logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+        if args.use_x_distractors:
+            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+
+    logger.info("-------------------- Filter Inference mode ------------------------")
+    logger.info(f"split = {args.split}")
+    logger.info(f"use_num_samples = {args.use_num_samples}")
+
+    logger.info('===============================================================================================')
+    logger.info('If you are using the test split, resulting metrics are invalid, since we do not have the labels')
+    logger.info('===============================================================================================')
+
+    th_list = [float(i) for i in args.filter_infr_th.split("|")]
+    if 0.7 not in th_list:
+        th_list.append(0.7)
+    logger.info(f"\nThresholds: {str(th_list)}")
+
+    score_dict = dict([(th, {'pr': [], 're': [], 'f1': []}) for th in th_list])
+    # for th in th_list:
+    dataloader_iters = [iter(e) for e in train_dataloaders]
+    # noinspection PyTypeChecker
+    total_samples = sum([len(e.dataset) for e in train_dataloaders])
+    logger.info(f"\ntotal_samples = {total_samples}")
+    iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
+
+    pred_all = []
+    choice_all = []
+    example_ids_all = []
+    filter_labels_all = []
+
+    model.eval()
+    with torch.no_grad():
+        for step, loader_idx in enumerate(iter_bar):
+            batch = next(dataloader_iters[loader_idx])
+            batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
+            (
+                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
+                filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
+                example_ids
+            ) = batch
+
+            conv_feats = img.data
+            vis_pe = vis_pe.data
+            cur_batch_score, pred = model(
+                vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids,
+                token_type_ids=segment_ids, attention_mask=input_mask,
+                masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
+                filter_label=filter_label, logit_mask=logit_mask, context=context,
+                cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
+                masked_pos=masked_pos, masked_weights=masked_weights,
+                task_idx=task_idx, drop_worst_ratio=0,
+                filter_infr_th=th_list  # this will make the return value different from during training
+            )
+
+            pred_all.append(pred)
+            filter_labels_all.append(filter_label.detach().cpu())
+            choice_all.extend(ori_choices)
+            example_ids_all.extend(example_ids)
+            if "filter" in args.task_to_learn:
+                for th in cur_batch_score:
+                    score_dict[th]['pr'].append(cur_batch_score[th][0])
+                    score_dict[th]['re'].append(cur_batch_score[th][1])
+                    score_dict[th]['f1'].append(cur_batch_score[th][2])
+                iter_bar.set_description('Iter={} loader_idx={} '.format(step, loader_idx))
+            else:
+                raise ValueError("Currently don't support qa task in inference mode")
+
+        pred_all = torch.cat(pred_all, dim=0)
+        pred_all = pred_all.numpy()
+        pred_all = [[f"{s:.4f}" for s in p] for p in pred_all]
+        filter_labels_all = torch.cat(filter_labels_all, dim=0)
+        filter_labels_all = filter_labels_all.numpy()
+        filter_labels_all = [[int(i[0]) for i in b] for b in filter_labels_all]
+        for th in th_list:
+            score_dict[th]['pr'] = np.sum(score_dict[th]['pr']) / float(total_samples)
+            score_dict[th]['re'] = np.sum(score_dict[th]['re']) / float(total_samples)
+            score_dict[th]['f1'] = np.sum(score_dict[th]['f1']) / float(total_samples)
+
+            logger.info(f"\nth = {th}")
+            logger.info(f"pr.mean = {score_dict[th]['pr']}")
+            logger.info(f"re.mean = {score_dict[th]['re']}")
+            logger.info(f"f1.mean = {score_dict[th]['f1']}")
+
+    # save result to files
+    output_pkl = {}
+    for e, c, l, p in zip(example_ids_all, choice_all, filter_labels_all, pred_all):
+        output_pkl[e] = {"choices": c, "labels": l, "pred_scores": p}
+    pkl_filename = f"{str(args.split)}_{args.use_num_samples}_step{recover_step}"
+
+    if "img" in args.answer_provided_by:
+        args.output_suffix = args.img_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
+        pkl_filename += f"_{'img'}_{args.img_filter_max_choices}_{args.use_img_content}_{args.use_img_meta}_"
+    if "txt" in args.answer_provided_by:
+        args.output_suffix = args.txt_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
+        pkl_filename += f"_{'txt'}_{args.txt_filter_max_choices}_{args.use_txt_fact}_"
+    pkl_filename += args.output_suffix
+
+    if args.use_x_distractors:
+        pkl_filename += "_unknown_modality"
+
+    with open(os.path.join(args.output_dir, "{}.json".format(pkl_filename)), "w") as f:
+        json.dump(output_pkl, f, indent=4)
+
+    torch.cuda.empty_cache()
+
+
 def main():
     args = get_args()
 
@@ -561,100 +685,7 @@ def main():
                 f.write(str(np.mean([l for L in loss_dict for l in L])))
 
     elif args.do_predict:  # inference mode
-        if "img" in args.answer_provided_by:
-            logger.info(f"use_img_content = {args.use_img_content}")
-            logger.info(f"use_img_meta = {args.use_img_meta}")
-            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-            if args.use_x_distractors:
-                logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-
-        if "txt" in args.answer_provided_by:
-            logger.info(f"use_txt_fact = {args.use_txt_fact}")
-            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-            if args.use_x_distractors:
-                logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-
-        logger.info("-------------------- Filter Inference mode ------------------------")
-        logger.info(f"split = {args.split}")
-        logger.info(f"use_num_samples = {args.use_num_samples}")
-
-        th_list = [float(i) for i in args.filter_infr_th.split("|")]
-        if not 0.7 in th_list: th_list.append(0.7)
-        logger.info(f"\nThresholds: {str(th_list)}")
-        model.eval()
-
-        score_dict = dict([(th, {'pr': [], 're': [], 'f1': []}) for th in th_list])
-        # for th in th_list:
-        dataloader_iters = [iter(l) for l in train_dataloaders]
-        total_samples = sum([len(l.dataset) for l in train_dataloaders])
-        logger.info(f"\ntotal_samples = {total_samples}")
-        iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
-
-        Pred = []
-        Choices = []
-        Example_ids = []
-        Filter_labels = []
-        with torch.no_grad():
-            for step, loader_idx in enumerate(iter_bar):
-                batch = next(dataloader_iters[loader_idx])
-                batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-
-                conv_feats = img.data  # Bx100x2048
-                vis_pe = vis_pe.data
-                cur_batch_score, pred = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids,
-                                              token_type_ids=segment_ids, attention_mask=input_mask,
-                                              masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                                              filter_label=filter_label, logit_mask=logit_mask, context=context,
-                                              cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                                              masked_pos=masked_pos, masked_weights=masked_weights,
-                                              task_idx=task_idx, drop_worst_ratio=0, filter_infr_th=th_list)
-                assert len(cur_batch_score) == len(th_list)
-                Pred.append(pred)
-                Filter_labels.append(filter_label.detach().cpu())
-                Choices.extend(ori_choices)
-                Example_ids.extend(example_ids)
-                if "filter" in args.task_to_learn:
-                    for th in cur_batch_score:
-                        score_dict[th]['pr'].append(cur_batch_score[th][0])
-                        score_dict[th]['re'].append(cur_batch_score[th][1])
-                        score_dict[th]['f1'].append(cur_batch_score[th][2])
-                    iter_bar.set_description('Iter={} loader_idx={} '.format(step, loader_idx))
-                else:
-                    raise ValueError("Currently don't support qa task in inference mode")
-
-            Pred = torch.cat(Pred, dim=0)
-            Pred = Pred.numpy()
-            Pred = [["{0:.4f}".format(s) for s in p] for p in Pred]
-            Filter_labels = torch.cat(Filter_labels, dim=0)
-            Filter_labels = Filter_labels.numpy()
-            Filter_labels = [[int(i[0]) for i in b] for b in Filter_labels]
-            for th in th_list:
-                score_dict[th]['pr'] = np.sum(score_dict[th]['pr']) / float(total_samples)
-                score_dict[th]['re'] = np.sum(score_dict[th]['re']) / float(total_samples)
-                score_dict[th]['f1'] = np.sum(score_dict[th]['f1']) / float(total_samples)
-
-                logger.info(f"\nth = {th}")
-                logger.info(f"pr.mean = {score_dict[th]['pr']}")
-                logger.info(f"re.mean = {score_dict[th]['re']}")
-                logger.info(f"f1.mean = {score_dict[th]['f1']}")
-        output_pkl = {}
-        for e, c, l, p in zip(Example_ids, Choices, Filter_labels, Pred):
-            output_pkl[e] = {"choices": c, "labels": l, "pred_scores": p}
-        pkl_filename = "{}_{}_step{}".format(str(args.split), args.use_num_samples, recover_step)
-        if "img" in args.answer_provided_by:
-            args.output_suffix = args.img_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
-            pkl_filename += "_{}_{}_{}_{}_".format("img", args.img_filter_max_choices, args.use_img_content,
-                                                   args.use_img_meta)
-        if "txt" in args.answer_provided_by:
-            args.output_suffix = args.txt_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
-            pkl_filename += "_{}_{}_{}_".format("txt", args.txt_filter_max_choices, args.use_txt_fact)
-        pkl_filename += args.output_suffix
-        if args.use_x_distractors: pkl_filename += "_UNknown_modality"
-
-        with open(os.path.join(args.output_dir, "{}.json".format(pkl_filename)), "w") as f:
-            json.dump(output_pkl, f, indent=4)
-        torch.cuda.empty_cache()
+        inference(logger, args, model, device, recover_step, train_dataloaders, train_dataloader_order)
 
 
 def get_args():
