@@ -33,12 +33,13 @@ pip install -v --disable-pip-version-check --no-cache-dir --global-option="--cpp
 
 ```bash
 ./train_retrieval.sh
-./infer_retrieval.sh <checkpoint_number>  # infer on train/val set
 ```
 
-## Inference on Test Set
+## Inference
 
-TODO
+```bash
+./infer_retrieval.sh <checkpoint_number>  # works on train/val/test
+```
 
 # Question Answering
 

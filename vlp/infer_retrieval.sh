@@ -10,7 +10,8 @@ else
   ckpt_step="$1"
 fi
 
-output_dir=exp/retrieval_test
+split="test"
+output_dir=exp/retrieval_${split}
 ckpts_dir=exp/retrieval/ckpt  # load from trained model
 
 webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
@@ -18,12 +19,11 @@ rcnn_feat=$webqa_dir
 imgid_map=$webqa_dir/image_id_map_0328.pkl
 detectron_dir=$webqa_dir/baseline_finetuned/detectron_weights
 
-dataset=../subWebqa/data/test_subWebqa.json
-# dataset=data/webqa_subset.json
+dataset=../subWebqa/data/${split}_subWebqa.json
 
 python run_webqa.py \
   --do_predict \
-  --split test \
+  --split ${split} \
   --answer_provided_by 'img' \
   --task_to_learn 'filter' \
   --use_x_distractors \
