@@ -649,3 +649,10 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+text-retriever/data/
+text-retriever/cache/
+text-retriever/raw_data/
+text-retriever/WebQA_tmp/
+text-retriever/__pycache__/
+text-retriever/checkpoints/
