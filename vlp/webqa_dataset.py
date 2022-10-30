@@ -88,33 +88,12 @@ class WebQARetrievalDataset(Dataset):
                         Q = self.tokenizer.tokenize(datum['Q'].replace('"', ""))
                         A = self.tokenizer.tokenize(datum['A'][0].replace('"', ""))
 
-                        # text facts
-                        gold_text_facts = []
-                        distractor_text_facts = []
-                        if 'txt_posFacts' in datum:
-                            for fa in datum['txt_posFacts']:
-                                gold_text_facts.append({
-                                    'fact': self.tokenizer.tokenize(fa['fact']),
-                                    'snippet_id': fa['snippet_id']
-                                })
-                        if 'txt_negFacts' in datum:
-                            for fa in datum['txt_negFacts']:
-                                distractor_text_facts.append({
-                                    'fact': self.tokenizer.tokenize(fa['fact']),
-                                    'snippet_id': fa['snippet_id']
-                                })
+                        (
+                            gold_text_facts, distractor_text_facts, gold_img_and_caps, distractor_img_and_caps
+                        ) = self.extract_text_image_facts_for_question(datum)
+
                         shuffle(gold_text_facts)
                         shuffle(distractor_text_facts)
-
-                        # image facts
-                        gold_img_and_caps = []
-                        distractor_img_and_caps = []
-                        if 'img_posFacts' in datum:
-                            for im in datum['img_posFacts']:
-                                gold_img_and_caps.append(self.load_image_fact(im))
-                        if 'img_negFacts' in datum:
-                            for im in datum['img_negFacts']:
-                                distractor_img_and_caps.append(self.load_image_fact(im))
                         shuffle(gold_img_and_caps)
                         shuffle(distractor_img_and_caps)
 
@@ -132,6 +111,35 @@ class WebQARetrievalDataset(Dataset):
                         count += 1
 
         print(f"Load {len(self.instance_list)} instances from {count} samples")
+
+    def extract_text_image_facts_for_question(self, datum: dict):
+        # text facts
+        gold_text_facts = []
+        distractor_text_facts = []
+        if 'txt_posFacts' in datum:
+            for fa in datum['txt_posFacts']:
+                gold_text_facts.append({
+                    'fact': self.tokenizer.tokenize(fa['fact']),
+                    'snippet_id': fa['snippet_id']
+                })
+        if 'txt_negFacts' in datum:
+            for fa in datum['txt_negFacts']:
+                distractor_text_facts.append({
+                    'fact': self.tokenizer.tokenize(fa['fact']),
+                    'snippet_id': fa['snippet_id']
+                })
+
+        # image facts
+        gold_img_and_caps = []
+        distractor_img_and_caps = []
+        if 'img_posFacts' in datum:
+            for im in datum['img_posFacts']:
+                gold_img_and_caps.append(self.load_image_fact(im))
+        if 'img_negFacts' in datum:
+            for im in datum['img_negFacts']:
+                distractor_img_and_caps.append(self.load_image_fact(im))
+
+        return gold_text_facts, distractor_text_facts, gold_img_and_caps, distractor_img_and_caps
 
     def load_image_fact(self, im: dict):
         image_id = int(im['image_id'])
@@ -174,3 +182,21 @@ class WebQARetrievalDataset(Dataset):
             Q, A, do_filter_task, context, example_id
         )
         return self.processor(instance, self.max_imgs + self.max_snippets, self.device)
+
+
+class WebQARetrievalTestDataset(WebQARetrievalDataset):
+    def extract_text_image_facts_for_question(self, datum: dict):
+        # text facts
+        gold_text_facts = []
+        for fa in datum['txt_Facts']:
+            gold_text_facts.append({
+                'fact': self.tokenizer.tokenize(fa['fact']),
+                'snippet_id': fa['snippet_id']
+            })
+
+        # image facts
+        gold_img_and_caps = []
+        for im in datum['img_Facts']:
+            gold_img_and_caps.append(self.load_image_fact(im))
+
+        return gold_text_facts, [], gold_img_and_caps, []
