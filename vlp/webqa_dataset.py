@@ -81,46 +81,30 @@ class WebQARetrievalDataset(Dataset):
         # load all samples
         count = 0
         for i, datum in dataset.items():
-            if datum['split'] in split:
-                if datum['Qcate'] in self.Qcate:
+            data_split = datum['split']
+            if data_split in split:
+                if data_split == 'test' or datum['Qcate'] in self.Qcate:
                     if use_num_samples == -1 or count < use_num_samples:
                         Guid = datum['Guid']
                         Q = self.tokenizer.tokenize(datum['Q'].replace('"', ""))
                         A = self.tokenizer.tokenize(datum['A'][0].replace('"', ""))
 
-                        # text facts
-                        gold_text_facts = []
-                        distractor_text_facts = []
-                        if 'txt_posFacts' in datum:
-                            for fa in datum['txt_posFacts']:
-                                gold_text_facts.append({
-                                    'fact': self.tokenizer.tokenize(fa['fact']),
-                                    'snippet_id': fa['snippet_id']
-                                })
-                        if 'txt_negFacts' in datum:
-                            for fa in datum['txt_negFacts']:
-                                distractor_text_facts.append({
-                                    'fact': self.tokenizer.tokenize(fa['fact']),
-                                    'snippet_id': fa['snippet_id']
-                                })
+                        (
+                            gold_text_facts, distractor_text_facts, gold_img_and_caps, distractor_img_and_caps
+                        ) = (
+                            self.extract_facts_for_question_test(datum) if datum['split'] == 'test'
+                            else self.extract_facts_for_question(datum)
+                        )
+
                         shuffle(gold_text_facts)
                         shuffle(distractor_text_facts)
-
-                        # image facts
-                        gold_img_and_caps = []
-                        distractor_img_and_caps = []
-                        if 'img_posFacts' in datum:
-                            for im in datum['img_posFacts']:
-                                gold_img_and_caps.append(self.load_image_fact(im))
-                        if 'img_negFacts' in datum:
-                            for im in datum['img_negFacts']:
-                                distractor_img_and_caps.append(self.load_image_fact(im))
                         shuffle(gold_img_and_caps)
                         shuffle(distractor_img_and_caps)
 
                         # at least one type of gold fact and one type of distractor fact
                         assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
-                        assert len(distractor_text_facts) > 0 or len(distractor_img_and_caps) > 0
+                        if data_split != 'test':
+                            assert len(distractor_text_facts) > 0 or len(distractor_img_and_caps) > 0
 
                         # ========================
                         self.instance_list.append(
@@ -132,6 +116,51 @@ class WebQARetrievalDataset(Dataset):
                         count += 1
 
         print(f"Load {len(self.instance_list)} instances from {count} samples")
+
+    def extract_facts_for_question(self, datum: dict):
+        # text facts
+        gold_text_facts = []
+        distractor_text_facts = []
+        if 'txt_posFacts' in datum:
+            for fa in datum['txt_posFacts']:
+                gold_text_facts.append({
+                    'fact': self.tokenizer.tokenize(fa['fact']),
+                    'snippet_id': fa['snippet_id']
+                })
+        if 'txt_negFacts' in datum:
+            for fa in datum['txt_negFacts']:
+                distractor_text_facts.append({
+                    'fact': self.tokenizer.tokenize(fa['fact']),
+                    'snippet_id': fa['snippet_id']
+                })
+
+        # image facts
+        gold_img_and_caps = []
+        distractor_img_and_caps = []
+        if 'img_posFacts' in datum:
+            for im in datum['img_posFacts']:
+                gold_img_and_caps.append(self.load_image_fact(im))
+        if 'img_negFacts' in datum:
+            for im in datum['img_negFacts']:
+                distractor_img_and_caps.append(self.load_image_fact(im))
+
+        return gold_text_facts, distractor_text_facts, gold_img_and_caps, distractor_img_and_caps
+
+    def extract_facts_for_question_test(self, datum: dict):
+        # text facts
+        gold_text_facts = []
+        for fa in datum['txt_Facts']:
+            gold_text_facts.append({
+                'fact': self.tokenizer.tokenize(fa['fact']),
+                'snippet_id': fa['snippet_id']
+            })
+
+        # image facts
+        gold_img_and_caps = []
+        for im in datum['img_Facts']:
+            gold_img_and_caps.append(self.load_image_fact(im))
+
+        return gold_text_facts, [], gold_img_and_caps, []
 
     def load_image_fact(self, im: dict):
         image_id = int(im['image_id'])
@@ -153,20 +182,13 @@ class WebQARetrievalDataset(Dataset):
 
         # make sure number of gold+negative facts is <= self.max_imgs or self.max_snippets
         # if not, remove extra negative facts, keeping all positive facts
-        if self.answer_provided_by == 'img':
-            sample_size = self.max_imgs - len(gold_img_and_caps)
-            sample_size = min(sample_size, len(distractor_img_and_caps))
+        # txt
+        distractor_text_facts = distractor_text_facts[:self.max_snippets - len(gold_text_facts)]
+        # img
+        distractor_img_and_caps = distractor_img_and_caps[:self.max_imgs - len(gold_img_and_caps)]
 
-            distractor_img_and_caps = distractor_img_and_caps[:sample_size]
-            distractor_text_facts = distractor_text_facts[:self.max_snippets]
-        elif self.answer_provided_by == 'txt':
-            sample_size = self.max_snippets - len(gold_text_facts)
-            sample_size = min(sample_size, len(distractor_text_facts))
-
-            distractor_text_facts = distractor_text_facts[:sample_size]
-            distractor_img_and_caps = distractor_img_and_caps[:self.max_imgs]
-        else:
-            raise ValueError("Invalid answer modality. args.answer_provided_by must be one of {'img', 'txt'}")
+        # NOTE: for test split, all facts are kept in gold_xxx_facts
+        # Therefore, the number of facts might be bigger than self.max_snippets + self.max_imgs
 
         # postprocess
         instance = (

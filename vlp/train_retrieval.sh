@@ -9,9 +9,13 @@ webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
 rcnn_feat=$webqa_dir
 imgid_map=$webqa_dir/image_id_map_0328.pkl
 detectron_dir=$webqa_dir/baseline_finetuned/detectron_weights
-model_ckpt=$webqa_dir/baseline_finetuned/retrieval_x101fpn/model.3.bin
+
+# model_ckpt=$webqa_dir/baseline_finetuned/retrieval_x101fpn/model.3.bin
+# train from vlp that has not been finetuned on WebQA
+model_ckpt=$webqa_dir/vlp_pretrained/model.30.bin
 
 dataset=../subWebqa/data/train_subWebqa.json
+# dataset=data/webqa_subset.json
 
 python run_webqa.py \
   --do_train \

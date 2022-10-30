@@ -168,6 +168,54 @@ def get_dataloaders(args, device):
     return train_dataloaders
 
 
+def model_forward_pass(model, batch, device, n_gpu, drop_worst_ratio=0):
+    batch = [t.to(device) if isinstance(t, torch.Tensor) else t for t in batch]
+    (
+        input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
+        filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
+        example_ids
+    ) = batch
+
+    # Each batch contains img/text facts + question (+answer)
+
+    # Input of filter task:
+    # batch_size 1 float16
+    # sample: 1 fact question answer
+
+    #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [Answer] [SEP]
+    #       Text: [CLS], [[Text fact], [SEP] of each fact], [Question] [Answer] [SEP]
+    # Input of QA task:
+    #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [SEP]
+    #       Text: [CLS], [[Text fact] of each fact], [SEP], [Question] [SEP]
+    conv_feats = img.data  # B x 100 bounding boxes x 2048
+    vis_pe = vis_pe.data  # positional embeddings
+
+    # input_ids contains the actual input sequence,
+    # but the tokens of image and text facts are marked as [UNK] at this stage,
+    # their values will be set to the sequence in BertEmbedding forward call
+
+    loss_tuple = model(
+        vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
+        attention_mask=input_mask,
+        masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
+        filter_label=filter_label, logit_mask=logit_mask, context=context,
+        cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
+        masked_pos=masked_pos, masked_weights=masked_weights,
+        task_idx=task_idx,
+        drop_worst_ratio=drop_worst_ratio
+    )
+    mean_reward = loss_tuple[0].new(1).fill_(0)
+
+    # disable pretext_loss_deprecated for now
+    masked_lm_loss, cls_loss = loss_tuple
+    if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
+        masked_lm_loss = masked_lm_loss.mean()
+        cls_loss = cls_loss.mean()
+    loss = masked_lm_loss + cls_loss
+
+    return loss, masked_lm_loss, cls_loss, mean_reward
+
+
 def train(
         logger: logging.Logger, args,
         model: BertForWebqa, device, optimizer, n_gpu: int,
@@ -211,47 +259,11 @@ def train(
         scst_reward = []
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
-            batch = [t.to(device) if isinstance(t, torch.Tensor) else t for t in batch]
-            (
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
-                filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
-                example_ids
-            ) = batch
+            loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+                model, batch, device, n_gpu,
+                drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0
+            )
 
-            # Each batch contains img/text facts + question (+answer)
-
-            # Input of filter task:
-            # batch_size 1 float16
-            # sample: 1 fact question answer
-
-            #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [Answer] [SEP]
-            #       Text: [CLS], [[Text fact], [SEP] of each fact], [Question] [Answer] [SEP]
-            # Input of QA task:
-            #       Image: [CLS], [[RCNN feats] [Image captions] of each fact], [SEP], [Question] [SEP]
-            #       Text: [CLS], [[Text fact] of each fact], [SEP], [Question] [SEP]
-            conv_feats = img.data  # B x 100 bounding boxes x 2048
-            vis_pe = vis_pe.data  # positional embeddings
-
-            # input_ids contains the actual input sequence,
-            # but the tokens of image and text facts are marked as [UNK] at this stage,
-            # their values will be set to the sequence in BertEmbedding forward call
-
-            loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
-                               attention_mask=input_mask,
-                               masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                               filter_label=filter_label, logit_mask=logit_mask, context=context,
-                               cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                               masked_pos=masked_pos, masked_weights=masked_weights,
-                               task_idx=task_idx,
-                               drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0)
-            mean_reward = loss_tuple[0].new(1).fill_(0)
-
-            # disable pretext_loss_deprecated for now
-            masked_lm_loss, cls_loss = loss_tuple
-            if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
-                masked_lm_loss = masked_lm_loss.mean()
-                cls_loss = cls_loss.mean()
-            loss = masked_lm_loss + cls_loss
             # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
             iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
             qa_loss.append(masked_lm_loss.item())
@@ -326,6 +338,120 @@ def train(
                 loss_idx += 1
         logger.info("***** CUDA.empty_cache() *****")
         torch.cuda.empty_cache()
+
+
+def inference(
+        logger: logging.Logger,
+        args,
+        model: BertForWebqa,
+        device,
+        recover_step: int,
+        train_dataloaders: List[DataLoader],
+        train_dataloader_order: List[int],
+):
+    if "img" in args.answer_provided_by:
+        logger.info(f"use_img_content = {args.use_img_content}")
+        logger.info(f"use_img_meta = {args.use_img_meta}")
+        logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+        if args.use_x_distractors:
+            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+
+    if "txt" in args.answer_provided_by:
+        logger.info(f"use_txt_fact = {args.use_txt_fact}")
+        logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+        if args.use_x_distractors:
+            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+
+    logger.info("-------------------- Filter Inference mode ------------------------")
+    logger.info(f"split = {args.split}")
+    logger.info(f"use_num_samples = {args.use_num_samples}")
+
+    logger.info('===============================================================================================')
+    logger.info('If you are using the test split, resulting metrics are invalid, since we do not have the labels')
+    logger.info('===============================================================================================')
+
+    th_list = [float(i) for i in args.filter_infr_th.split("|")]
+    if 0.7 not in th_list:
+        th_list.append(0.7)
+    logger.info(f"\nThresholds: {str(th_list)}")
+
+    score_dict = dict([(th, {'pr': [], 're': [], 'f1': []}) for th in th_list])
+    # for th in th_list:
+    dataloader_iters = [iter(e) for e in train_dataloaders]
+    # noinspection PyTypeChecker
+    total_samples = sum([len(e.dataset) for e in train_dataloaders])
+    logger.info(f"\ntotal_samples = {total_samples}")
+    iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
+
+    model.eval()
+    res = {}  # {threshold: {question guid: prediction}}
+    with torch.no_grad():
+        for step, loader_idx in enumerate(iter_bar):
+            batch = next(dataloader_iters[loader_idx])
+            batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
+            (
+                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
+                filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
+                example_ids
+            ) = batch
+
+            conv_feats = img.data
+            vis_pe = vis_pe.data
+            cur_batch_score, pred = model(
+                vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids,
+                token_type_ids=segment_ids, attention_mask=input_mask,
+                masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
+                filter_label=filter_label, logit_mask=logit_mask, context=context,
+                cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
+                masked_pos=masked_pos, masked_weights=masked_weights,
+                task_idx=task_idx, drop_worst_ratio=0,
+                filter_infr_th=th_list  # this will make the return value different from during training
+            )
+
+            # Note that for the test split, the number of facts can be bigger than
+            #   txt_filter_max_choices + img_filter_max_choices
+
+            for th in cur_batch_score:
+                pr = cur_batch_score[th][0]
+                re = cur_batch_score[th][1]
+                f1 = cur_batch_score[th][2]
+
+                score_dict[th]['pr'].append(pr)
+                score_dict[th]['re'].append(re)
+                score_dict[th]['f1'].append(f1)
+
+                for i, guid in enumerate(example_ids):
+                    pred_dict = dict(
+                        sources=[],
+                        answer='',
+                    )
+                    num_choices = pred[th].shape[1]
+                    for c in range(num_choices):
+                        # pred[th].shape: (batch_size, num_choices)
+                        # if pred[th][i, c] == 1
+                        if pred[th][i, c] > 0.5:  # positive, use 0.5 because the type is float
+                            pred_dict['sources'].append(ori_choices[i][c])
+
+                    res.setdefault(th, {})[guid] = pred_dict
+
+            iter_bar.set_description('Iter={} loader_idx={} '.format(step, loader_idx))
+
+        for th in th_list:
+            score_dict[th]['pr'] = np.sum(score_dict[th]['pr']) / float(total_samples)
+            score_dict[th]['re'] = np.sum(score_dict[th]['re']) / float(total_samples)
+            score_dict[th]['f1'] = np.sum(score_dict[th]['f1']) / float(total_samples)
+
+            logger.info(f"\nth = {th}")
+            logger.info(f"pr.mean = {score_dict[th]['pr']}")
+            logger.info(f"re.mean = {score_dict[th]['re']}")
+            logger.info(f"f1.mean = {score_dict[th]['f1']}")
+
+    # save result to files, you can submit this json file to the leaderboard
+    for th in th_list:
+        with open(os.path.join(args.output_dir, f"predictions_th{th}.json"), "w") as f:
+            json.dump(res[th], f, indent=2)
+
+    torch.cuda.empty_cache()
 
 
 def main():
@@ -418,15 +544,15 @@ def main():
         )
         global_step = 0
     else:
-        if recover_step:
+        if args.model_recover_path:  # model_recover_path overrides recover_step
+            logger.info(f"***** Recover model from path: {args.model_recover_path} *****")
+            model_recover = torch.load(args.model_recover_path)
+            global_step = 0
+        else:  # elif args.model_recover_path:
             logger.info(f"***** Recover model from step {recover_step} *****")
             model_recover = torch.load(os.path.join(args.ckpts_dir, "model.{0}.bin".format(recover_step)))
             # recover_step == number of epochs
             global_step = math.floor(recover_step * t_total * 1. / args.num_train_epochs)
-        else:  # elif args.model_recover_path:
-            logger.info(f"***** Recover model from path: {args.model_recover_path} *****")
-            model_recover = torch.load(args.model_recover_path)
-            global_step = 0
 
         model = BertForWebqa.from_pretrained(
             args.bert_model, state_dict=model_recover, num_labels=cls_num_labels,
@@ -511,7 +637,6 @@ def main():
 
         with torch.no_grad():
             dataloader_iters = [iter(l) for l in train_dataloaders]
-
             iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
 
             qa_loss = []
@@ -519,32 +644,11 @@ def main():
             loss_dict = [[], [], [], []]
             scst_reward = []
             for step, loader_idx in enumerate(iter_bar):
-
                 batch = next(dataloader_iters[loader_idx])
+                loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+                    model, batch, device, n_gpu, drop_worst_ratio=0
+                )
 
-                for param_tensor in model.state_dict():
-                    if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        logger.info(f"\n nan exists in {param_tensor}")
-                batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-
-                conv_feats = img.data  # Bx100x2048
-                vis_pe = vis_pe.data
-                loss_tuple = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids, token_type_ids=segment_ids,
-                                   attention_mask=input_mask,
-                                   masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                                   filter_label=filter_label, logit_mask=logit_mask, context=context,
-                                   cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                                   masked_pos=masked_pos, masked_weights=masked_weights,
-                                   task_idx=task_idx, drop_worst_ratio=0)
-                mean_reward = loss_tuple[0].new(1).fill_(0)
-
-                # disable pretext_loss_deprecated for now
-                masked_lm_loss, cls_loss = loss_tuple
-                if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
-                    masked_lm_loss = masked_lm_loss.mean()
-                    cls_loss = cls_loss.mean()
-                loss = masked_lm_loss + cls_loss
                 # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
                 iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
                 qa_loss.append(masked_lm_loss.item())
@@ -558,16 +662,11 @@ def main():
                         f"Mean R {np.mean(scst_reward):.3f}\n"
                     )
 
-                # ensure that accumlated gradients are normalized
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-
             logger.info(qa_loss)
             logger.info(filter_loss)
             logger.info(loss_dict)
             logger.info(f"Mean loss = {np.mean([l for L in loss_dict for l in L])}")
 
-            logger.info("***** CUDA.empty_cache() *****")
             torch.cuda.empty_cache()
 
             with open(os.path.join(args.output_dir, "val_loss.txt"), "a") as f:
@@ -576,103 +675,7 @@ def main():
                 f.write(str(np.mean([l for L in loss_dict for l in L])))
 
     elif args.do_predict:  # inference mode
-        if "img" in args.answer_provided_by:
-            logger.info(f"use_img_content = {args.use_img_content}")
-            logger.info(f"use_img_meta = {args.use_img_meta}")
-            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-            if args.use_x_distractors:
-                logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-
-        if "txt" in args.answer_provided_by:
-            logger.info(f"use_txt_fact = {args.use_txt_fact}")
-            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-            if args.use_x_distractors:
-                logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-
-        logger.info("-------------------- Filter Inference mode ------------------------")
-        logger.info(f"split = {args.split}")
-        logger.info(f"use_num_samples = {args.use_num_samples}")
-
-        th_list = [float(i) for i in args.filter_infr_th.split("|")]
-        if not 0.7 in th_list: th_list.append(0.7)
-        logger.info(f"\nThresholds: {str(th_list)}")
-        model.eval()
-
-        score_dict = dict([(th, {'pr': [], 're': [], 'f1': []}) for th in th_list])
-        # for th in th_list:
-        dataloader_iters = [iter(l) for l in train_dataloaders]
-        total_samples = sum([len(l.dataset) for l in train_dataloaders])
-        logger.info(f"\ntotal_samples = {total_samples}")
-        iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
-
-        Pred = []
-        Choices = []
-        Example_ids = []
-        Filter_labels = []
-        with torch.no_grad():
-            for step, loader_idx in enumerate(iter_bar):
-                batch = next(dataloader_iters[loader_idx])
-                for param_tensor in model.state_dict():
-                    if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                        logger.info(f"\n nan exists in {param_tensor}")
-                batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
-
-                conv_feats = img.data  # Bx100x2048
-                vis_pe = vis_pe.data
-                cur_batch_score, pred = model(vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids,
-                                              token_type_ids=segment_ids, attention_mask=input_mask,
-                                              masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
-                                              filter_label=filter_label, logit_mask=logit_mask, context=context,
-                                              cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
-                                              masked_pos=masked_pos, masked_weights=masked_weights,
-                                              task_idx=task_idx, drop_worst_ratio=0, filter_infr_th=th_list)
-                assert len(cur_batch_score) == len(th_list)
-                Pred.append(pred)
-                Filter_labels.append(filter_label.detach().cpu())
-                Choices.extend(ori_choices)
-                Example_ids.extend(example_ids)
-                if "filter" in args.task_to_learn:
-                    for th in cur_batch_score:
-                        score_dict[th]['pr'].append(cur_batch_score[th][0])
-                        score_dict[th]['re'].append(cur_batch_score[th][1])
-                        score_dict[th]['f1'].append(cur_batch_score[th][2])
-                    iter_bar.set_description('Iter={} loader_idx={} '.format(step, loader_idx))
-                else:
-                    raise ValueError("Currently don't support qa task in inference mode")
-
-            Pred = torch.cat(Pred, dim=0)
-            Pred = Pred.numpy()
-            Pred = [["{0:.4f}".format(s) for s in p] for p in Pred]
-            Filter_labels = torch.cat(Filter_labels, dim=0)
-            Filter_labels = Filter_labels.numpy()
-            Filter_labels = [[int(i[0]) for i in b] for b in Filter_labels]
-            for th in th_list:
-                score_dict[th]['pr'] = np.sum(score_dict[th]['pr']) / float(total_samples)
-                score_dict[th]['re'] = np.sum(score_dict[th]['re']) / float(total_samples)
-                score_dict[th]['f1'] = np.sum(score_dict[th]['f1']) / float(total_samples)
-
-                logger.info(f"\nth = {th}")
-                logger.info(f"pr.mean = {score_dict[th]['pr']}")
-                logger.info(f"re.mean = {score_dict[th]['re']}")
-                logger.info(f"f1.mean = {score_dict[th]['f1']}")
-        output_pkl = {}
-        for e, c, l, p in zip(Example_ids, Choices, Filter_labels, Pred):
-            output_pkl[e] = {"choices": c, "labels": l, "pred_scores": p}
-        pkl_filename = "{}_{}_step{}".format(str(args.split), args.use_num_samples, recover_step)
-        if "img" in args.answer_provided_by:
-            args.output_suffix = args.img_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
-            pkl_filename += "_{}_{}_{}_{}_".format("img", args.img_filter_max_choices, args.use_img_content,
-                                                   args.use_img_meta)
-        if "txt" in args.answer_provided_by:
-            args.output_suffix = args.txt_dataset_json_path.split('/')[-1].replace(".json", "") + args.output_suffix
-            pkl_filename += "_{}_{}_{}_".format("txt", args.txt_filter_max_choices, args.use_txt_fact)
-        pkl_filename += args.output_suffix
-        if args.use_x_distractors: pkl_filename += "_UNknown_modality"
-
-        with open(os.path.join(args.output_dir, "{}.json".format(pkl_filename)), "w") as f:
-            json.dump(output_pkl, f, indent=4)
-        torch.cuda.empty_cache()
+        inference(logger, args, model, device, recover_step, train_dataloaders, train_dataloader_order)
 
 
 def get_args():

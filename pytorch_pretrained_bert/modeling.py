@@ -1135,6 +1135,7 @@ class BertForWebqa(PreTrainedBertModel):
                 pred = pred[:, 0, :]  # batch_size x num_choices
                 th_dict = {}
 
+                predictions = {}
                 for th in th_list:
                     cur_pred = (pred > th).float() * logit_mask
                     overlap = torch.sum(cur_pred * label, dim=-1)  # batch_size
@@ -1142,7 +1143,8 @@ class BertForWebqa(PreTrainedBertModel):
                     re = overlap / (torch.sum(label, dim=-1) + 1e-5)  # batch_size
                     f1 = 2 * pr * re / (pr + re + 1e-5)
                     th_dict[th] = [torch.sum(pr).item(), torch.sum(re).item(), torch.sum(f1).item()]
-                return th_dict, pred.detach().cpu()
+                    predictions[th] = cur_pred.detach().cpu().numpy()
+                return th_dict, predictions
 
             if context[0] in ['img', 'both']:
                 assert np.array(cxt_modality_label).size == vis_feats.size(0) == vis_pe.size(0)
