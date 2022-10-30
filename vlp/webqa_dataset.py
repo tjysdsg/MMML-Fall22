@@ -90,7 +90,10 @@ class WebQARetrievalDataset(Dataset):
 
                         (
                             gold_text_facts, distractor_text_facts, gold_img_and_caps, distractor_img_and_caps
-                        ) = self.extract_text_image_facts_for_question(datum)
+                        ) = (
+                            self.extract_facts_for_question_test(datum) if datum['split'] == 'test'
+                            else self.extract_facts_for_question(datum)
+                        )
 
                         shuffle(gold_text_facts)
                         shuffle(distractor_text_facts)
@@ -112,7 +115,7 @@ class WebQARetrievalDataset(Dataset):
 
         print(f"Load {len(self.instance_list)} instances from {count} samples")
 
-    def extract_text_image_facts_for_question(self, datum: dict):
+    def extract_facts_for_question(self, datum: dict):
         # text facts
         gold_text_facts = []
         distractor_text_facts = []
@@ -140,6 +143,22 @@ class WebQARetrievalDataset(Dataset):
                 distractor_img_and_caps.append(self.load_image_fact(im))
 
         return gold_text_facts, distractor_text_facts, gold_img_and_caps, distractor_img_and_caps
+
+    def extract_facts_for_question_test(self, datum: dict):
+        # text facts
+        gold_text_facts = []
+        for fa in datum['txt_Facts']:
+            gold_text_facts.append({
+                'fact': self.tokenizer.tokenize(fa['fact']),
+                'snippet_id': fa['snippet_id']
+            })
+
+        # image facts
+        gold_img_and_caps = []
+        for im in datum['img_Facts']:
+            gold_img_and_caps.append(self.load_image_fact(im))
+
+        return gold_text_facts, [], gold_img_and_caps, []
 
     def load_image_fact(self, im: dict):
         image_id = int(im['image_id'])
@@ -182,21 +201,3 @@ class WebQARetrievalDataset(Dataset):
             Q, A, do_filter_task, context, example_id
         )
         return self.processor(instance, self.max_imgs + self.max_snippets, self.device)
-
-
-class WebQARetrievalTestDataset(WebQARetrievalDataset):
-    def extract_text_image_facts_for_question(self, datum: dict):
-        # text facts
-        gold_text_facts = []
-        for fa in datum['txt_Facts']:
-            gold_text_facts.append({
-                'fact': self.tokenizer.tokenize(fa['fact']),
-                'snippet_id': fa['snippet_id']
-            })
-
-        # image facts
-        gold_img_and_caps = []
-        for im in datum['img_Facts']:
-            gold_img_and_caps.append(self.load_image_fact(im))
-
-        return gold_text_facts, [], gold_img_and_caps, []
