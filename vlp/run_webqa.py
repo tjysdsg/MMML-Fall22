@@ -544,15 +544,15 @@ def main():
         )
         global_step = 0
     else:
-        if recover_step:
+        if args.model_recover_path:  # model_recover_path overrides recover_step
+            logger.info(f"***** Recover model from path: {args.model_recover_path} *****")
+            model_recover = torch.load(args.model_recover_path)
+            global_step = 0
+        else:  # elif args.model_recover_path:
             logger.info(f"***** Recover model from step {recover_step} *****")
             model_recover = torch.load(os.path.join(args.ckpts_dir, "model.{0}.bin".format(recover_step)))
             # recover_step == number of epochs
             global_step = math.floor(recover_step * t_total * 1. / args.num_train_epochs)
-        else:  # elif args.model_recover_path:
-            logger.info(f"***** Recover model from path: {args.model_recover_path} *****")
-            model_recover = torch.load(args.model_recover_path)
-            global_step = 0
 
         model = BertForWebqa.from_pretrained(
             args.bert_model, state_dict=model_recover, num_labels=cls_num_labels,
