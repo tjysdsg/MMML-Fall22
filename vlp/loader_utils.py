@@ -26,15 +26,8 @@ class TorchCPUUnpickler(pickle.Unpickler):
             return super().find_class(module, name)
 
 
-# FIXME: find a way to pre-determine which subset this image is, without guessing and using the file system
 def get_image_feature_path(feature_folder: str, image_id: int):
-    image_feature_path = None
-    for subset in ['dev', 'train', 'test']:
-        tmp = os.path.join(feature_folder, f"{subset}/{image_id}.pkl")
-        if os.path.exists(tmp):
-            image_feature_path = tmp
-            break
-
+    image_feature_path = os.path.join(feature_folder, f"{image_id}.pkl")
     if image_feature_path is None:
         raise AssertionError(f"Can't find feature file for imageid = {image_id}")
 

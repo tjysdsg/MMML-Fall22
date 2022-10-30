@@ -6,7 +6,7 @@ output_dir=exp/retrieval
 ckpts_dir=${output_dir}/ckpt
 
 webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
-rcnn_feat=$webqa_dir
+rcnn_feat=$webqa_dir/features
 imgid_map=$webqa_dir/image_id_map_0328.pkl
 detectron_dir=$webqa_dir/baseline_finetuned/detectron_weights
 
