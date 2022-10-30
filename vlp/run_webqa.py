@@ -111,7 +111,7 @@ def get_dataloaders(args, device):
                 train_dataset,
                 args.train_batch_size,
                 args.num_workers,
-                batch_list_to_batch_tensors
+                batch_list_to_batch_tensors,
             )
             train_dataloaders.append(train_dataloader)
 
@@ -135,7 +135,7 @@ def get_dataloaders(args, device):
             train_dataloader = _get_loader_from_dataset(
                 train_dataset,
                 args.train_batch_size, args.num_workers,
-                batch_list_to_batch_tensors
+                batch_list_to_batch_tensors,
             )
             train_dataloaders.append(train_dataloader)
 
@@ -211,11 +211,12 @@ def train(
         scst_reward = []
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
-            for param_tensor in model.state_dict():
-                if torch.isnan(model.state_dict()[param_tensor]).any().item():
-                    logger.info(f"\n nan exists in {param_tensor}")
-            batch = [t.to(device) if not isinstance(t, list) else t for t in batch]
-            input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_ids = batch
+            batch = [t.to(device) if isinstance(t, torch.Tensor) else t for t in batch]
+            (
+                input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next, do_filter_task,
+                filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label,
+                example_ids
+            ) = batch
 
             # Each batch contains img/text facts + question (+answer)
 

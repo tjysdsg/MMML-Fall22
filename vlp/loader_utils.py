@@ -48,17 +48,13 @@ def get_random_word(vocab_words):
 
 def batch_list_to_batch_tensors(batch):
     batch_tensors = []
-    # previous schema: (input_ids, segment_ids, input_mask, masked_ids, masked_pos, masked_weights, is_next_label, do_filter_task, filter_label, logit_mask, ori_choices, task_idx, img, vis_pe, context, cxt_modality_label, example_id)
-    #          schema: (input_ids, segment_ids, position_ids, input_mask, ----------------------------------------------------------------------------------------------- task_idx, img, vis_pe, context, cxt_modality_label, example_id)
-    batch_size = len(batch)
     keys = set([key for b in batch for key in b.keys()])
-    if len(keys) == 17:
-        keys = ["input_ids", "segment_ids", "input_mask", "masked_ids", "masked_pos", "masked_weights", "is_next_label",
-                "do_filter_task", "filter_label", "logit_mask", "ori_choices", "task_idx", "img", "vis_pe", "context",
-                "cxt_modality_label", "example_id"]
-    else:
-        keys = ["input_ids", "segment_ids", "position_ids", "input_mask", "task_idx", "img", "vis_pe", "context",
-                "cxt_modality_label", "example_id"]
+    assert len(keys) == 17
+    keys = [
+        "input_ids", "segment_ids", "input_mask", "masked_ids", "masked_pos", "masked_weights", "is_next_label",
+        "do_filter_task", "filter_label", "logit_mask", "ori_choices", "task_idx", "img", "vis_pe", "context",
+        "cxt_modality_label", "example_id"
+    ]
     dict_batch = {k: [dic[k] if k in dic else None for dic in batch] for k in keys}
 
     for k in keys:

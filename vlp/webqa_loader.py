@@ -302,16 +302,6 @@ class WebQADataSampleProcessor(Pipeline):
 
         return img, vis_pe
 
-    # TODO: reduce memory usage by not using max_len_img_ctx all the time
-    def load_tokens_part_a_img(self, captions: list):
-        tokens = ['[UNK]'] * self.max_len_img_cxt
-        if self.use_img_meta:
-            tokens += captions
-        return tokens
-
-    def load_tokens_part_b(self, q: list, a: list):
-        return q + a
-
     def load_filter_data(self, instance, filter_max_choices=None) -> dict:
         _, _, _, _, _, _, _, modality_type, _ = instance
         assert filter_max_choices is not None, "must pass in a valid filter_max_choices when doing filter task"
@@ -345,16 +335,26 @@ class WebQADataSampleProcessor(Pipeline):
             label = torch.stack([label, 1 - label], dim=0).transpose(1, 0)
 
             for o in order:
+
                 if o == 1 or o == 3:  # context is img
                     if o == 1:  # pos img
-                        img_path, cxt = gold_img_and_caps.pop()
+                        img_path, caption = gold_img_and_caps.pop()
                     else:  # neg img
-                        img_path, cxt = distractor_img_and_caps.pop()
+                        img_path, caption = distractor_img_and_caps.pop()
 
                     ori_choices.append(img_path.split('/')[-1].replace('.pkl', ''))
 
-                    tokens_a = self.load_tokens_part_a_img(cxt)
-                    tokens_b = self.load_tokens_part_b(Q, A)
+                    tokens_a = ['[UNK]'] * self.max_len_img_cxt
+                    tokens_b = Q + A
+
+                    # truncate
+                    max_len_cxt_meta = self.max_len_a - self.max_len_img_cxt
+                    truncate_tokens_pair(caption, tokens_b, max_len=max_len_cxt_meta + self.max_len_b,
+                                         max_len_a=max_len_cxt_meta, max_len_b=self.max_len_b,
+                                         trunc_seg=self.trunc_seg, always_truncate_tail=self.always_truncate_tail)
+                    if self.use_img_meta:
+                        tokens_a += caption
+
                     tokens = ['[CLS]'] + tokens_a + ['[SEP]'] + tokens_b + ['[SEP]']
 
                     if self.new_segment_ids:
@@ -399,7 +399,12 @@ class WebQADataSampleProcessor(Pipeline):
                             tokens_a = f['fact']
                             ori_choices.append(f['snippet_id'])
 
-                    tokens_b = self.load_tokens_part_b(Q, A)
+                    tokens_b = Q + A
+                    # truncate
+                    truncate_tokens_pair(tokens_a, tokens_b, max_len=self.max_len_a + self.max_len_b,
+                                         max_len_a=self.max_len_a, max_len_b=self.max_len_b,
+                                         trunc_seg=self.trunc_seg, always_truncate_tail=self.always_truncate_tail)
+
                     tokens = ['[CLS]'] + tokens_a + ['[SEP]'] + tokens_b + ['[SEP]']
 
                     if self.new_segment_ids:
@@ -487,8 +492,17 @@ class WebQADataSampleProcessor(Pipeline):
             for i in range(filter_num_choices):
                 img_path, captions = all_image_choices[i]
 
-                tokens_a = self.load_tokens_part_a_img(captions)
-                tokens_b = self.load_tokens_part_b(Q, A)
+                tokens_a = ['[UNK]'] * self.max_len_img_cxt
+                tokens_b = Q + A
+
+                # truncate
+                max_len_cxt_meta = self.max_len_a - self.max_len_img_cxt
+                truncate_tokens_pair(captions, tokens_b, max_len=max_len_cxt_meta + self.max_len_b,
+                                     max_len_a=max_len_cxt_meta, max_len_b=self.max_len_b, trunc_seg=self.trunc_seg,
+                                     always_truncate_tail=self.always_truncate_tail)
+                if self.use_img_meta:
+                    tokens_a += captions
+
                 tokens = ['[CLS]'] + tokens_a + ['[SEP]'] + tokens_b + ['[SEP]']
 
                 if self.new_segment_ids:
@@ -574,7 +588,13 @@ class WebQADataSampleProcessor(Pipeline):
                 tokens_a = []
                 if self.use_txt_fact:
                     tokens_a = all_choices_facts[i].copy()
-                tokens_b = self.load_tokens_part_b(Q, A)
+                tokens_b = Q + A
+
+                # truncate
+                truncate_tokens_pair(tokens_a, tokens_b, max_len=self.max_len_a + self.max_len_b,
+                                     max_len_a=self.max_len_a, max_len_b=self.max_len_b, trunc_seg=self.trunc_seg,
+                                     always_truncate_tail=self.always_truncate_tail)
+
                 tokens = ['[CLS]'] + tokens_a + ['[SEP]'] + tokens_b + ['[SEP]']
 
                 if self.new_segment_ids:
@@ -609,7 +629,6 @@ class WebQADataSampleProcessor(Pipeline):
             input_mask = torch.stack(input_mask_list, dim=0)
             logit_mask = torch.tensor(logit_mask)
 
-            cxt_modality_label = []
             return {"input_ids": input_ids,
                     "segment_ids": segment_ids,
                     "input_mask": input_mask,
@@ -623,15 +642,18 @@ class WebQADataSampleProcessor(Pipeline):
                     "img": None,
                     "vis_pe": None,
                     "context": modality_type,
-                    "cxt_modality_label": cxt_modality_label,
+                    "cxt_modality_label": [],
                     "example_id": example_id}
 
     def __call__(self, instance, filter_max_choices=None, device=None):
         _, _, _, _, _, _, do_filter_task, context, example_id = instance
 
+        # Retrieval
         if do_filter_task:
             return self.load_filter_data(instance, filter_max_choices)
-        else:  # qa task
+
+        # QA
+        else:
             if context == 'img':
                 gold_feature_paths, distractor_feature_paths, gold_cxt_list, distractor_cxt_list, Q, A, do_filter_task, context, example_id = instance
                 gold_feature_paths = gold_feature_paths[:2]

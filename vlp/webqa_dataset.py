@@ -1,9 +1,8 @@
-from random import randint, shuffle
+from random import shuffle
 import pickle
-import math
 import json
 from torch.utils.data import Dataset
-from vlp.loader_utils import batch_list_to_batch_tensors, get_image_feature_path
+from vlp.loader_utils import get_image_feature_path
 from typing import Literal
 
 
@@ -175,12 +174,3 @@ class WebQARetrievalDataset(Dataset):
             Q, A, do_filter_task, context, example_id
         )
         return self.processor(instance, self.max_imgs + self.max_snippets, self.device)
-
-    def __iter__(self):  # iterator to load data
-        for _ in range(math.ceil(len(self.instance_list) / float(self.batch_size))):
-            batch = []
-            for _ in range(self.batch_size):
-                # FIXME: should draw without replacement?
-                idx = randint(0, len(self.instance_list) - 1)  # allow overlap between batches???
-                batch.append(self.__getitem__(idx))
-            yield batch_list_to_batch_tensors(batch)
