@@ -84,8 +84,13 @@ def validate(args, dev_dataloader, model):
         outputs = model(input_ids, labels=labels, attention_mask=mask_ids)
         eval_loss = outputs['loss']
         logits = outputs['logits']
-        predictions = torch.argmax(logits, dim=-1)
-        import pdb; pdb.set_trace()
+        softmax_logits = torch.nn.functional.softmax(logits, dim=-1)
+        predictions = torch.where(
+            softmax_logits > args.threshold, 
+            torch.ones_like(softmax_logits), 
+            torch.zeros_like(softmax_logits)
+        )
+        predictions = torch.argmax(predictions, dim=-1)
         pred_labels.append(predictions.tolist())
         gth_labels.append(labels.tolist())
         eval_losses.append(eval_loss.item()) 
@@ -134,43 +139,45 @@ def train(args, model, tokenizer):
             loss.backward()
             train_losses.append(loss.item())
             step += 1
+
             if step % args.gradient_accumulation_step == 0:
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
                 global_step += 1
-            if args.use_wandb:
-                wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': global_step})
 
-            if global_step % args.evaluation_steps == 0:
-                eval_f1, eval_loss = validate(args, dev_dataloader, model)
                 if args.use_wandb:
-                    wandb.log({'eval_f1': eval_f1, 'step': global_step})
-                    wandb.log({'eval_loss': eval_loss, 'step': global_step})
-                if args.model_chosen_metric == 'f1':
-                    if eval_f1 > best_eval_f1:
-                        if best_checkpoint_name is not None:
-                            os.remove(best_checkpoint_name)
-                            best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_f1_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_f1*100,3), args.timestamp)
-                        else:
-                            best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_f1_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_f1*100,3), args.timestamp)
-                        model_to_save = model.module if hasattr(model, 'module') else model
-                        output_model_file = best_checkpoint_name
-                        torch.save(model_to_save.state_dict(), output_model_file)
-                        best_eval_f1 = eval_f1
-                elif args.model_chosen_metric == 'loss':
-                    if eval_loss < best_eval_loss:
-                        if best_checkpoint_name is not None:
-                            os.remove(best_checkpoint_name)
-                            best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_loss_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_loss,3), args.timestamp)
-                        else:
-                            best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_loss_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_loss,3), args.timestamp)
-                        model_to_save = model.module if hasattr(model, 'module') else model
-                        output_model_file = best_checkpoint_name
-                        torch.save(model_to_save.state_dict(), output_model_file)
-                        best_eval_loss = eval_loss
-                else:
-                    raise NotImplementedError
+                    wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': global_step})
+
+                if global_step % args.evaluation_steps == 0:
+                    eval_f1, eval_loss = validate(args, dev_dataloader, model)
+                    if args.use_wandb:
+                        wandb.log({'eval_f1': eval_f1, 'step': global_step})
+                        wandb.log({'eval_loss': eval_loss, 'step': global_step})
+                    if args.model_chosen_metric == 'f1':
+                        if eval_f1 > best_eval_f1:
+                            if best_checkpoint_name is not None:
+                                os.remove(best_checkpoint_name)
+                                best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_f1_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_f1*100,3), args.timestamp)
+                            else:
+                                best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_f1_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_f1*100,3), args.timestamp)
+                            model_to_save = model.module if hasattr(model, 'module') else model
+                            output_model_file = best_checkpoint_name
+                            torch.save(model_to_save.state_dict(), output_model_file)
+                            best_eval_f1 = eval_f1
+                    elif args.model_chosen_metric == 'loss':
+                        if eval_loss < best_eval_loss:
+                            if best_checkpoint_name is not None:
+                                os.remove(best_checkpoint_name)
+                                best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_loss_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_loss,3), args.timestamp)
+                            else:
+                                best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_loss_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_loss,3), args.timestamp)
+                            model_to_save = model.module if hasattr(model, 'module') else model
+                            output_model_file = best_checkpoint_name
+                            torch.save(model_to_save.state_dict(), output_model_file)
+                            best_eval_loss = eval_loss
+                    else:
+                        raise NotImplementedError
         epoch_loss = sum(train_losses) / len(train_losses)
         print(f'Epoch {epoch} loss: {epoch_loss}')
 
@@ -272,6 +279,7 @@ if __name__ == '__main__':
     parser.add_argument('--local_rank', type=int, default=-1)
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
+    parser.add_argument('--threshold', type=float, default=0.6)
 
     args = parser.parse_args()
 

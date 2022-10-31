@@ -78,7 +78,7 @@ class WebQADataset(Dataset):
 
             if 'txt_fact' in instance.keys():
                 instance_labels = instance['txt_fact']['label']
-            else:
+            elif 'img_fact' in instance.keys():
                 instance_labels = instance['img_fact']['label']
             else:
                 raise ValueError('instance should either be image-based or text-based')
