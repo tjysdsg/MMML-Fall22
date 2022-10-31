@@ -24,6 +24,10 @@ def main():
     undershoot_q = 0
     correct_per_qcate = {}
     n_incorrect = 0
+    n_multi_source = 0
+    correct_multi_source = 0
+    n_single_source = 0
+    correct_single_source = 0
     for q, data in preds.items():
         sources = data['sources']
         n = len(sources)
@@ -37,28 +41,41 @@ def main():
         qcate = meta['Qcate']
         correct_per_qcate.setdefault(qcate, [])
         true_sources = [str(f['image_id']) for f in meta['img_posFacts']]
-        if n == len(true_sources):  # same number of sources
+        n_true = len(true_sources)
+
+        if n == n_true:  # same number of sources
             if set(sources) == set(true_sources):  # fully correct
                 full_correct_q += 1
                 correct_per_qcate[qcate].append(1)
+
+                if n_true >= 2:
+                    correct_multi_source += 1
+                else:
+                    correct_single_source += 1
             else:  # but incorrect
                 n_incorrect += 1
                 correct_per_qcate[qcate].append(0)
         else:  # different number of sources
             n_incorrect += 1
             correct_per_qcate[qcate].append(0)
-            if n > len(true_sources):
+            if n > n_true:
                 overshoot_q += 1
-            elif n < len(true_sources):
+            elif n < n_true:
                 undershoot_q += 1
 
-    full_correct_q /= len(preds)
-    undershoot_q /= len(preds)
-    overshoot_q /= len(preds)
+        if n_true >= 2:
+            n_multi_source += 1
+        else:
+            n_single_source += 1
+
+    n_questions = len(preds)
     print('# of sources', {k: num_sources[k] for k in sorted(num_sources)})
-    print(f'Full correct questions: {full_correct_q}')
-    print(f'Undershoot questions: {undershoot_q}')
-    print(f'Overshoot questions: {overshoot_q}')
+    print(f'Full correct questions: {full_correct_q / n_questions}')
+    print(f'Undershoot questions: {undershoot_q / n_questions}')
+    print(f'Overshoot questions: {overshoot_q / n_questions}')
+
+    print(f'Correct out of multi source: {correct_multi_source / n_multi_source}')
+    print(f'Correct out of single source: {correct_single_source / n_single_source}')
 
     correct_per_qcate = {k: np.mean(v) for k, v in correct_per_qcate.items()}
     print(f'correct per cate: {correct_per_qcate}')
