@@ -1,6 +1,6 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=2
 export NGPU=1
-python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29519 main.py \
+python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29518 main.py \
 --train \
 --task webqa-finetune-full-data \
 --use_wandb \

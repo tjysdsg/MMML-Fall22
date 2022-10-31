@@ -113,7 +113,7 @@ def validate(args, dev_dataloader, model):
             )
             logits = outputs['logits']
             logit_mask = (labels != -100)
-            labels[labels == -100] = 0 # TODO: should not be considered into F1 calculation
+            labels[labels == -100] = 0 # TODO: should not be considered into F1 calculation, -100 should be filtered
             one_hot_labels = torch.nn.functional.one_hot(labels)
 
             prediction = logits.view(-1, args.choice_num, args.label_num)
@@ -162,6 +162,7 @@ def train(args, model, tokenizer):
     scheduler = attach_scheduler(args, optimizer, total_training_steps)
 
     if args.use_amp:
+        # TODO: need to figure out how to implement amp
         from apex import amp
         model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
