@@ -185,7 +185,7 @@ def train(args, model, tokenizer):
 
             prediction = logits.view(-1, args.choice_num, args.label_num)
             target = one_hot_labels.view(-1, args.choice_num, args.label_num)
-            
+
             loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
 
             loss.backward()
@@ -316,7 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
-    parser.add_argument('--choice_num', type=int, default=8)
+    parser.add_argument('--choice_num', type=int, default=16)
 
     args = parser.parse_args()
 
