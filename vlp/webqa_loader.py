@@ -451,6 +451,7 @@ class WebQADataSampleProcessor(Pipeline):
 
             # Sequence indices where image facts are located
             cxt_modality_label = [i for i in range(len(order)) if order[i] % 2 == 1]
+            assert len(cxt_modality_label), f'{example_id}: {len(gold_text_facts)}, {len(gold_img_and_caps)}, {len(distractor_text_facts)}, {len(distractor_img_and_caps)}'
 
             return {"input_ids": input_ids,
                     "segment_ids": segment_ids,

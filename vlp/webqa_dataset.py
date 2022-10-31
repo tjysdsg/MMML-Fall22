@@ -5,6 +5,37 @@ from torch.utils.data import Dataset
 from vlp.loader_utils import get_image_feature_path
 from typing import Literal
 
+ignored_questions = [
+    # RCNN features are missing
+    "d5bca9220dba11ecb1e81171463288e9",
+    "d5bd79ec0dba11ecb1e81171463288e9",
+    "d5c1b5ca0dba11ecb1e81171463288e9",
+    "d5c35e5c0dba11ecb1e81171463288e9",
+    "d5c404b00dba11ecb1e81171463288e9",
+    "d5c6bc5a0dba11ecb1e81171463288e9",
+    "d5c73d240dba11ecb1e81171463288e9",
+    "d5c7f5660dba11ecb1e81171463288e9",
+    "d5c81ff00dba11ecb1e81171463288e9",
+    "d5c88ed60dba11ecb1e81171463288e9",
+    "d5c8e70a0dba11ecb1e81171463288e9",
+    "d5c9de120dba11ecb1e81171463288e9",
+    "d5ca437a0dba11ecb1e81171463288e9",
+    "d5cb80320dba11ecb1e81171463288e9",
+    "d5d0a2ce0dba11ecb1e81171463288e9",
+    "d5d214600dba11ecb1e81171463288e9",
+    "d5d5fcec0dba11ecb1e81171463288e9",
+    "d5d72c0c0dba11ecb1e81171463288e9",
+    "d5d758d00dba11ecb1e81171463288e9",
+    "d5d8e88a0dba11ecb1e81171463288e9",
+    "d5d9492e0dba11ecb1e81171463288e9",
+    "d5dc3f3a0dba11ecb1e81171463288e9",
+    "d5de14720dba11ecb1e81171463288e9",
+    "d5de1b340dba11ecb1e81171463288e9",
+
+    # invalid facts
+    "d5d84d1c0dba11ecb1e81171463288e9",
+]
+
 
 class WebQARetrievalDataset(Dataset):
     def __init__(
@@ -81,6 +112,8 @@ class WebQARetrievalDataset(Dataset):
         # load all samples
         count = 0
         for i, datum in dataset.items():
+            if i in ignored_questions:
+                continue
             data_split = datum['split']
             if data_split in split:
                 if data_split == 'test' or datum['Qcate'] in self.Qcate:
