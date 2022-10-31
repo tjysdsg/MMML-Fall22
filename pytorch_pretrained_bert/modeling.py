@@ -1071,9 +1071,12 @@ class BertForWebqa(PreTrainedBertModel):
         :param masked_weights:
         :param task_idx:
         :param drop_worst_ratio:
-        :param filter_infr_th: Filter inference threshold, >=threshold will be regarded as a positive fact
+        :param filter_infr_th: Filter inference threshold, >=threshold will be regarded as a positive fact, default 0.2
         :param tokenizer: Text tokenizer
         """
+
+        if filter_infr_th is None:
+            filter_infr_th = [0.2]
 
         if context[0] in ['img', 'both'] and vis_feats.size()[-1] > 1:
             vis_feats = self.vis_embed(
@@ -1144,10 +1147,12 @@ class BertForWebqa(PreTrainedBertModel):
                     f1 = 2 * pr * re / (pr + re + 1e-5)
                     th_dict[th] = [torch.sum(pr).item(), torch.sum(re).item(), torch.sum(f1).item()]
                     predictions[th] = cur_pred.detach().cpu().numpy()
+
                 return th_dict, predictions
 
             if context[0] in ['img', 'both']:
                 assert np.array(cxt_modality_label).size == vis_feats.size(0) == vis_pe.size(0)
+
             sequence_output, pooled_output = self.bert(vis_feats, vis_pe, input_ids, token_type_ids,
                                                        attention_mask, context[0], cxt_modality_label,
                                                        output_all_encoded_layers=False,
@@ -1159,13 +1164,14 @@ class BertForWebqa(PreTrainedBertModel):
             cls_pred = self.context_classifier(cls_embed)  # B*num_choices x 2
             cls_pred = cls_pred.view(-1, num_choices, 2)
             # cls_labels: B
+            th_dict, pred = {}, {}
             if filter_infr_th is not None:
                 # assert ori_choices is not None, "In inference mode, must provide ori_choices"
                 th_dict, pred = filter_metric(cls_pred, filter_label, logit_mask, filter_infr_th)
-                return th_dict, pred
+
             cls_loss = cross_entropy_with_logits_loss(cls_pred, filter_label, logit_mask)
             masked_lm_loss = cls_loss.new(1).fill_(0)
-            return masked_lm_loss, cls_loss
+            return masked_lm_loss, cls_loss, th_dict, pred
 
         else:
             assert masked_lm_labels is not None

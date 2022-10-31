@@ -23,8 +23,8 @@ from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 from vlp.loader_utils import batch_list_to_batch_tensors
 from vlp.webqa_dataset import WebQARetrievalDataset
 import vlp.webqa_loader as webqa_loader
-import matplotlib.pyplot as plt
-from typing import List
+from wandb_utils import init_wandb, wandb_log_loss_scores
+from typing import List, Dict
 
 
 def _get_max_epoch_model(output_dir):
@@ -50,16 +50,6 @@ def _get_loader_from_dataset(train_dataset, train_batch_size, num_workers, colla
         pin_memory=True
     )
     return train_dataloader
-
-
-def save_loss_curve(loss, i_epoch, output_dir, task, all_tasks):
-    plt.figure(figsize=(12, 5))
-    plt.plot(range(1, len(loss) + 1), loss)
-    plt.xlabel("iter")
-    plt.ylabel("loss")
-    title = "{}__epc={}__all_tasks={}".format(task, i_epoch, all_tasks)
-    plt.title(title)
-    plt.savefig(os.path.join(output_dir, "figs/" + title + ".jpg"))
 
 
 def get_dataloaders(args, device, split: str):
@@ -221,18 +211,18 @@ def model_forward_pass(model, batch, device, n_gpu, drop_worst_ratio=0):
         cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
         masked_pos=masked_pos, masked_weights=masked_weights,
         task_idx=task_idx,
-        drop_worst_ratio=drop_worst_ratio
+        drop_worst_ratio=drop_worst_ratio,
     )
     mean_reward = loss_tuple[0].new(1).fill_(0)
 
     # disable pretext_loss_deprecated for now
-    masked_lm_loss, cls_loss = loss_tuple
+    masked_lm_loss, cls_loss, score_per_threshold, _ = loss_tuple
     if n_gpu > 1:  # mean() to average on multi-gpu. For dist, this is done through gradient addition.
         masked_lm_loss = masked_lm_loss.mean()
         cls_loss = cls_loss.mean()
     loss = masked_lm_loss + cls_loss
 
-    return loss, masked_lm_loss, cls_loss, mean_reward
+    return loss, masked_lm_loss, cls_loss, mean_reward, score_per_threshold
 
 
 def train(
@@ -240,6 +230,7 @@ def train(
         model: BertForWebqa, device, optimizer, n_gpu: int,
         recover_step: int, global_step: int, t_total: int,
         train_dataloaders: List[DataLoader], train_dataloader_order: List[int],
+        val_dataloaders: List[DataLoader] = None, val_dataloader_order: List[int] = None,
 ):
     if args.amp:
         from apex import amp
@@ -278,7 +269,7 @@ def train(
         scst_reward = []
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
-            loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+            loss, masked_lm_loss, cls_loss, mean_reward, score_per_threshold = model_forward_pass(
                 model, batch, device, n_gpu,
                 drop_worst_ratio=args.max_drop_worst_ratio if i_epoch > args.drop_after else 0
             )
@@ -320,9 +311,8 @@ def train(
                 optimizer.zero_grad()
                 global_step += 1
 
-        logger.info(qa_loss)
-        logger.info(filter_loss)
-        logger.info(loss_dict)
+            if args.use_wandb:
+                wandb_log_loss_scores(global_step, 'train', loss.item(), score_per_threshold)
 
         # Save a trained model
         logger.info("** ** * Saving fine-tuned model and optimizer ** ** * ")
@@ -336,27 +326,19 @@ def train(
         torch.save(copy.deepcopy(model_to_save).cpu().state_dict(), output_model_file)
         torch.save(optimizer.state_dict(), output_optim_file)
 
-        # Save loss curve
-        if args.save_loss_curve:
-            loss_idx = 0
-            if "filter" in args.task_to_learn and "txt" in args.answer_provided_by:
-                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "filter-txt",
-                                "-".join([args.task_to_learn, args.answer_provided_by]))
-                loss_idx += 1
-            if "filter" in args.task_to_learn and "img" in args.answer_provided_by:
-                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "filter-img",
-                                "-".join([args.task_to_learn, args.answer_provided_by]))
-                loss_idx += 1
-            if "qa" in args.task_to_learn and "txt" in args.answer_provided_by:
-                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "qa-txt",
-                                "-".join([args.task_to_learn, args.answer_provided_by]))
-                loss_idx += 1
-            if "qa" in args.task_to_learn and "img" in args.answer_provided_by:
-                save_loss_curve(loss_dict[loss_idx], i_epoch, args.output_dir, "qa-img",
-                                "-".join([args.task_to_learn, args.answer_provided_by]))
-                loss_idx += 1
-        logger.info("***** CUDA.empty_cache() *****")
         torch.cuda.empty_cache()
+
+        if val_dataloaders is not None and val_dataloader_order is not None:
+            mean_loss, score_per_threshold = validate(
+                logger, args, model, device, n_gpu, val_dataloaders, val_dataloader_order, silent=True,
+            )
+            logger.info(f'Validation mean loss: {mean_loss}')
+            logger.info(f'Validation scores per threshold:\n{score_per_threshold}')
+
+            if args.use_wandb:
+                wandb_log_loss_scores(global_step, 'validation', mean_loss, score_per_threshold)
+        else:
+            logger.info('No validation dataloader, skip per-epoch validation')
 
 
 def validate(
@@ -366,33 +348,32 @@ def validate(
         device,
         n_gpu,
         dataloaders: List[DataLoader],
-        dataloader_order
-):
+        dataloader_order,
+        silent=False,  # suppress all logging/wandb
+) -> (float, Dict[float, List[float]]):
     logger.info("--------------- Validation ------------------")
-    assert args.split == "val"
     if "img" in args.answer_provided_by:
-        logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
+        logger.info(f"use_img_meta = {args.use_img_meta}")
         logger.info(f"use_img_content = {args.use_img_content}")
         logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
     if "txt" in args.answer_provided_by:
-        logger.info(f"use_txt_fact = ", args.use_txt_fact)
+        logger.info(f"use_txt_fact = {args.use_txt_fact}")
         logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-
-    logger.info("***** Compute loss without grad *****")
     logger.info(f"  Batch size = {args.train_batch_size}")
 
     model.eval()
+    score_dict = {}  # {threshold: [mean precision, mean recall, mean F1 scores]}
     with torch.no_grad():
         qa_loss = []
         filter_loss = []
-        loss = []
+        all_loss = []
         scst_reward = []
 
         dataloader_iters = [iter(l) for l in dataloaders]
         iter_bar = tqdm(dataloader_order, desc='Iter (loss=X.XXX)')
         for step, loader_idx in enumerate(iter_bar):
             batch = next(dataloader_iters[loader_idx])
-            loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+            loss, masked_lm_loss, cls_loss, mean_reward, score_per_threshold = model_forward_pass(
                 model, batch, device, n_gpu, drop_worst_ratio=0
             )
 
@@ -400,21 +381,34 @@ def validate(
             iter_bar.set_description(f'Iter (loss={loss.item():.3f})')
             qa_loss.append(masked_lm_loss.item())
             filter_loss.append(cls_loss.item())
-            loss.append(loss.item())
+            all_loss.append(loss.item())
             scst_reward.append(mean_reward.item())
 
-            if step % 100 == 0:
+            if not silent and step % 100 == 0:
                 logger.info(
-                    f"Iter {step}, Loss {np.mean(qa_loss):.2f}, Filter {np.mean(filter_loss):.2f}, "
-                    f"Mean R {np.mean(scst_reward):.3f}\n"
+                    f"[Iter {step}] qa_loss {np.mean(qa_loss):.2f}, filter_loss {np.mean(filter_loss):.2f}, "
+                    f"mean_reward {np.mean(scst_reward):.3f}"
                 )
 
-        logger.info(qa_loss)
-        logger.info(filter_loss)
-        logger.info(loss)
-        logger.info(f"Mean loss = {np.mean(loss)}")
+            for th, (pr, re, f1) in score_per_threshold.items():
+                score_dict.setdefault(th, [[], [], []])
+                score_dict[th][0].append(pr)
+                score_dict[th][1].append(re)
+                score_dict[th][2].append(f1)
 
-        torch.cuda.empty_cache()
+        if not silent:
+            logger.info(qa_loss)
+            logger.info(filter_loss)
+            logger.info(loss)
+            logger.info(f"Mean total loss = {np.mean(all_loss)}")
+
+    for th in score_dict:
+        score_dict[th][0] = np.mean(score_dict[th][0])
+        score_dict[th][1] = np.mean(score_dict[th][1])
+        score_dict[th][2] = np.mean(score_dict[th][2])
+
+    torch.cuda.empty_cache()
+    return np.mean(all_loss), score_dict
 
 
 def inference(
@@ -473,7 +467,7 @@ def inference(
 
             conv_feats = img.data
             vis_pe = vis_pe.data
-            cur_batch_score, pred = model(
+            _, _, cur_batch_score, pred = model(
                 vis_feats=conv_feats, vis_pe=vis_pe, input_ids=input_ids,
                 token_type_ids=segment_ids, attention_mask=input_mask,
                 masked_lm_labels=masked_ids, do_filter_task=do_filter_task,
@@ -481,7 +475,7 @@ def inference(
                 cxt_modality_label=cxt_modality_label, next_sentence_label=is_next,
                 masked_pos=masked_pos, masked_weights=masked_weights,
                 task_idx=task_idx, drop_worst_ratio=0,
-                filter_infr_th=th_list  # this will make the return value different from during training
+                filter_infr_th=th_list,
             )
 
             # Note that for the test split, the number of facts can be bigger than
@@ -678,11 +672,18 @@ def main():
     logger.info("***** CUDA.empty_cache() *****")
     torch.cuda.empty_cache()
 
+    if args.use_wandb:
+        wandb_output_dir = os.path.join(args.output_dir, 'wandb')
+        os.makedirs(wandb_output_dir, exist_ok=True)
+        init_wandb(wandb_output_dir)
+
     # ===========================================================================================
     if args.do_train:  # run training
+        val_dataloaders, val_dataloader_order, _ = get_dataloaders(args, device, 'val')
         train(
             logger, args, model, device, optimizer, n_gpu, recover_step, global_step, t_total,
-            train_dataloaders, train_dataloader_order
+            train_dataloaders, train_dataloader_order,
+            val_dataloaders, val_dataloader_order,
         )
     elif args.do_val:  # run validation on data
         validate(logger, args, model, device, n_gpu, train_dataloaders, train_dataloader_order)
@@ -819,7 +820,6 @@ def get_args():
     parser.add_argument("--output_suffix", default="", type=str)
 
     # Others for VLP
-    parser.add_argument('--save_loss_curve', action='store_true')
     parser.add_argument('--split', type=str, default=['train', 'val', 'test'])
     parser.add_argument('--Qcate', type=str, default=['all'])
     parser.add_argument('--sche_mode', default='warmup_linear', type=str,
