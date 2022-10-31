@@ -74,7 +74,7 @@ class WebQATestDataset(Dataset):
             else:
                 raise ValueError('instance should either be image-based or text-based')
 
-            instance_token_ids = instance_token_ids[:self.args.max_length]
+            instance_token_ids = instance_token_ids[:self.args.max_length-1] # since there is one last [SEP]
             # add [SEP] after truncation
             instance_token_ids += [self.tokenizer.sep_token_id]
             instance_token_ids = torch.LongTensor(instance_token_ids)

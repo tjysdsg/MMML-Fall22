@@ -284,7 +284,6 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     config = AutoConfig.from_pretrained(args.model_name, num_labels=args.label_num)
     model = AutoModelForSequenceClassification.from_pretrained(args.model_name, config=config, ignore_mismatched_sizes=True)
-    import pdb; pdb.set_trace()
     device = torch.device(args.local_rank) if args.local_rank != -1 else torch.device('cuda')
     if args.load_from_checkpoint:
         model_dict = torch.load(args.load_from_checkpoint)
@@ -301,4 +300,4 @@ if __name__ == '__main__':
     if args.train:
         train(args, model, tokenizer)
     elif args.test:
-        conll_result = test(args, model, tokenizer)
+        test(args, model, tokenizer)
