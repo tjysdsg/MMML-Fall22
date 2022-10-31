@@ -102,18 +102,29 @@ def validate(args, dev_dataloader, model):
             labels = data['labels'].to(args.device)
             attention_mask = data['attention_mask'].to(args.device)
 
-            input_ids = input_ids.view(-1, input_ids.size(-1))
-            labels = labels.view(-1)
-            attention_mask = attention_mask.view(-1, attention_mask.size(-1))
+            squeezed_input_ids = input_ids.view(-1, input_ids.size(-1))
+            squeezed_labels = labels.view(-1)
+            squeezed_attention_mask = attention_mask.view(-1, attention_mask.size(-1))
 
-            outputs = model(input_ids, labels=labels, attention_mask=attention_mask)
-
-            eval_loss = outputs['loss']
+            outputs = model(
+                input_ids=squeezed_input_ids, 
+                labels=squeezed_labels, 
+                attention_mask=squeezed_attention_mask
+            )
             logits = outputs['logits']
+            logit_mask = (labels != -100)
+            labels[labels == -100] = 0
+            one_hot_labels = torch.nn.functional.one_hot(labels)
+
+            prediction = logits.view(-1, args.choice_num, args.label_num)
+            target = one_hot_labels.view(-1, args.choice_num, args.label_num)
+            
+            eval_loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
+
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
             predictions = (softmax_logits > args.classifier_threshold).float()
             pred_labels.append(predictions.tolist())
-            gth_labels.append(labels.tolist())
+            gth_labels.append(labels.view(-1).tolist())
             eval_losses.append(eval_loss.item()) 
     metric = evaluate.load("f1")
 
@@ -164,7 +175,9 @@ def train(args, model, tokenizer):
             outputs = model(
                 input_ids=squeezed_input_ids, 
                 labels=squeezed_labels, 
-                attention_mask=squeezed_attention_mask)
+                attention_mask=squeezed_attention_mask
+            )
+
             logits = outputs['logits']
             logit_mask = (labels != -100)
             labels[labels == -100] = 0
