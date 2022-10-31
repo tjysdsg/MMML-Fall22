@@ -1,3 +1,4 @@
+import os.path
 from random import shuffle
 import pickle
 import json
@@ -126,6 +127,10 @@ class WebQARetrievalDataset(Dataset):
                             else self.extract_facts_for_question(datum)
                         )
 
+                        if not self.check_image_feature_path(gold_img_and_caps + distractor_img_and_caps):
+                            print(f"Question {i} skipped")
+                            continue
+
                         shuffle(gold_text_facts)
                         shuffle(distractor_text_facts)
                         shuffle(gold_img_and_caps)
@@ -234,3 +239,10 @@ class WebQARetrievalDataset(Dataset):
             Q, A, do_filter_task, context, example_id
         )
         return self.processor(instance, self.max_imgs + self.max_snippets, self.device)
+
+    def check_image_feature_path(self, facts):
+        for path, _ in facts:
+            if not os.path.exists(path):
+                print(f'Cannot find feature at {path}')
+                return False
+        return True
