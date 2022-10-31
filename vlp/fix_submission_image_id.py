@@ -11,7 +11,7 @@ from argparse import ArgumentParser
 def get_args():
     parser = ArgumentParser()
     parser.add_argument('input', type=str)
-    parser.add_argument('--imgid-map', type=str, default=r'E:\webqa\data\image_id_map_0328.pkl')
+    parser.add_argument('--imgid-map', type=str, required=True)
     parser.add_argument('output', type=str)
     return parser.parse_args()
 
