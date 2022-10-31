@@ -8,4 +8,4 @@ python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29519 ma
 --dataset_dir ./data/WebQA_sub_data/ \
 --train_file train.jsonl \
 --val_file val.jsonl \
---evaluation_steps 5 \
+--evaluation_steps 500 \

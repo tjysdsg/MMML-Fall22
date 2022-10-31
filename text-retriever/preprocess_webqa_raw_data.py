@@ -10,7 +10,6 @@ def generate_dataset_from_raw_WebQA(file_name, split):
             Qcate = data['Qcate']
             Q = data['Q'].replace('"', "")
             A = data['A'][0].replace('"', "")
-            txt_facts = []
             for txt_fact_type in ['txt_posFacts', 'txt_negFacts']:
                 for txt_fact in data[txt_fact_type]:
                     fact = {}
@@ -40,6 +39,22 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                         dataset.append({'Q': Q, 'A': A, 'img_fact': fact})
     random.shuffle(dataset)
     return dataset
+
+def generate_test_dataset_from_raw_WebQA(file_name):
+    with open(file_name, 'r') as f:
+        raw_dataset = json.load(f)
+        dataset = []
+        for data_id, data in raw_dataset.items():
+            Q_id = data_id
+            Q = data['Q'].replace('"', "")
+            A = data['A'][0].replace('"', "")
+            for txt_fact in data['txt_Facts']:
+                fact = {}
+                fact['title'] = txt_fact['title']
+                fact['fact'] = txt_fact['fact']
+                fact['snippet_id'] = txt_fact['snippet_id']
+                dataset.append({'Q': Q, 'A': A, 'txt_fact': fact})
+            for img_fact in data['img']
 
 
 def write_dataset(dataset, output_file_name):

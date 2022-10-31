@@ -188,6 +188,7 @@ def train(args, model, tokenizer):
 
 
 def test(args, model, tokenizer):
+    
     raise NotImplementedError
 
 
@@ -275,7 +276,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--label_num', type=int, default=2, help='number of labels, 1 for pos, 1 for neg')
     parser.add_argument('--train', action='store_true')
-    parser.add_argument('--inference', action='store_true')
+    parser.add_argument('--test', action='store_true')
     parser.add_argument('--local_rank', type=int, default=-1)
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
@@ -316,5 +317,5 @@ if __name__ == '__main__':
 
     if args.train:
         train(args, model, tokenizer)
-    elif args.inference:
-        conll_result = inference(args, model, tokenizer)
+    elif args.test:
+        conll_result = test(args, model, tokenizer)
