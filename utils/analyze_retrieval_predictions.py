@@ -23,6 +23,7 @@ def main():
     overshoot_q = 0
     undershoot_q = 0
     correct_per_qcate = {}
+    n_incorrect = 0
     for q, data in preds.items():
         sources = data['sources']
         n = len(sources)
@@ -36,11 +37,15 @@ def main():
         qcate = meta['Qcate']
         correct_per_qcate.setdefault(qcate, [])
         true_sources = [str(f['image_id']) for f in meta['img_posFacts']]
-        if n == len(true_sources):
-            if set(sources) == set(true_sources):
+        if n == len(true_sources):  # same number of sources
+            if set(sources) == set(true_sources):  # fully correct
                 full_correct_q += 1
                 correct_per_qcate[qcate].append(1)
-        else:
+            else:  # but incorrect
+                n_incorrect += 1
+                correct_per_qcate[qcate].append(0)
+        else:  # different number of sources
+            n_incorrect += 1
             correct_per_qcate[qcate].append(0)
             if n > len(true_sources):
                 overshoot_q += 1
@@ -50,13 +55,12 @@ def main():
     full_correct_q /= len(preds)
     undershoot_q /= len(preds)
     overshoot_q /= len(preds)
-    correct_per_qcate = {k: np.mean(v) for k, v in correct_per_qcate.items()}
-
     print('# of sources', {k: num_sources[k] for k in sorted(num_sources)})
     print(f'Full correct questions: {full_correct_q}')
     print(f'Undershoot questions: {undershoot_q}')
     print(f'Overshoot questions: {overshoot_q}')
 
+    correct_per_qcate = {k: np.mean(v) for k, v in correct_per_qcate.items()}
     print(f'correct per cate: {correct_per_qcate}')
 
 
