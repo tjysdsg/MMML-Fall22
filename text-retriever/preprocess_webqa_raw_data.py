@@ -53,8 +53,14 @@ def generate_test_dataset_from_raw_WebQA(file_name):
                 fact['title'] = txt_fact['title']
                 fact['fact'] = txt_fact['fact']
                 fact['snippet_id'] = txt_fact['snippet_id']
-                dataset.append({'Q': Q, 'A': A, 'txt_fact': fact})
-            for img_fact in data['img']
+                dataset.append({'Q_id': Q_id, 'Q': Q, 'A': A, 'txt_fact': fact})
+            for img_fact in data['img_Facts']:
+                fact = {}
+                fact['title'] = img_fact['title']
+                fact['caption'] = img_fact['caption']
+                fact['image_id'] = img_fact['image_id']
+                dataset.append({'Q_id': Q_id, 'Q': Q, 'A': A, 'img_fact': fact})
+    return dataset
 
 
 def write_dataset(dataset, output_file_name):
@@ -74,11 +80,16 @@ if __name__ == '__main__':
     write_dataset(val_dataset, './data/WebQA_sub_data/val.jsonl')
     '''
 
+    '''
     # for full-size WebQA data
     file_name = './raw_data/WebQA_data_first_release/WebQA_train_val.json'
     train_dataset = generate_dataset_from_raw_WebQA(file_name, split='train')
     val_dataset = generate_dataset_from_raw_WebQA(file_name, split='val')
     write_dataset(train_dataset, './data/WebQA_full_data/train.jsonl')
     write_dataset(val_dataset, './data/WebQA_full_data/val.jsonl')
+    '''
 
-
+    # for full-size WebQA test data
+    file_name = './raw_data/WebQA_data_first_release/WebQA_test.json'
+    test_dataset = generate_test_dataset_from_raw_WebQA(file_name)
+    write_dataset(test_dataset, './data/WebQA_test_data/test.jsonl')
