@@ -7,44 +7,44 @@ def generate_dataset_from_raw_WebQA(file_name, split):
         raw_dataset = json.load(f)
         dataset = []
         for data_id, data in raw_dataset.items():
-            Qcate = data['Qcate']
-            Q = data['Q'].replace('"', "")
-            A = data['A'][0].replace('"', "")
-            pos_txt_facts = []
-            neg_txt_facts = []
-            for txt_fact_type in ['txt_posFacts', 'txt_negFacts']:
-                for txt_fact in data[txt_fact_type]:
-                    fact = {}
-                    fact['title'] = txt_fact['title']
-                    fact['fact'] = txt_fact['fact']
-                    if txt_fact_type == 'txt_posFacts':
-                        fact['label'] = 1
-                        pos_txt_facts.append(fact)
-                    else:
-                        fact['label'] = 0
-                        neg_txt_facts.append(fact)
-            pos_img_facts = []
-            neg_img_facts = []
-            for img_fact_type in ['img_posFacts', 'img_negFacts']:
-                for img_fact in data['img_posFacts']:
-                    fact = {}
-                    fact['title'] = img_fact['title']
-                    fact['caption'] = img_fact['caption']
-                    if img_fact_type == 'img_posFacts':
-                        fact['label'] = 1
-                        pos_img_facts.append(fact)
-                    else:
-                        fact['label'] = 0
-                        neg_img_facts.append(fact)
-            dataset.append({
-                'Q': Q, 
-                'A': A, 
-                'pos_img_facts': pos_img_facts, 
-                'pos_txt_facts': pos_txt_facts,
-                'neg_img_facts': neg_img_facts,
-                'neg_txt_facts': neg_txt_facts,
-            })
-    random.shuffle(dataset)
+            if data['split'] == split:
+                Qcate = data['Qcate']
+                Q = data['Q'].replace('"', "")
+                A = data['A'][0].replace('"', "")
+                pos_txt_facts = []
+                neg_txt_facts = []
+                for txt_fact_type in ['txt_posFacts', 'txt_negFacts']:
+                    for txt_fact in data[txt_fact_type]:
+                        fact = {}
+                        fact['title'] = txt_fact['title']
+                        fact['fact'] = txt_fact['fact']
+                        if txt_fact_type == 'txt_posFacts':
+                            fact['label'] = 1
+                            pos_txt_facts.append(fact)
+                        else:
+                            fact['label'] = 0
+                            neg_txt_facts.append(fact)
+                pos_img_facts = []
+                neg_img_facts = []
+                for img_fact_type in ['img_posFacts', 'img_negFacts']:
+                    for img_fact in data['img_posFacts']:
+                        fact = {}
+                        fact['title'] = img_fact['title']
+                        fact['caption'] = img_fact['caption']
+                        if img_fact_type == 'img_posFacts':
+                            fact['label'] = 1
+                            pos_img_facts.append(fact)
+                        else:
+                            fact['label'] = 0
+                            neg_img_facts.append(fact)
+                dataset.append({
+                    'Q': Q, 
+                    'A': A, 
+                    'pos_img_facts': pos_img_facts, 
+                    'pos_txt_facts': pos_txt_facts,
+                    'neg_img_facts': neg_img_facts,
+                    'neg_txt_facts': neg_txt_facts,
+                })
     return dataset
 
 def generate_test_dataset_from_raw_WebQA(file_name):

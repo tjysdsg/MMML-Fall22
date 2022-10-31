@@ -97,7 +97,7 @@ def validate(args, dev_dataloader, model):
         eval_losses = []
         gth_labels = []
         pred_labels = []
-        for idx, data in enumerate(dev_dataloader):
+        for idx, data in enumerate(tqdm(dev_dataloader)):
             input_ids = data['input_ids'].to(args.device)
             labels = data['labels'].to(args.device)
             attention_mask = data['attention_mask'].to(args.device)

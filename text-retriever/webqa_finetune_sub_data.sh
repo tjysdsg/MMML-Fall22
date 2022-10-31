@@ -10,4 +10,4 @@ python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29517 ma
 --val_file val.jsonl \
 --num_epochs 2 \
 --evaluation_steps 500 \
---have_cached_dataset \
+#--have_cached_dataset \
