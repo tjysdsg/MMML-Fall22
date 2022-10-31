@@ -1,5 +1,6 @@
 import json
 from argparse import ArgumentParser
+import numpy as np
 
 
 def get_args():
@@ -14,19 +15,49 @@ def main():
 
     with open(args.preds, 'r', encoding='utf-8') as f:
         preds = json.load(f)
+    with open(args.labels, 'r', encoding='utf-8') as f:
+        labels = json.load(f)
 
     num_sources = {}
+    full_correct_q = 0
+    overshoot_q = 0
+    undershoot_q = 0
+    correct_per_qcate = {}
     for q, data in preds.items():
         sources = data['sources']
         n = len(sources)
         num_sources.setdefault(n, 0)
         num_sources[n] += 1
 
-        if n == 0:
-            print(q)
+        # if n > 3:
+        #     print(q)
+        meta = labels[q]
 
-    print({k: num_sources[k] for k in sorted(num_sources)})
-    print(63 + 31 + 23 + 11 + 2 + 4 + 1 + 2)
+        qcate = meta['Qcate']
+        correct_per_qcate.setdefault(qcate, [])
+        true_sources = [str(f['image_id']) for f in meta['img_posFacts']]
+        if n == len(true_sources):
+            if set(sources) == set(true_sources):
+                full_correct_q += 1
+                correct_per_qcate[qcate].append(1)
+        else:
+            correct_per_qcate[qcate].append(0)
+            if n > len(true_sources):
+                overshoot_q += 1
+            elif n < len(true_sources):
+                undershoot_q += 1
+
+    full_correct_q /= len(preds)
+    undershoot_q /= len(preds)
+    overshoot_q /= len(preds)
+    correct_per_qcate = {k: np.mean(v) for k, v in correct_per_qcate.items()}
+
+    print('# of sources', {k: num_sources[k] for k in sorted(num_sources)})
+    print(f'Full correct questions: {full_correct_q}')
+    print(f'Undershoot questions: {undershoot_q}')
+    print(f'Overshoot questions: {overshoot_q}')
+
+    print(f'correct per cate: {correct_per_qcate}')
 
 
 if __name__ == '__main__':
