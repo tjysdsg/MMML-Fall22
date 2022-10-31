@@ -23,7 +23,6 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                         dataset.append({'Q': Q, 'A': A, 'txt_fact': fact})
                     elif split == 'val' and data['split'] == 'val':
                         dataset.append({'Q': Q, 'A': A, 'txt_fact': fact})
-
             for img_fact_type in ['img_posFacts', 'img_negFacts']:
                 for img_fact in data['img_posFacts']:
                     fact = {}
