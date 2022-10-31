@@ -2,7 +2,7 @@
 
 export PYTHONPATH=$(pwd)/../
 
-output_dir=exp/retrieval
+output_dir=exp/retrieval_train
 ckpts_dir=${output_dir}/ckpt
 
 webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
@@ -11,11 +11,9 @@ imgid_map=$webqa_dir/image_id_map_0328.pkl
 detectron_dir=$webqa_dir/baseline_finetuned/detectron_weights
 
 # model_ckpt=$webqa_dir/baseline_finetuned/retrieval_x101fpn/model.3.bin
-# train from vlp that has not been finetuned on WebQA
-model_ckpt=$webqa_dir/vlp_pretrained/model.30.bin
+model_ckpt=$webqa_dir/vlp_pretrained/model.30.bin # train from vlp that has not been finetuned on WebQA
 
-dataset=../subWebqa/data/train_subWebqa.json
-# dataset=data/webqa_subset.json
+dataset=$webqa_dir/WebQA_train_val.json
 
 python run_webqa.py \
   --do_train \
@@ -24,13 +22,13 @@ python run_webqa.py \
   --task_to_learn 'filter' \
   --use_x_distractors \
   --amp \
+  --use_wandb \
   --new_segment_ids \
   --train_batch_size 1 \
   --num_workers 4 \
   --max_pred 10 --mask_prob 1.0 \
   --learning_rate 3e-5 \
   --gradient_accumulation_steps 128 \
-  --save_loss_curve \
   --num_train_epochs 6 \
   --output_dir ${output_dir} \
   --ckpts_dir ${ckpts_dir} \

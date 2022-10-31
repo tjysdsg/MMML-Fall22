@@ -10,8 +10,8 @@ else
   ckpt_step="$1"
 fi
 
-split="test"
-output_dir=exp/retrieval_${split}
+split="val"
+output_dir=exp/retrieval_validate_${split}
 ckpts_dir=exp/retrieval/ckpt
 
 webqa_dir=/ocean/projects/cis210027p/shared/corpora/webqa
@@ -48,7 +48,7 @@ fi
 # Or you can specify the exact model path
 model_ckpt=$webqa_dir/baseline_finetuned/retrieval_x101fpn/model.3.bin
 python run_webqa.py \
-  --do_predict \
+  --do_val \
   --split ${split} \
   --answer_provided_by 'img' \
   --task_to_learn 'filter' \
