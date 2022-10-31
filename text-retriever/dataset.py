@@ -2,6 +2,7 @@ import os
 import jsonlines
 import argparse
 import torch
+import random
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
@@ -162,14 +163,14 @@ class WebQADataset(Dataset):
             neg_txt_count = 0
             neg_img_count = 0
 
-            shuffled_neg_txt_facts = random.shuffle(instance['neg_txt_facts'])
-            for neg_txt_fact in neg_txt_facts:
+            random.shuffle(instance['neg_txt_facts'])
+            for neg_txt_fact in instance['neg_txt_facts']:
                 if neg_txt_count < 8:
                     neg_txt_count += 1
                     token_facts.append(neg_txt_fact['fact'])
                     batch_labels.append(0)
-            shuffled_neg_img_facts = random.shuffle(instance['neg_img_facts'])
-            for neg_img_fact in neg_img_facts:
+            random.shuffle(instance['neg_img_facts'])
+            for neg_img_fact in instance['neg_img_facts']:
                 if neg_img_count < 8:
                     neg_img_count += 1
                     token_facts.append(neg_img_fact['caption'])
