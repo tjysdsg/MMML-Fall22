@@ -113,7 +113,7 @@ def validate(args, dev_dataloader, model):
             )
             logits = outputs['logits']
             logit_mask = (labels != -100)
-            labels[labels == -100] = 0
+            labels[labels == -100] = 0 # TODO: should not be considered into F1 calculation
             one_hot_labels = torch.nn.functional.one_hot(labels)
 
             prediction = logits.view(-1, args.choice_num, args.label_num)
@@ -126,8 +126,8 @@ def validate(args, dev_dataloader, model):
             pred_labels.append(predictions.tolist())
             gth_labels.append(labels.view(-1).tolist())
             eval_losses.append(eval_loss.item()) 
-    metric = evaluate.load("f1")
 
+    metric = evaluate.load("f1")
     true_predictions = []
     for prediction in gth_labels:
         true_predictions += prediction
@@ -161,6 +161,9 @@ def train(args, model, tokenizer):
     total_training_steps = len(train_dataloader) * args.num_epochs // args.gradient_accumulation_step
     scheduler = attach_scheduler(args, optimizer, total_training_steps)
 
+    if args.use_amp:
+        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+
     train_losses = []
     for epoch in range(args.num_epochs):
         for data in tqdm(train_dataloader):
@@ -188,7 +191,12 @@ def train(args, model, tokenizer):
 
             loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
 
-            loss.backward()
+            if args.use_amp:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
+
             train_losses.append(loss.item())
             step += 1
 
@@ -317,6 +325,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
     parser.add_argument('--choice_num', type=int, default=16)
+    parser.add_argument('--use_amp', action='store_true')
 
     args = parser.parse_args()
 

@@ -171,6 +171,7 @@ class WebQADataset(Dataset):
                 batch_input_id += [self.tokenizer.sep_token_id]
                 batch_input_id = torch.LongTensor(batch_input_id)
                 batch_input_ids.append(batch_input_id)
+            import pdb; pdb.set_trace()
             if len(batch_input_ids) > self.args.choice_num:
                 batch_input_ids = batch_input_ids[:self.args.choice_num]
                 batch_labels = batch_labels[:self.args.choice_num]
