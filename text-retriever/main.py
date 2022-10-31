@@ -87,13 +87,8 @@ def validate(args, dev_dataloader, model):
             outputs = model(input_ids, labels=labels, attention_mask=mask_ids)
             eval_loss = outputs['loss']
             logits = outputs['logits']
-            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)
-            predictions = torch.where(
-                softmax_logits > args.classifier_threshold, 
-                torch.ones_like(softmax_logits), 
-                torch.zeros_like(softmax_logits)
-            )
-            predictions = torch.argmax(predictions, dim=-1)
+            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            predictions = (softmax_logits > args.classifier_threshold).float()
             pred_labels.append(predictions.tolist())
             gth_labels.append(labels.tolist())
             eval_losses.append(eval_loss.item()) 
@@ -129,7 +124,7 @@ def train(args, model, tokenizer):
     dev_dataloader = loaders['dev']
     model.train()
     optimizer = attach_optimizer(args, model)
-    total_training_steps = len(train_dataloader) * args.num_epochs
+    total_training_steps = len(train_dataloader) * args.num_epochs // args.gradient_accumulation_step
     scheduler = attach_scheduler(args, optimizer, total_training_steps)
 
     train_losses = []
@@ -148,18 +143,18 @@ def train(args, model, tokenizer):
                 optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
-                global_step += 1
 
                 if args.use_wandb:
+                    wandb.log({'train loss': loss.item(), 'step': global_step})
                     wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': global_step})
 
+                global_step += 1
                 if global_step % args.evaluation_steps == 0:
                     eval_f1, eval_loss = validate(args, dev_dataloader, model)
-                    import pdb; pdb.set_trace()
                     if args.use_wandb:
                         wandb.log({'eval_f1': eval_f1, 'step': global_step})
                         wandb.log({'eval_loss': eval_loss, 'step': global_step})
-                    if arfgs.model_chosen_metric == 'f1':
+                    if args.model_chosen_metric == 'f1':
                         if eval_f1 > best_eval_f1:
                             if best_checkpoint_name is not None:
                                 os.remove(best_checkpoint_name)
@@ -206,13 +201,8 @@ def test(args, model, tokenizer):
             q_ids = data['q_ids']
             outputs = model(input_ids, attention_mask=attention_mask)
             logits = outputs['logits']
-            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)
-            predictions = torch.where(
-                softmax_logits > args.classifier_threshold, 
-                torch.ones_like(softmax_logits), 
-                torch.zeros_like(softmax_logits)
-            )
-            predictions = torch.argmax(predictions, dim=-1)
+            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            predictions = (softmax_logits > args.classifier_threshold).float()
             
             assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
             for idx in range(len(predictions)):
@@ -226,6 +216,7 @@ def test(args, model, tokenizer):
 
     with open("./data/WebQA_test_data/submission.json", "w") as outfile:
         json.dump(test_results, outfile)
+
     return
 
 
@@ -244,11 +235,10 @@ if __name__ == '__main__':
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
-    parser.add_argument('--model_name', type=str, default='bert-base-uncased', help='model name or path')
+    parser.add_argument('--model_name', type=str, default='roberta-base', help='model name or path')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')
-    parser.add_argument('--test_file', type=str, default='val.jsonl', help='path to test file')
-    parser.add_argument('--inference_file', type=str, default='./data/test.jsonl', help='final ANLP submission file')
+    parser.add_argument('--test_file', type=str, default='test.jsonl', help='path to test file')
     parser.add_argument('--load_from_checkpoint', type=str, default=None, help='contine finetuning based on one checkpoint')
     parser.add_argument('--model_chosen_metric', type=str, default='f1', help='choose dev checkpoint based on this metric')
     parser.add_argument('--checkpoint_save_dir', type=str, default='./checkpoints/')
@@ -272,7 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('--local_rank', type=int, default=-1)
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
-    parser.add_argument('--classifier_threshold', type=float, default=0.6)
+    parser.add_argument('--classifier_threshold', type=float, default=0.3)
 
     args = parser.parse_args()
 
@@ -294,6 +284,7 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     config = AutoConfig.from_pretrained(args.model_name, num_labels=args.label_num)
     model = AutoModelForSequenceClassification.from_pretrained(args.model_name, config=config, ignore_mismatched_sizes=True)
+    import pdb; pdb.set_trace()
     device = torch.device(args.local_rank) if args.local_rank != -1 else torch.device('cuda')
     if args.load_from_checkpoint:
         model_dict = torch.load(args.load_from_checkpoint)
