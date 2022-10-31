@@ -62,7 +62,7 @@ def save_loss_curve(loss, i_epoch, output_dir, task, all_tasks):
     plt.savefig(os.path.join(output_dir, "figs/" + title + ".jpg"))
 
 
-def get_dataloaders(args, device):
+def get_dataloaders(args, device, split: str):
     from pytorch_pretrained_bert.tokenization import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained(
@@ -88,12 +88,12 @@ def get_dataloaders(args, device):
         use_txt_fact=args.use_txt_fact
     )
 
-    train_dataloaders = []
+    dataloaders = []
     if "filter" in args.task_to_learn:
         if "txt" in args.answer_provided_by:
-            train_dataset = WebQARetrievalDataset(
+            dataset = WebQARetrievalDataset(
                 dataset_json_path=args.txt_dataset_json_path,
-                split=args.split,
+                split=split,
                 Qcate=args.Qcate,
                 batch_size=args.train_batch_size,
                 tokenizer=tokenizer,
@@ -107,18 +107,18 @@ def get_dataloaders(args, device):
                 imgid_map=args.image_id_map_path,
                 device=device,
             )
-            train_dataloader = _get_loader_from_dataset(
-                train_dataset,
+            loader = _get_loader_from_dataset(
+                dataset,
                 args.train_batch_size,
                 args.num_workers,
                 batch_list_to_batch_tensors,
             )
-            train_dataloaders.append(train_dataloader)
+            dataloaders.append(loader)
 
         if "img" in args.answer_provided_by:
-            train_dataset = WebQARetrievalDataset(
+            dataset = WebQARetrievalDataset(
                 dataset_json_path=args.img_dataset_json_path,
-                split=args.split,
+                split=split,
                 Qcate=args.Qcate,
                 batch_size=args.train_batch_size,
                 tokenizer=tokenizer,
@@ -132,40 +132,59 @@ def get_dataloaders(args, device):
                 imgid_map=args.image_id_map_path,
                 device=device,
             )
-            train_dataloader = _get_loader_from_dataset(
-                train_dataset,
+            loader = _get_loader_from_dataset(
+                dataset,
                 args.train_batch_size, args.num_workers,
                 batch_list_to_batch_tensors,
             )
-            train_dataloaders.append(train_dataloader)
+            dataloaders.append(loader)
 
     if "qa" in args.task_to_learn:
         if "txt" in args.answer_provided_by:
-            train_dataset = webqa_loader.webqaDataset_qa(dataset_json_path=args.txt_dataset_json_path, split=args.split,
-                                                         Qcate=args.Qcate,
-                                                         batch_size=args.train_batch_size, tokenizer=tokenizer,
-                                                         use_num_samples=args.use_num_samples,
-                                                         processor=processor, device=device)
+            dataset = webqa_loader.webqaDataset_qa(
+                dataset_json_path=args.txt_dataset_json_path,
+                split=split,
+                Qcate=args.Qcate,
+                batch_size=args.train_batch_size,
+                tokenizer=tokenizer,
+                use_num_samples=args.use_num_samples,
+                processor=processor,
+                device=device
+            )
 
-            train_dataloader = _get_loader_from_dataset(train_dataset,
-                                                        args.train_batch_size, args.num_workers,
-                                                        batch_list_to_batch_tensors)
-            train_dataloaders.append(train_dataloader)
+            loader = _get_loader_from_dataset(
+                dataset, args.train_batch_size, args.num_workers, batch_list_to_batch_tensors
+            )
+            dataloaders.append(loader)
 
         if "img" in args.answer_provided_by:
-            train_dataset = webqa_loader.webqaDataset_qa_with_img(dataset_json_path=args.img_dataset_json_path,
-                                                                  split=args.split, Qcate=args.Qcate,
-                                                                  batch_size=args.train_batch_size, tokenizer=tokenizer,
-                                                                  feature_folder=args.feature_folder,
-                                                                  use_num_samples=args.use_num_samples,
-                                                                  processor=processor, imgid_map=args.image_id_map_path,
-                                                                  device=device)
-            train_dataloader = _get_loader_from_dataset(train_dataset,
-                                                        args.train_batch_size, args.num_workers,
-                                                        batch_list_to_batch_tensors)
-            train_dataloaders.append(train_dataloader)
+            dataset = webqa_loader.webqaDataset_qa_with_img(
+                dataset_json_path=args.img_dataset_json_path,
+                split=split,
+                Qcate=args.Qcate,
+                batch_size=args.train_batch_size,
+                tokenizer=tokenizer,
+                feature_folder=args.feature_folder,
+                use_num_samples=args.use_num_samples,
+                processor=processor,
+                imgid_map=args.image_id_map_path,
+                device=device
+            )
+            loader = _get_loader_from_dataset(
+                dataset, args.train_batch_size, args.num_workers, batch_list_to_batch_tensors
+            )
+            dataloaders.append(loader)
 
-    return train_dataloaders
+    # train_dataloader_order randomly specifies which at each iteration which dataloader to retrieve a batch from,
+    # in case multiple dataloaders (text+image) are used during training
+    # If there is only one dataloader, the training loop is equivalent to `for i, batch in enumerate(dataloder):`
+    loader_lengths = [len(e) for e in dataloaders]
+    dataloader_order = []
+    for i in range(len(loader_lengths)):
+        dataloader_order.extend([i] * loader_lengths[i])
+    random.shuffle(dataloader_order)
+
+    return dataloaders, dataloader_order, loader_lengths
 
 
 def model_forward_pass(model, batch, device, n_gpu, drop_worst_ratio=0):
@@ -340,12 +359,69 @@ def train(
         torch.cuda.empty_cache()
 
 
+def validate(
+        logger: logging.Logger,
+        args,
+        model: BertForWebqa,
+        device,
+        n_gpu,
+        dataloaders: List[DataLoader],
+        dataloader_order
+):
+    logger.info("--------------- Validation ------------------")
+    assert args.split == "val"
+    if "img" in args.answer_provided_by:
+        logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
+        logger.info(f"use_img_content = {args.use_img_content}")
+        logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
+    if "txt" in args.answer_provided_by:
+        logger.info(f"use_txt_fact = ", args.use_txt_fact)
+        logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
+
+    logger.info("***** Compute loss without grad *****")
+    logger.info(f"  Batch size = {args.train_batch_size}")
+
+    model.eval()
+    with torch.no_grad():
+        qa_loss = []
+        filter_loss = []
+        loss = []
+        scst_reward = []
+
+        dataloader_iters = [iter(l) for l in dataloaders]
+        iter_bar = tqdm(dataloader_order, desc='Iter (loss=X.XXX)')
+        for step, loader_idx in enumerate(iter_bar):
+            batch = next(dataloader_iters[loader_idx])
+            loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
+                model, batch, device, n_gpu, drop_worst_ratio=0
+            )
+
+            # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
+            iter_bar.set_description(f'Iter (loss={loss.item():.3f})')
+            qa_loss.append(masked_lm_loss.item())
+            filter_loss.append(cls_loss.item())
+            loss.append(loss.item())
+            scst_reward.append(mean_reward.item())
+
+            if step % 100 == 0:
+                logger.info(
+                    f"Iter {step}, Loss {np.mean(qa_loss):.2f}, Filter {np.mean(filter_loss):.2f}, "
+                    f"Mean R {np.mean(scst_reward):.3f}\n"
+                )
+
+        logger.info(qa_loss)
+        logger.info(filter_loss)
+        logger.info(loss)
+        logger.info(f"Mean loss = {np.mean(loss)}")
+
+        torch.cuda.empty_cache()
+
+
 def inference(
         logger: logging.Logger,
         args,
         model: BertForWebqa,
         device,
-        recover_step: int,
         train_dataloaders: List[DataLoader],
         train_dataloader_order: List[int],
 ):
@@ -493,18 +569,8 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
 
     # prepare dataloaders
-    train_dataloaders = get_dataloaders(args, device)
-    loader_lengths = [len(e) for e in train_dataloaders]
-    logger.info(f"n_batches = {sum(loader_lengths)}", )
-
-    # train_dataloader_order randomly specifies which at each iteration which dataloader to retrieve a batch from,
-    # in case multiple dataloaders (text+image) are used during training
-    # If there is only one dataloader, the training loop is equivalent to `for i, batch in enumerate(dataloder):`
-    train_dataloader_order = []
-    for i in range(len(loader_lengths)):
-        train_dataloader_order.extend([i] * loader_lengths[i])
-    random.shuffle(train_dataloader_order)
-    logger.info(f"\ntrain_dataloader_order = {train_dataloader_order}")
+    train_dataloaders, train_dataloader_order, loader_lengths = get_dataloaders(args, device, args.split)
+    logger.info(f"n_batches = {sum(loader_lengths)}")
 
     # Total number of times we update the model's parameter, note we are using grad accum
     t_total = int(sum(loader_lengths) * args.num_train_epochs * 1. / args.gradient_accumulation_steps)
@@ -612,70 +678,16 @@ def main():
     logger.info("***** CUDA.empty_cache() *****")
     torch.cuda.empty_cache()
 
+    # ===========================================================================================
     if args.do_train:  # run training
         train(
             logger, args, model, device, optimizer, n_gpu, recover_step, global_step, t_total,
             train_dataloaders, train_dataloader_order
         )
-
     elif args.do_val:  # run validation on data
-        logger.info("--------------- Compute loss without grad ------------------")
-        assert args.split == "val"
-        if "img" in args.answer_provided_by:
-            logger.info(f"use_img_meta = {args.use_img_meta}", args.use_img_meta)
-            logger.info(f"use_img_content = {args.use_img_content}")
-            logger.info(f"\nimg Filter_max_choices: {args.img_filter_max_choices}")
-        if "txt" in args.answer_provided_by:
-            logger.info(f"use_txt_fact = ", args.use_txt_fact)
-            logger.info(f"\ntxt Filter_max_choices: {args.txt_filter_max_choices}")
-
-        logger.info("***** Compute loss without grad *****")
-        logger.info(f"  Batch size = {args.train_batch_size}")
-        logger.info(f"  Num steps = {t_total}")
-
-        model.eval()
-
-        with torch.no_grad():
-            dataloader_iters = [iter(l) for l in train_dataloaders]
-            iter_bar = tqdm(train_dataloader_order, desc='Iter (loss=X.XXX), loader_idx=X')
-
-            qa_loss = []
-            filter_loss = []
-            loss_dict = [[], [], [], []]
-            scst_reward = []
-            for step, loader_idx in enumerate(iter_bar):
-                batch = next(dataloader_iters[loader_idx])
-                loss, masked_lm_loss, cls_loss, mean_reward = model_forward_pass(
-                    model, batch, device, n_gpu, drop_worst_ratio=0
-                )
-
-                # logging for each step (i.e., before normalization by args.gradient_accumulation_steps)
-                iter_bar.set_description('Iter (loss={:.3f}) loader_idx={}'.format(loss.item(), loader_idx))
-                qa_loss.append(masked_lm_loss.item())
-                filter_loss.append(cls_loss.item())
-                loss_dict[loader_idx].append(loss.item())
-                scst_reward.append(mean_reward.item())
-
-                if step % 100 == 0:
-                    logger.info(
-                        f"Iter {step}, Loss {np.mean(qa_loss):.2f}, Filter {np.mean(filter_loss):.2f}, "
-                        f"Mean R {np.mean(scst_reward):.3f}\n"
-                    )
-
-            logger.info(qa_loss)
-            logger.info(filter_loss)
-            logger.info(loss_dict)
-            logger.info(f"Mean loss = {np.mean([l for L in loss_dict for l in L])}")
-
-            torch.cuda.empty_cache()
-
-            with open(os.path.join(args.output_dir, "val_loss.txt"), "a") as f:
-                f.write("\nrecover_step = {}, use_num_samples = {}, answer_provided_by = {}, task = {}\n".format(
-                    recover_step, args.use_num_samples, args.answer_provided_by, args.task_to_learn))
-                f.write(str(np.mean([l for L in loss_dict for l in L])))
-
+        validate(logger, args, model, device, n_gpu, train_dataloaders, train_dataloader_order)
     elif args.do_predict:  # inference mode
-        inference(logger, args, model, device, recover_step, train_dataloaders, train_dataloader_order)
+        inference(logger, args, model, device, train_dataloaders, train_dataloader_order)
 
 
 def get_args():
@@ -821,6 +833,9 @@ def get_args():
     parser.add_argument('--relax_projection',
                         action='store_true',
                         help="Use different projection layers for tasks.")
+
+    # wandb
+    parser.add_argument('--use_wandb', action='store_true')
     return parser.parse_args()
 
 
