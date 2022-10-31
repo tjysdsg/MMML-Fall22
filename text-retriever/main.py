@@ -71,6 +71,23 @@ def attach_scheduler(args, optimizer, total_training_steps):
         raise ValueError('Invalid scheduler type')
 
 
+def cross_entropy_with_logits_loss(prediction, target, logit_mask):
+    # prediction: batch_size x num_choices x 2
+    # target: batch_size x num_choices x 2. Targets with multiple flags look like [[0,1], [1,0], [0,1], [0,1], [0,1]] (there is no need to normalize them)
+    num_choices = prediction.size(1)
+    batch_size = prediction.size(0)
+    lp = torch.nn.functional.log_softmax(prediction, dim=-1)  # batch_size x num_choices x 2
+    # num_flags = torch.sum(target, dim=-1)
+    # num_flags = torch.max(num_flags, torch.ones_like(num_flags))
+    # labels = target / num_flags.unsqueeze(-1).repeat(1, prediction.size(-1))
+    # m = lp * labels
+    # m = torch.where(torch.isnan(m), torch.zeros_like(m), m)
+    # loss = torch.sum(- m, dim=-1) * num_flags
+    normalizer = torch.sum(logit_mask, dim=-1)
+    m = lp * target * logit_mask.view(-1, num_choices, 1).repeat(1, 1, 2)  # target.transpose --> batch_size x num_choices x 2
+    loss = (-m).view(batch_size, -1).sum(dim=-1) / (normalizer + 1e-8)
+    return torch.mean(loss)
+
 
 def validate(args, dev_dataloader, model):
     model.eval()
@@ -83,8 +100,14 @@ def validate(args, dev_dataloader, model):
         for idx, data in enumerate(dev_dataloader):
             input_ids = data['input_ids'].to(args.device)
             labels = data['labels'].to(args.device)
-            mask_ids = data['attention_mask'].to(args.device)
-            outputs = model(input_ids, labels=labels, attention_mask=mask_ids)
+            attention_mask = data['attention_mask'].to(args.device)
+
+            input_ids = input_ids.view(-1, input_ids.size(-1))
+            labels = labels.view(-1)
+            attention_mask = attention_mask.view(-1, attention_mask.size(-1))
+
+            outputs = model(input_ids, labels=labels, attention_mask=attention_mask)
+
             eval_loss = outputs['loss']
             logits = outputs['logits']
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
@@ -132,9 +155,26 @@ def train(args, model, tokenizer):
         for data in tqdm(train_dataloader):
             input_ids = data['input_ids'].to(args.device)
             labels = data['labels'].to(args.device)
-            mask_ids = data['attention_mask'].to(args.device)
-            outputs = model(input_ids, labels=labels, attention_mask=mask_ids, return_dict=True)
-            loss = outputs['loss']
+            attention_mask = data['attention_mask'].to(args.device)
+
+            squeezed_input_ids = input_ids.view(-1, input_ids.size(-1))
+            squeezed_labels = labels.view(-1)
+            squeezed_attention_mask = attention_mask.view(-1, attention_mask.size(-1))
+
+            outputs = model(
+                input_ids=squeezed_input_ids, 
+                labels=squeezed_labels, 
+                attention_mask=squeezed_attention_mask)
+            logits = outputs['logits']
+            logit_mask = (labels != -100)
+            labels[labels == -100] = 0
+            one_hot_labels = torch.nn.functional.one_hot(labels)
+
+            prediction = logits.view(-1, args.choice_num, args.label_num)
+            target = one_hot_labels.view(-1, args.choice_num, args.label_num)
+            
+            loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
+
             loss.backward()
             train_losses.append(loss.item())
             step += 1
@@ -243,9 +283,9 @@ if __name__ == '__main__':
     parser.add_argument('--model_chosen_metric', type=str, default='f1', help='choose dev checkpoint based on this metric')
     parser.add_argument('--checkpoint_save_dir', type=str, default='./checkpoints/')
     parser.add_argument('--task', type=str, default='webqa-finetune')
-    parser.add_argument('--train_batch_size', type=int, default=8)
-    parser.add_argument('--gradient_accumulation_step', type=int, default=4)
-    parser.add_argument('--dev_batch_size', type=int, default=8)
+    parser.add_argument('--train_batch_size', type=int, default=1)
+    parser.add_argument('--gradient_accumulation_step', type=int, default=1)
+    parser.add_argument('--dev_batch_size', type=int, default=1)
     parser.add_argument('--test_batch_size', type=int, default=4)
     parser.add_argument('--max_length', type=int, default=512)
     parser.add_argument('--num_epochs', type=int, default=10)
@@ -263,6 +303,7 @@ if __name__ == '__main__':
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
+    parser.add_argument('--choice_num', type=int, default=8)
 
     args = parser.parse_args()
 

@@ -10,6 +10,8 @@ def generate_dataset_from_raw_WebQA(file_name, split):
             Qcate = data['Qcate']
             Q = data['Q'].replace('"', "")
             A = data['A'][0].replace('"', "")
+            pos_txt_facts = []
+            neg_txt_facts = []
             for txt_fact_type in ['txt_posFacts', 'txt_negFacts']:
                 for txt_fact in data[txt_fact_type]:
                     fact = {}
@@ -17,12 +19,12 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                     fact['fact'] = txt_fact['fact']
                     if txt_fact_type == 'txt_posFacts':
                         fact['label'] = 1
+                        pos_txt_facts.append(fact)
                     else:
                         fact['label'] = 0
-                    if split == 'train' and data['split'] == 'train':
-                        dataset.append({'Q': Q, 'A': A, 'txt_fact': fact})
-                    elif split == 'val' and data['split'] == 'val':
-                        dataset.append({'Q': Q, 'A': A, 'txt_fact': fact})
+                        neg_txt_facts.append(fact)
+            pos_img_facts = []
+            neg_img_facts = []
             for img_fact_type in ['img_posFacts', 'img_negFacts']:
                 for img_fact in data['img_posFacts']:
                     fact = {}
@@ -30,12 +32,18 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                     fact['caption'] = img_fact['caption']
                     if img_fact_type == 'img_posFacts':
                         fact['label'] = 1
+                        pos_img_facts.append(fact)
                     else:
                         fact['label'] = 0
-                    if split =='train' and data['split'] == 'train':
-                        dataset.append({'Q': Q, 'A': A, 'img_fact': fact})
-                    elif split == 'val' and data['split'] == 'val':
-                        dataset.append({'Q': Q, 'A': A, 'img_fact': fact})
+                        neg_img_facts.append(fact)
+            dataset.append({
+                'Q': Q, 
+                'A': A, 
+                'pos_img_facts': pos_img_facts, 
+                'pos_txt_facts': pos_txt_facts,
+                'neg_img_facts': neg_img_facts,
+                'neg_txt_facts': neg_txt_facts,
+            })
     random.shuffle(dataset)
     return dataset
 
@@ -69,7 +77,6 @@ def write_dataset(dataset, output_file_name):
 
 
 if __name__ == '__main__':
-    '''
     # for deliberately split small-size WebQA subdata
     file_name = './raw_data/WebQA_subdata/train_subWebqa.json'
     train_dataset = generate_dataset_from_raw_WebQA(file_name, split='train')
@@ -77,16 +84,13 @@ if __name__ == '__main__':
     val_dataset = generate_dataset_from_raw_WebQA(file_name, split='val')
     write_dataset(train_dataset, './data/WebQA_sub_data/train.jsonl')
     write_dataset(val_dataset, './data/WebQA_sub_data/val.jsonl')
-    '''
 
-    '''
     # for full-size WebQA data
     file_name = './raw_data/WebQA_data_first_release/WebQA_train_val.json'
     train_dataset = generate_dataset_from_raw_WebQA(file_name, split='train')
     val_dataset = generate_dataset_from_raw_WebQA(file_name, split='val')
     write_dataset(train_dataset, './data/WebQA_full_data/train.jsonl')
     write_dataset(val_dataset, './data/WebQA_full_data/val.jsonl')
-    '''
 
     # for full-size WebQA test data
     file_name = './raw_data/WebQA_data_first_release/WebQA_test.json'

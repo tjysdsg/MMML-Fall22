@@ -59,7 +59,7 @@ class WebQATestDataset(Dataset):
             instance_token_ids = [self.tokenizer.cls_token_id]
             # QA part
             instance_token_ids += instance['Q']
-            instance_token_ids += instance['A']
+            #instance_token_ids += instance['A'] # answer is all empty in test cases
             # add one [SEP] after QA part
             instance_token_ids += [self.tokenizer.sep_token_id]
             # fact part (both for text and image)
@@ -142,46 +142,54 @@ class WebQADataset(Dataset):
             torch.save(dataset, os.path.join(self.args.cache_dir, split))
         return dataset
 
-    def collate_fn(self, batch, max_length=None):
+    def collate_fn(self, batch):
         input_ids = []
         labels = []
         attention_mask = []
+        bsz = len(batch)
 
         for instance in batch:
-            instance_token_ids = [self.tokenizer.cls_token_id]
-            # QA part
-            instance_token_ids += instance['Q']
-            instance_token_ids += instance['A']
-            # add one [SEP] after QA part
-            instance_token_ids += [self.tokenizer.sep_token_id]
-            # fact part (both for text and image)
-            if 'txt_fact' in instance.keys():
-                instance_token_ids += instance['txt_fact']['fact']
-            elif 'img_fact' in instance.keys():
-                instance_token_ids += instance['img_fact']['caption']
+            batch_labels = []
+            batch_input_ids = []
+            token_facts = []
+            tokens_question = [self.tokenizer.cls_token_id] + instance['Q'] + [self.tokenizer.sep_token_id]
+            for pos_txt_fact in instance['pos_txt_facts']:
+                token_facts.append(pos_txt_fact['fact'])
+                batch_labels.append(1)
+            for pos_img_fact in instance['pos_img_facts']:
+                token_facts.append(pos_img_fact['caption'])
+                batch_labels.append(1)
+            for neg_txt_fact in instance['neg_txt_facts']:
+                token_facts.append(neg_txt_fact['fact'])
+                batch_labels.append(0)
+            for neg_img_fact in instance['neg_img_facts']:
+                token_facts.append(neg_img_fact['caption'])
+                batch_labels.append(0)
+            for token_fact in token_facts:
+                batch_input_id = tokens_question + token_fact
+                batch_input_id = batch_input_id[:self.args.max_length-1]
+                batch_input_id += [self.tokenizer.sep_token_id]
+                batch_input_id = torch.LongTensor(batch_input_id)
+                batch_input_ids.append(batch_input_id)
+            if len(batch_input_ids) > self.args.choice_num:
+                batch_input_ids = batch_input_ids[:self.args.choice_num]
+                batch_labels = batch_labels[:self.args.choice_num]
             else:
-                raise ValueError('instance should either be image-based or text-based')
+                num_placeholder = self.args.choice_num - len(batch_input_ids)
+                batch_input_ids += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
+                batch_labels += [-100 for _ in range(num_placeholder)]
 
-            instance_token_ids = instance_token_ids[:self.args.max_length]
-            # add [SEP] after truncation
-            instance_token_ids += [self.tokenizer.sep_token_id]
-            instance_token_ids = torch.LongTensor(instance_token_ids)
-
-            if 'txt_fact' in instance.keys():
-                instance_labels = instance['txt_fact']['label']
-            elif 'img_fact' in instance.keys():
-                instance_labels = instance['img_fact']['label']
-            else:
-                raise ValueError('instance should either be image-based or text-based')
-
-            input_ids.append(instance_token_ids)
-            labels.append(instance_labels)
+            input_ids += batch_input_ids # get (bsz x choice_num) x seq_len 
+            labels += batch_labels
 
         input_ids = pad_sequence(
             input_ids, 
             batch_first=True, 
-            padding_value=self.tokenizer.pad_token_id)
+            padding_value=self.tokenizer.pad_token_id
+        )
         labels = torch.LongTensor(labels)
+        input_ids = input_ids.view(bsz, -1, input_ids.size(-1))
+        labels = labels.view(bsz, -1)
         attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
 
         return {
