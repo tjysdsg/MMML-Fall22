@@ -13,6 +13,8 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                 A = data['A'][0].replace('"', "")
                 pos_txt_facts = []
                 neg_txt_facts = []
+                pos_img_facts = []
+                neg_img_facts = []
                 for txt_fact_type in ['txt_posFacts', 'txt_negFacts']:
                     for txt_fact in data[txt_fact_type]:
                         fact = {}
@@ -24,10 +26,8 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                         else:
                             fact['label'] = 0
                             neg_txt_facts.append(fact)
-                pos_img_facts = []
-                neg_img_facts = []
                 for img_fact_type in ['img_posFacts', 'img_negFacts']:
-                    for img_fact in data['img_posFacts']:
+                    for img_fact in data[img_fact_type]:
                         fact = {}
                         fact['title'] = img_fact['title']
                         fact['caption'] = img_fact['caption']
