@@ -23,7 +23,7 @@ class RcnnFeatureLoader:
 
         self.data_dir = data_dir
 
-    def load_img_feats(self, embed_id: int, split: str) -> (torch.Tensor, torch.Tensor, torch.Tensor):
+    def load_img_feats(self, embed_id: int, split: str = 'features') -> (torch.Tensor, torch.Tensor, torch.Tensor):
         """Load image RCNN features"""
         filename = os.path.join(self.data_dir, split, f'{self.imgid_map[embed_id]}.pkl')
         with open(filename, 'rb') as f:
