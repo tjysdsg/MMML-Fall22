@@ -85,6 +85,7 @@ def validate(args, dev_dataloader, model):
         eval_loss = outputs['loss']
         logits = outputs['logits']
         predictions = torch.argmax(logits, dim=-1)
+        import pdb; pdb.set_trace()
         pred_labels.append(predictions.tolist())
         gth_labels.append(labels.tolist())
         eval_losses.append(eval_loss.item()) 
