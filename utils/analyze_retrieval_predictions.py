@@ -29,7 +29,7 @@ def main():
     n_single_source = 0
     correct_single_source = 0
     for q, data in preds.items():
-        sources = data['sources']
+        sources = [str(s) for s in data['sources']]
         n = len(sources)
         num_sources.setdefault(n, 0)
         num_sources[n] += 1
