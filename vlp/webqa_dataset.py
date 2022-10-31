@@ -31,9 +31,6 @@ ignored_questions = [
     "d5dc3f3a0dba11ecb1e81171463288e9",
     "d5de14720dba11ecb1e81171463288e9",
     "d5de1b340dba11ecb1e81171463288e9",
-
-    # invalid facts
-    "d5d84d1c0dba11ecb1e81171463288e9",
 ]
 
 
@@ -138,6 +135,14 @@ class WebQARetrievalDataset(Dataset):
                         assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
                         if data_split != 'test':
                             assert len(distractor_text_facts) > 0 or len(distractor_img_and_caps) > 0
+
+                        # not enough cross modal facts
+                        if self.use_x_distractors and not (
+                                len(gold_text_facts) + len(distractor_text_facts) > 0
+                                and len(gold_img_and_caps) + len(distractor_img_and_caps) > 0
+                        ):
+                            print(f"Question {i} skipped: doesn't have enough cross modal facts")
+                            continue
 
                         # ========================
                         self.instance_list.append(
