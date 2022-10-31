@@ -159,19 +159,29 @@ class WebQADataset(Dataset):
             for pos_img_fact in instance['pos_img_facts']:
                 token_facts.append(pos_img_fact['caption'])
                 batch_labels.append(1)
-            for neg_txt_fact in instance['neg_txt_facts']:
-                token_facts.append(neg_txt_fact['fact'])
-                batch_labels.append(0)
-            for neg_img_fact in instance['neg_img_facts']:
-                token_facts.append(neg_img_fact['caption'])
-                batch_labels.append(0)
+            neg_txt_count = 0
+            neg_img_count = 0
+
+            shuffled_neg_txt_facts = random.shuffle(instance['neg_txt_facts'])
+            for neg_txt_fact in neg_txt_facts:
+                if neg_txt_count < 8:
+                    neg_txt_count += 1
+                    token_facts.append(neg_txt_fact['fact'])
+                    batch_labels.append(0)
+            shuffled_neg_img_facts = random.shuffle(instance['neg_img_facts'])
+            for neg_img_fact in neg_img_facts:
+                if neg_img_count < 8:
+                    neg_img_count += 1
+                    token_facts.append(neg_img_fact['caption'])
+                    batch_labels.append(0)
+
             for token_fact in token_facts:
                 batch_input_id = tokens_question + token_fact
                 batch_input_id = batch_input_id[:self.args.max_length-1]
                 batch_input_id += [self.tokenizer.sep_token_id]
                 batch_input_id = torch.LongTensor(batch_input_id)
                 batch_input_ids.append(batch_input_id)
-            import pdb; pdb.set_trace()
+            
             if len(batch_input_ids) > self.args.choice_num:
                 batch_input_ids = batch_input_ids[:self.args.choice_num]
                 batch_labels = batch_labels[:self.args.choice_num]

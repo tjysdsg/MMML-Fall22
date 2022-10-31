@@ -162,6 +162,7 @@ def train(args, model, tokenizer):
     scheduler = attach_scheduler(args, optimizer, total_training_steps)
 
     if args.use_amp:
+        from apex import amp
         model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
     train_losses = []
