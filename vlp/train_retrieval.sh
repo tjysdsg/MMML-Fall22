@@ -37,4 +37,5 @@ python run_webqa.py \
   --feature_folder $rcnn_feat \
   --model_recover_path $model_ckpt \
   --detectron_dir $detectron_dir \
+  --use_num_samples 10000 \
   --image_id_map_path $imgid_map

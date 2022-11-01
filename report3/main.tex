@@ -1,0 +1,594 @@
+\documentclass[nohyperref]{article}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{booktabs} % for professional tables
+
+% hyperref makes hyperlinks in the resulting PDF.
+% If your build breaks (sometimes temporarily if a hyperlink spans a page)
+% please comment out the following usepackage line and replace
+% \usepackage{icml2022} with \usepackage[nohyperref]{icml2022} above.
+\usepackage{hyperref}
+
+% Attempt to make hyperref and algorithmic work together better:
+\newcommand{\theHalgorithm}{\arabic{algorithm}}
+
+\usepackage[accepted]{icml2022}
+
+% If accepted, instead use the following line for the camera-ready submission:
+% \usepackage[accepted]{icml2022}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{mathtools}
+\usepackage{amsthm}
+% if you use cleveref..
+\usepackage[capitalize,noabbrev]{cleveref}
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+% Todonotes is useful during development; simply uncomment the next line
+%    and comment out the line below the next line to turn off comments
+%\usepackage[disable,textsize=tiny]{todonotes}
+\usepackage[textsize=tiny]{todonotes}
+
+% The \icmltitle you define below is probably too long as a header.
+% Therefore, a short form for the running title is supplied here:
+% \icmltitlerunning{WebQA Team 6}
+
+\begin{document}
+
+\twocolumn[
+\icmltitle{Midterm Report}
+
+% It is OKAY to include author information, even for blind
+% submissions: the style file will automatically remove it for you
+% unless you've provided the [accepted] option to the icml2022
+% package.
+
+% List of affiliations: The first argument should be a (short)
+% identifier you will use later to specify author affiliations
+% Academic affiliations should list Department, University, City, Region, Country
+% Industry affiliations should list Company, City, Region, Countryhttps://www.overleaf.com/project/635c14649275497704312645
+%https://www.overleaf.com/project/635c14649275497704312645
+% You can specify symbols, otherwise they are numbered in order.
+% Ideally, you should not use this facility. Affiliations will be numbered
+% in order of appearance and this is the preferred way.
+\icmlsetsymbol{equal}{*}
+
+\begin{icmlauthorlist}
+\icmlauthor{Haofei Yu}{}
+\icmlauthor{Jiyang Tang}{}
+\icmlauthor{Ruiyi Wang}{}
+\icmlauthor{Ziang Zhou}{}
+\end{icmlauthorlist}
+
+% \icmlaffiliation{cmu}{xxx}
+
+\icmlkeywords{Machine Learning, ICML}
+
+\vskip 0.3in
+]
+
+% this must go after the closing bracket ] following \twocolumn[ ...
+
+% This command actually creates the footnote in the first column
+% listing the affiliations and the copyright notice.
+% The command takes one argument, which is text to display at the start of the footnote.
+% The \icmlEqualContribution command is standard text for equal contribution.
+% Remove it (just {}) if you do not need this facility.
+
+%\printAffiliationsAndNotice{}  % leave blank if no need to mention equal contribution
+%\printAffiliationsAndNotice{\icmlEqualContribution} % otherwise use the standard text.
+
+\begin{abstract}
+
+It is important to examine multi-hop web-based VQA datasets such as WebQA because such benchmarks require information retrieval on both image and text sources, better aggregation and summary of knowledge, and higher reasoning ability on open-domain questions. 
+By implementing and analyzing the baseline models on WebQA, we found that the image resources are not fully extracted and understood and the model is heavily dependent on text.
+In addition, the large pre-trained VLP model is very time- and memory-consuming.
+Therefore, our goal is to find a better way to align text and image via image-text matching loss and multimomdal cross-attention module.
+We also aim at reducing the model size and improving the training speed by applying a lighter model via detector-free visual encoders and knowledge distillation. 
+
+\end{abstract}
+
+\section{Introduction}\label{intro}
+
+%First, describe and motivate your research problem.
+Visual Question Answering in the open domain is an important topic in multimodal machine learning. Compared to closed-domain settings where the main focus is object detection with a fixed vocabulary of responses \citep{closed-domain}, we are more interested in studying the challenges of visual representation learning, knowledge retrieval, and effective language generation in the open domain. WebQA is a novel multi-hop and open-domain VQA benchmark for large-scale text-image alignment, knowledge retrieval in both modalities, and question answering in multiple categories \citep{webqa}. The fine-tuned model applied on WebQA is pre-trained on VLP, a unified encoder-decoder transformer largely used in VQA tasks \citep{vlp}. However, the results show that the model fine-tuned on VLP is more capable of pure-text questions rather than image-based ones, indicating the failure to extract enough visual information and fully utilize the interconnections between text and images. In addition, the increasing scale of the VLP pre-trained model leads to parameter inefficiency in fine-tuning \citep{vlp-survey}, urging us to break the traditional paradigm and improve the training and inference efficiency of  the pre-trained model. Based on the challenges posed by the benchmark, we are particularly interested in the following three research questions: 1) apply image-text matching loss to source information retrieval 2) replace inefficient VLP encoders with detector-free visual encoders, 3) improve text-image alignment by applying the cross-attention module in late fusion, and 4) augment the multimodal model performance by distilling knowledge from the pure-text model to the multimodal model.
+
+%Second, define the specific research challenges that have not been addressed in prior work.
+WebQA differs from other open-domain VQA benchmarks such as OK-VQA, which requires knowledge aggregation but the images are only used as part of the query rather than the knowledge source \citep{okvqa}. As a step further to previous multimodal VQA datasets, one big challenge posed by the multi-hop nature of WebQA is bringing visual representation learning into the information retrieval stage and aggregating text and image knowledge for response generation. There are few state-of-the-art models giving a satisfactory performance on WebQA as the dataset is very new and different. The fine-tuned approach is based on VLP while the few-shot approach is built upon PICa \citep{PICa}, the currently strongest model on OK-VQA. Both approaches are not specifically tailored to multihop information retrieval and thus not performing well. In addition, the top model (ITL) on the WebQA leaderboard is heavily dependent on transforming the images into text and generating responses based on the combined text embeddings, reducing the model to unimodal settings. Therefore, it is worth researching whether the proposed models extracted useful visual representations or were just dependent on text resources and discovering better ways to integrate text and image context using the cross-attention mechanism and knowledge distillation. 
+%There is a tendency to use parameter-heavy pre-trained VLP models to boost the performance of downstream tasks in many lines of research, which leads to parameter inefficiency and over-fitting. Using a lighter pre-trained model that achieves comparable results is also our focus in this paper. 
+
+%Third, explain your proposed work and how it will help solving (or better understanding) the specific research challenges.
+In this paper, our proposed work will shed light on the problem of image-text integration and efficient fine-tuning scheme on the multihop WebQA dataset. By applying image-text matching loss to information retrieval, we are able to reduce the size of the baseline VLP model and make the training process more efficient. By replacing VLP encoders with detector-free visual  encoders, we will allow for quicker visual feature extraction suitable for our current hardware environment and configuration. By applying knowledge distillation in our multimodal settings, we are able to make our model lighter while rigorously monitoring the loss in different parts of the pipeline. Moreover, we will further discover the actual effect of cross-modal attention on the multi-hop dataset and do a comparison between unified attention and cross-attention.
+
+%Road map of this paper
+We will first present an overview of the field related to our research questions as well as the highlights of our proposed work. Then we will give a rigorous mathematical formulation of the problem we aim to solve. One important aspect of this paper is the analysis of baseline results, so we will formulate the baseline models mathematically and provide the experimental methodology we applied to implement the baseline models. After that, we will give a concrete error analysis of the baseline models and discuss our hypotheses for the possible reasons for the baseline model's pitfall. Finally, we will present our four new research ideas.
+
+% ======================= Related Work =======================
+
+\section{Related Work}
+% (1) present an overview of the work happening in your research area, and (2) highlight how your approach differs from prior work. % 12-15 citations
+\subsection{Image-Text Matching Loss}
+Image-text matching is at the core of cross-modal information retrieval. The motivation for image-text matching is that the words in a sentence correspond to some region in the image and the whole sentence is a weak annotation. Prior work on image-text matching demonstrates the effectiveness of inferring the latent region-word correspondences \citep{itm-feifei} and \citet{ITM_cross_attn} proposed a stacked cross attention strategy that differentially attends to the alignment between image and text. Another method of cross-attention matching is to utilize visual semantic reasoning, where text and images are mapped to the same semantic space and then the alignment is optimized based on a hinge-based triplet ranking loss \citep{itm-semantic}. As a step further, some lines of research sampled negatives offline from the entire training set together with adaptive quintuplet loss instead of using triplet loss to find hard negatives \citep{itm-quintuplet}. For BERT-based models, the hidden output of [CLS] is fed into a binary classifier to optimize the binary cross-entropy loss \citep{itm-bert}. Instead of sticking to unified encoder-decoder models, we aim to use a multimodal encoder enabling cross-attention between text and image where ITM loss will be applied to optimize the binary classification of hard negatives \citep{albef}. 
+
+\subsection{Detection-free Visual Encoder}
+VLP is the baseline model for WebQA, which jointly learns visual and text representations within a unified multimodal encoder \citep{vlp}. However, the image representations are extracted from faster RCNN, which leads to a higher cost of memory consumption even though the time consumption at the proposal stage is improved \citep{rcnn}. In addition to the existing problem of extracting RCNN features, object detection can be both annotation-expensive and compute-expensive because it requires bounding box annotations during pre-training and high-resolution images during inference \citep{albef}. To solve the potential expensiveness and inefficiency of the VLP pre-trained model, detector-free visual encoders are proposed. ALBEF uses a detector-free visual encoder and a text encoder and fuses both features via a multimodal encoder \citep{albef}. Their proposed detector-free visual encoder is based on ViT-Base/16 because the scaling of Vision Transformer is likely to lead to improved performance \citep{vit}. In our proposed work, we aim at replacing the fast RCNN feature extraction with detector-free visual encoders to improve the speed while maintaining the performance.
+
+\subsection{Cross-modal Attention}
+The concept of cross-modal attention is proposed in the vanilla transformer \citep{transformer}, where two separate embedding sequences of the same dimension are combined. The idea of cross-attention has been extended to multimodality settings. The multimodal transformer (MulT) proposed by \citet{mult} is an end-to-end transformer that is able to learn representations from unaligned modalities. Following the paradigm of the cross-attention module of the vanilla transformer, MulT uses the pivot modality as queries and the dependent modality as keys and values and generates cross-modal attention which is then passed to a self-attention transformer. There are other lines of research applying multimodal cross-attention for image-text matching by jointly modeling the intra-modality relationship and intermodality relationship of image regions and sentence words in a unified deep model \citep{itm-cross}. 
+
+\subsection{Knowledge Distillation}
+Knowledge Distillation is widely applied in language models. \citet{kd-seq} adopted knowledge distillation for sequential model compression. \cite{distill-text} proposed a reader-retriever system for weakly-supervised documents in question answering. For transformer-based models such as DistillBERT, which applied a cosine embedding loss on the basis of hidden embedding in the transformer block and a soft-target probability loss to reduce the model size by 40\% \citep{distillbert}. The method of knowledge distillation will greatly reduce the size of the pre-trained model and improve the efficiency of the entire pipeline. There is a new line of research that applies knowledge distillation to visual-linguistic models. \citet{distill-vl} used a new compressing scheme where both the Teacher and Student use the same lightweight object detector and several loss terms are enforced on the Teacher and Student network to align their attention weights as well as the classification correctness during fine-tuning. Taking a step further, the work proposed by \citet{adapt-distill} improves the previous DistillVLM by adaptively distilling useful knowledge from pre-trained encoders to cross-modal VL encoders. However, this approach is very complicated and we will not integrate this approach into our research plan.
+
+To our knowledge, this paper is the first to thoroughly implement and examine the pitfall of the baseline models on the newly released dataset WebQA. Our research questions are focusing on building lightweight pre-trained models for visual question-answering tasks, as well as discovering the boundary of unified attention compared with cross-attention. 
+
+\section{Problem Statement}
+The high-level research objective of WebQA is to simulate the multimodal and multi-hop searching behaviors of humans. It is publicly agreed that VQA consists of two stages: query and generation \cite{webqa}. In this work, our group focuses on building two baseline systems for the retrieval task and presents ideas that are practical for improvements.
+
+Note that the RCNN feature files provided by the WebQA official repository have some image feature missing, creating obstacles for training. Since it is extremely difficult and expensive to set up an environment to extract RCNN features, we removed 24 sources with missing RCNN features in total.
+
+The retrieval problem, from a very low level, is to use a query to retrieve resources in the order of relevance. Therefore, this problem can be abstracted into two steps, the form a query and to compare the matching degree. For the query construction period, multiple pretrained models are applied. For the textual information, including, questions, answers, textual facts, and image captions, textual embeddings are tokenized using \texttt{bert-base-cased} tokenizer\cite{BERT}. Image representations consisted of 100 bounding boxes, are extracted with the first fully-connected layer from ResNeXt-101 FPN backbone pretrained on Visual Genome\cite{visualgenome}. The query of each pass is formatted as \texttt{<[CLS], si, [SEP], Q, [SEP]>}, and the outcome $p_i$ is the confidence that the source is selected.
+
+There is a slight difference between the two baselines we proposed. In the RoBERTa baseline, the \texttt{si} does not contain image representations. Instead, it has extra textual information generated from image captions. In the VLP baseline, both image and textual representations are bounded in \texttt{si}.
+
+The objective function for the retrieval task can be written as the following,
+\begin{equation}
+Loss_{retrieval}=\sum_{s_i\in\mathcal{G}}logp_{s_i}+\sum_{s_i\in\mathcal{D}}log(1-p_{s_i})
+\end{equation}
+where $\mathcal{G}$ and $\mathcal{D}$ denotes the gold sources and distractor sources respectively \cite{webqa}.
+
+% \textcolor{red}{
+% Formalize mathematically your research problem. This should include the mathematical definition of the variables involved in your problem (e.g., input variable x and labels y). You should also include an objective function describing your main objective. While this section may be relatively short (e.g., quarter of a page), you should be consistent with your notation later in the paper. This section can be relatively short (e.g. 2 paragraphs or 1 long paragraph).
+% }
+
+% ======================= BASELINE =======================
+\section{Multimodal Baseline Models}\label{sec:baseline}
+
+\subsection{VLP Baseline}
+
+The official WebQA baseline uses a unified Visual-Language Pretraining (VLP) architecture for source retrieval and question answering \cite{vlp}.
+This architecture is essential to a BERT-base \cite{BERT} model with a different pretraining method.
+The input of the model consists of a sequence of image region embeddings followed by text embeddings.
+
+The image region embeddings $\{M_1, \dots, M_N\}$ are calculated using the result of a pretrained object detector.
+Each patch is composed of region features $R = [R_1, \dots, R_N]$, region object labels $C = [C_1, \dots, C_N]$, region geometric information (bounding box coordinates) as $G = [G_1, \dots, G_N]$, where $N$ is the number of regions.
+\begin{equation}
+ M_i = W_r R_i + W_p \left[\text{LN}(W_c C_i) | \text{LN}(W_g G_i)\right] 
+\end{equation}
+where $W$ is the weight of each feature, $\text{LN}(x)$ is the layer normalization of $x$, $|$ means concatenation, and the bias and nonlinearity terms are omitted.
+
+The embeddings of text tokens $\{T_1, \dots, T_K\}$ are extracted using a pretrained tokenizer, where $K$ is the number of text tokens.
+
+The overall model input $X$ is the concatenation of the three embedding sequences, separated by special tokens.
+\begin{gather*}
+    X = \texttt{[CLS]}, M_1, \dots, M_N, \\
+    \texttt{[SEP]}, T_1, \dots, T_K, \texttt{[SEP]}
+\end{gather*}
+where $E(x)$ is the embedding of token $x$ returned by BERT.
+
+The training object of VLP is the same as the ones used in BERT \cite{BERT}, masked language modeling objective. After pretraining, the model can be finetuned to perform source retrieval and visual language answering.
+During finetuning, a multi-layer perceptron (MLP) on top of the element-wise
+product of the last hidden states of $\texttt{[CLS]}$ token and $\texttt{[SEP]}$ token is trained, same as \cite{vilbert}.
+The input sequence for finetuning stays the same as before, but the training objective is VQA-specific.
+
+In the context of the WebQA baseline, the input sequence is slightly different.
+
+For source retrieval, if the input is an image source, the model input is
+\begin{gather*}
+    X = \texttt{[CLS]}, M_1, \dots, M_N, I_1, \dots, I_N, \\
+    \texttt{[SEP]}, Q_1, \dots, Q_K, \texttt{[SEP]}
+\end{gather*}
+where $\{I_1, \dots, I_N\}$ is the embeddings of the image caption, and $\{Q_1, \dots, Q_K\}$ is the embeddings of the question sentence with length $K$.
+
+If the input is a text source, the model input is
+\begin{gather*}
+    X = \texttt{[CLS]}, T_1, \dots, T_J, \texttt{[SEP]}, \\
+    Q_1, \dots, Q_K, \texttt{[SEP]}
+\end{gather*}
+where $\{T_1, \dots, T_J\}$ is the embeddings of the text fact.
+
+The training objective is the binary cross entropy between the predicted probability $x$ generated by the MLP and the true label $y$:
+\begin{equation}
+CE(x, y) = y \cdot \log x + (1 - y) \cdot \log (1 - x)
+\end{equation}
+
+During inference, the output of the MLP is converted to a binary discrete value using a threshold $H$, $1$ meaning that the source is selected and vice versa.
+
+For question answering, the input of the image fact or the text fact sample is
+\begin{gather*}
+    X = \texttt{[CLS]}, M_1, \dots, M_N, I_1, \dots, I_N, \\
+    \texttt{[SEP]}, Q_1, \dots, Q_K, A_1, \dots, A_K, \texttt{[SEP]}
+\end{gather*}
+or
+\begin{gather*}
+    X = \texttt{[CLS]}, T_1, \dots, T_J, \texttt{[SEP]}, \\
+    Q_1, \dots, Q_K, A_1, \dots, A_K, \texttt{[SEP]}
+\end{gather*}
+where $\{A_1, \dots, A_L\}$ is the embeddings of the answer sentence with length $L$.
+The training objective is masked language modeling.
+The answer is generated by repeatedly appending a $\texttt{[MASK]}$ token to the end of the input and replacing it with a predicted token and appending a new $\texttt{[MASK]}$ for the next
+step. The generation stops when the output is $\texttt{[SEP]}$, $\texttt{[PAD]}$, or the maximum length is reached.
+Beam Search is performed to find the best output sequence.
+
+Meanwhile, $M_i$ is generated by a faster RCNN (x101fpn) \cite{rcnn} trained on VisualGenome \cite{visualgenome} dataset, text embeddings are extracted using a pretrained Bert-base-uncased model, $G$ is normalized to $[0, 1]$, and $N$ is set to $100$.
+
+During the training process of either of the tasks, a mini-batch contains both samples with an image source and samples with a text source.
+
+\subsection{RoBERTa baseline}
+When considering the retrieval task in the WebQA pipeline, one way is to use one model like Vision-Language Pretraining and rely on the pretrained multimodal model to fuse information in different modalities. However, there is another way to think of doing the multimodal retrieval task. In order to reach better multimodal retrieval performance, we rely on the assumption that large-scale pretrained language models are much better than pretrained visual-language models. As a result, we separate the retrieval pipeline into two separate stages. In the first stage, image caption models are used to help us convert images into useful text. In the second stage, a text-only retriever like RoBERTa \citep{roberta} is used to retrieve the related source. \par 
+
+For the first stage of our pipeline, instead of using image region embeddings $\{M_1, \dots, M_N\}$ calculated by a pretrained object detector, one image is directly encoded using Vision Transformer \citep{vit} and the encoded features can be defined as $\{f_1, \dots, f_N\}$. These encoded features are sent into one pretrained language model like GPT-2 \citep{gpt2} to generate text that is related to the image. Mathematically speaking, the generated text can be defined as $\{T_1, \dots, T_N\}$. The semantic information that is included in the corresponding image and is helpful for retrieval and question generation task is represented in concrete text form instead of features. \par 
+
+For the second stage of our pipeline, we use separate encoders to encode each image or text fact in our source and predict whether it is a positive fact or a negative fact. With the help of $\{T_1, \dots, T_N\}$ obtained from the previous stage of the pipeline, the input tokens of the text-only retriever for QA pairs can be formally written as: 
+\begin{gather*}
+    X = \texttt{[CLS]}, T_1, \dots, T_N, T_{N+1}, \dots T_{N+M}, \texttt{[SEP]}, \\
+    Q_1, \dots, Q_K, \texttt{[SEP]}
+\end{gather*}
+For image-based questions, $\{T_1, \dots, T_N\}$ stands for the generated text from the image and $\{T_{N+1}, \dots T_{N+M}\}$ stands for the provided image caption from the dataset. For text-based questions, $\{T_1, \dots, T_N\}$ stands for the text fact in the dataset and $\{T_{N+1}, \dots T_{N+M}\}$ stands for the title of the text fact from the dataset.\par 
+
+Same with the VLP baseline mentioned above, the training objective for the text-only retriever is also the binary cross entropy between the predicted logits $x$ coming from the [CLS] classifier and the pre-defined ground truth label $y$:
+\begin{equation}
+CE(x, y) = y \cdot \log x + (1 - y) \cdot \log (1 - x)
+\end{equation}
+
+For the inference process, each source image is first sent into the ViT+GPT-2 image caption pipeline to get its text form and is concatenated with its title. For text facts, each fact is concatenated with its corresponding title. After that process, both image-based facts and text-based facts are concatenated with the question to get its final input format. Therefore, based on the input format, prediction results are obtained using text-only retriever.\par
+
+For optimization, both the image caption model and text-based retrieval model are optimized using the AdamW optimizer.
+
+% =================== Experimental Methodology ===================
+\section{Experimental Methodology}
+
+\subsection{WebQA Dataset}
+
+WebQA data \cite{webqa} is composed of a large list of questions. Each question contains several ``facts'', or sources, some of them must be used to correctly answer the question (gold sources, or positive facts), while others are not relevant to the question (distractors, or negative facts). The facts are either images with their caption text or text snippets.
+The answers to these questions are in natural language form. Compared to other QA datasets that only have single-word or double-word answers, WebQA requires more powerful answer generation.
+The data contains 36,766 training questions,  4,966 validation questions, and 7,540 test questions.
+Based on which modality the gold sources have, the whole dataset can be classified into two types of questions: image-based and text-based.
+
+\begin{table}[ht]
+\centering
+\footnotesize
+\begin{tabular}{@{}l@{\hspace{4pt}}r@{\hspace{10pt}}r@{\hspace{10pt}}r@{\hspace{3pt}}r@{\hspace{10pt}}r@{\hspace{6pt}}r@{}}
+Train & \#Img(+) & \#Img(-) & \#Txt(+) & \#Txt(-) \\
+\toprule
+Image-based QA & 1.44 & 15.85 & 0 & 15.35 \\
+\midrule
+Text-based QA & 0 & 11.61 & 2.03 & 14.62 \\
+\midrule
+\midrule 
+Dev & \#Img(+) & \#Img(-) & \#Txt(+) & \#Txt(-) \\
+\toprule
+Image-based QA & 1.44 & 15.88 & 0 & 15.29 \\
+\midrule
+Text-based QA & 0 & 11.78 & 2.04 & 14.63 \\
+\bottomrule
+\end{tabular}
+\caption{Statistical information about both image-based and text-based negatives and positives. Each number in this table represents the average number of text-based and image-based positives and negatives that one sample has.}
+\label{tb:stat1}
+\vspace{-5pt}
+\end{table}
+
+It is worth noticing that for image-based question-answering pairs, text positives are not provided while for text-based question-answering pairs, image positives are not provided. As a result, we calculate statistical information about positive samples and negative samples separately on image-based question-answering pairs and text-based question-answering pairs. Table \ref{tb:stat1} shows how many average positives and negatives belong to each sample in the dataset.
+
+\subsection{Evaluation Metrics}
+
+The evaluation metrics we used are the same as the ones used in the WebQA benchmark.
+For source retrieval, a given number of facts are fed into the model one at a time, and the model outputs the probability of selecting that fact as relevant to the question.
+On \textit{restricted} setting, the model is given only about $40$ facts, which are within the general topic of the question. On \textit{full} setting, the model is given all of the facts in the WebQA dataset.
+We only test our model on the \textit{restricted} setting.
+The metric is the F1 score of correctly selected positive sources.
+The evaluation metric for question answering is the multiplication of fluency score, calculated from BARTScore \cite{bartscore}, and a score $\mathbf{acc}$ of keyword occurrences.
+\begin{gather*}
+    \textbf{FL}(c,R)=\max\left\{\min\left(1,\frac{BARTScore(r,c)}{BARTScore(r,r)}\right)\right\}_{r\in R} \\
+    \textbf{acc} = 
+    \begin{cases}
+    \text{F1} & \text{if QType}\in\text{[color,shape,number,Y/N]}\\
+    \text{Recall} & \text{otherwise}
+    \end{cases}
+\end{gather*}
+The keywords are estimated from standard answers depending on the specific question categories. For example, for $\mathit{Color}$ category a list of colors, such as ``orange'' and ``yellow'', is searched in the standard answer to obtain the keywords.
+
+In this report, we mainly focus on the source retrieval baselines so that future models can have a clear comparison subject to evaluate their multimodal information processing capabilities.
+
+\subsection{VLP Baseline Setting}
+
+Same as the official baseline, we find that the best performing threshold $H$ on the validation set is $0.2$, so we set $H = 0.2$ in all testing procedures.
+The max number of facts trained in a batch is set to 32 during training, and 40 during inference.
+Excessive facts are randomly truncated.
+We use the AdamW \citep{adamw} optimizer with default parameters ($\beta_1 = 0.9$, $\beta_2= 0.99$), setting the initial learning rate as $3e-5$, with a cosine learning rate scheduler with warmup steps being 0. And gradient accumulation step is $128$.
+
+\subsection{RoBERTa Baseline Setting}
+Concerning the hyper-parameter setting for the RoBERTa baseline, in the image caption model, we set max length = 32, and beam size = 4. For the retrieval model, we set classifier threshold = 0.3, use max choice number = 16 for positive and negative training, and use the same optimizer as above but with an initial learning rate of $5e-5$. The learning rate scheduler is also the same.
+
+% =================== Results ===================
+
+\section{Results and Discussion}\label{sec:results}
+
+In this section, we show the retrieval results of our two baselines. We submitted our inference results on the test dataset to WebQA's official test server to produce a convincing result. Moreover, we do error analysis and compare model performance based on the validation dataset (on both full-size and image-based only sub-part).
+
+% \textcolor{red}{
+% Present in tables and/or figures your experimental results.
+% This section should include more than re-running experiments for your pre-existing baseline models. You should include a discussion (if possible with examples and figures) of the failure cases of the baseline models. This error analysis is an important part of the report. The error analysis should study failure cases of the baseline models and hypothesize about the reasons for these failures.
+% }
+
+\subsection{Baseline Results}
+
+The VLP baseline achieved an F1 score of $67.96$ on the test set using $H=0.2$, which is slightly lower than the results from \cite{webqa}.
+The F1 score of text-based questions in the validation set is $70.07$, and the F1 of image-based questions is
+$67.88$, as shown in Table \ref{tab:vlp_overall_metrics}
+
+The RoBERTa baseline achieved a better F1 score of $75.73$ on the test set using $H=0.3$.
+However, when tested on the validation set, the F1 score of the RoBERTa performs badly on image-based questions and well on text-based questions.
+Therefore, the RoBERTa baseline achieves an overall better F1 score on the entire test set.
+\begin{table}[h]
+    \centering
+    \footnotesize
+    \begin{tabular}{llll}
+        \toprule[1.2pt]
+        VLP Baseline & F1 & Precision & Recall \\
+        \toprule
+        Val text-only  & 70.07 & -     & -     \\
+        Val image-only & \textbf{67.88} & \textbf{65.20} & 78.48 \\
+        Test           & 67.96 & -     & -      \\
+        \midrule[1.2pt]
+        RoBERTa Baseline & F1 & Precision & Recall \\
+        \midrule
+        Val text-only  & \textbf{76.22} & \textbf{67.86} & \textbf{86.95}        \\
+        Val image-only & 65.75 & 52.50  & \textbf{87.92}        \\
+        Test           & \textbf{75.73} & -    & -      \\
+        \bottomrule[1.2pt]
+    \end{tabular}
+    \caption{Overall Classification Metrics of the Baselines}
+    \label{tab:vlp_overall_metrics}
+    \vspace{-5pt}
+\end{table}
+
+Note that image-based questions have image caption data and negative text facts, so this subset contains two modalities.
+However, the text-based questions have only text facts, which is a unimodal subset.
+
+We also performed some more fine-grained tests.
+Since we have no control over the testing procedure hosted on the WebQA evaluation server, we did these tests on the validation subset.
+For the following analysis, we focus on image-based questions.
+
+Overall, the VLP baseline achieved full retrieval accuracy on $41.38\%$ of questions. In other words, the predictions of these questions have the same number of sources and every source matches the canonical annotation.
+The model did not select enough sources on $18.52\%$ of the questions, while selected too many sources on $34.63\%$ of the questions.
+For the RoBERTa baseline, full retrieval accuracy is $43.89\%$, $9.32\%$ of the questions have too few predicted sources, and $44.48\%$ has too many.
+
+As shown in Table \ref{tab:vlp_num_selected_sources}, lots of questions are predicted to have either $0$ sources or too many sources. For image-based questions, WebQA has at most two sources \cite{webqa}.
+Table \ref{tab:vlp_num_selected_sources} shows the frequency of the number of sources per question predicted by the model.
+\begin{table}[h]
+    \centering
+    \footnotesize
+    \begin{tabular}{rcc}
+        \toprule[1.2pt]
+        \#Sources & Freq (VLP) & Freq (RoBERTa) \\
+        \midrule
+        0     & 258   & 150 \\
+        1     & 915   & 868 \\
+        2     & 675   & 652 \\
+        3     & 302   & 325 \\
+        4     & 127   & 208 \\
+        $>=5$ & 137   & 308 \\
+        \bottomrule[1.2pt]
+    \end{tabular}
+    \caption{Number of selected sources in each image-based question in the validation set}
+    \label{tab:vlp_num_selected_sources}
+    \vspace{-5pt}
+\end{table}
+
+Both VLP and RoBERTa retrieved an incorrect number of sources on many occasions.
+But the RoBERTa baseline tends to retrieve more. This also corresponds to RoBERTa's high recall on the validation dataset.
+
+Table \ref{tab:vlp_correct_attribute} shows the percentage of fully retrieved questions with regard to several question attributes.
+The RoBERTa has more fully correctly retrieved questions across all question categories except \textit{Shape}.
+Single-source questions are the ones that require only one source fact to answer, while multi-source questions require two or more sources to be answered.
+We believe we can measure multi-hop capability by the percentage of correctly retrieved questions among all questions that require two or more sources.
+\begin{table}[h]
+    \centering
+    \footnotesize
+    \begin{tabular}{lcc}
+        \toprule[1.2pt]
+        Category & VLP(\%) & RoBERTa(\%) \\
+        \toprule
+        Choose & 40.50 & \textbf{42.23}   \\
+        Shape  & \textbf{50.00} & 45.95   \\
+        YesNo  & 33.67 & \textbf{35.99}   \\
+        Others & 43.12 & \textbf{46.19}   \\
+        Color  & 44.12 & \textbf{49.16}   \\
+        Number & 59.27 & \textbf{62.16}   \\
+        \bottomrule[1.2pt]
+    \end{tabular}
+    \caption{Percentage of fully correct question predictions in different question categories}
+    \label{tab:vlp_correct_attribute}
+    \vspace{-5pt}
+\end{table}
+
+\begin{table}[h]
+    \centering
+    \footnotesize
+    \begin{tabular}{lcc}
+        \toprule[1.2pt]
+        Sources & VLP(\%) & RoBERTa(\%) \\
+        \toprule
+        single & 51.49 & \textbf{54.91}  \\
+        multi  & 28.73 & \textbf{30.11}  \\
+        \bottomrule[1.2pt]
+    \end{tabular}
+    \caption{Percentage of fully correct question predictions in multi-source questions and single-source questions}
+    \label{tab:vlp_correct_attribute}
+    \vspace{-5pt}
+\end{table}
+
+\subsection{Discussion}
+
+We noticed a pattern that a model that performs better on image-based questions performs worse on text-based questions.
+We believe that there should be a way to modulate and encourage the model to learn from both modalities.
+Hence, we proposed the ITM loss research idea in Section \ref{sec:itm_research_idea}.
+
+The results show that the RoBERTa baseline has a better multi-hop capability.
+This is probably because the attention between multiple modalities is more difficult to train compared to unimodal attention.
+Because of this, we proposed our multimodal cross-attention research idea mentioned in Section \ref{sec:cross_attention_research_idea}.
+
+Note that both the VLP and the RoBERTa baseline use the exact same BERT architecture, but the significant difference in the performance suggests that maybe the BERT model itself cannot capture multimodal information well.
+Therefore, we want to test the Image-Text Matching loss and multimodal cross-attention module research ideas in our future work.
+
+Meanwhile, we are not fully certain if the image regional feature produced by RCNN is suitable for the VQA task, plus the network itself takes a long time to run.
+We believe that there is a way to reduce the overall architectural complexity while keeping the performance.
+Therefore, we proposed Detection-free visual encoder and multimodal knowledge distillation research ideas in Section \ref{sec:detection_free_encoder_idea} and Section \ref{sec:distillation_idea}.
+
+\section{New Research Ideas}
+
+\subsection{Image-Text Match Loss}\label{sec:itm_research_idea}
+% 1. state the current limitation
+    % 1. what is the current loss. （a loss image）
+    % 2. how does it operate, what is its limitations?
+    % 3. In nature, the model learns the matching relationship between images and texts, thus we are motivated to use a more specific objective function
+% 2. what image text matching objective can do
+    % 1. motivation. why do we need it. (find some paper applied ITM loss)
+    % 2. how to do, explain formula with parameters.
+    % 3. expected performance
+% 3. confusions and potential challenges
+    % 1. the batch sample confusion (tjy and yhf had)
+    % 2. it is to be tested whether ITM loss work better alone, or together, or by ratio
+% 4. Toget: tjy’s training image
+
+As mentioned in the Introduction section, we will be focusing on the retrieval part of WebQA for now. For multimodal sources, $s_1, \cdots, s_i$, the loss of retrieval in WebQA adopts Cross-entropy loss. Since $s_i$ symbols the confidence that a certain source will be selected or not, thus the cross-entropy loss is also within the scope of Binary Cross-entropy Loss (BCE). 
+\begin{equation}
+Loss_{retrieval}=\sum_{s_i\in\mathcal{G}}logp_{s_i}+\sum_{s_i\in\mathcal{D}}log(1-p_{s_i})
+\end{equation}
+
+In the official leaderboard of WebQA\footnote[1]{https://eval.ai/web/challenges/challenge-page/1255/leaderboard/3168}, the current SOTA on the retrieval task, the ITL team, utilizes unimodality only. They first caption text from the image facts and then encode the caption information. Surprisingly, they achieved better performance compared with other multimodal approaches. This gives out a message that text (questions, context, image captions, etc.) are actually playing a bigger part in source retrieval compared to images. Our first baseline model also shed light on this analysis. 
+
+With only a cross-entropy objective, we are not able to further encourage a joint understanding of image and text. Plus, the retrieval problem is more than a binary classification problem. Therefore, our idea is to introduce the Image-Text Matching Objective to the retrieval task. In fact, the retrieval problem is more like the definition of the Image-text Matching task using attention-based methods \cite{ITM_cross_attn}. Image-text matching predicts whether a pair of images and text is matched or not \cite{albef}. In the cases of WebQA retrieval, image-text matching can be thought of as whether a Question matches the image facts or not. Image text pairs are formed using image facts and multiple text sources, including questions, captions, and context. With ITM loss introduced, we expect to achieve a higher F1 score compared to the baseline model. We will perform experiments to validate our hypothesis before the next milestone.
+
+ITM Loss has been applied together with Masked Language Model (MLM) Loss in the multimodal stage in ALBEF\cite{albef}. The ITM loss can be addressed as
+\begin{equation}
+    \mathcal{L}_{itm}=\mathop{\mathbb{E}_{(I,T)\sim D}H(y^{itm}, p^{itm}(I,T))}
+\end{equation}
+where the joint representation of the image-text pair can be directly taken from the \texttt{[CLS]} token, followed by a fully connected layer (FC) layer and softmax function to predict a binary probability $p^{itm}$ \cite{albef}. The $y^{itm}$ is a one-hot vector of 2 dimensions, hosting the ground truth label. 
+
+With ITM loss integrated, the retrieval objective can now be written as \begin{equation}
+    Loss_{new}=Loss_{retrieval}+L_{itm}
+\end{equation}
+
+Note, not all sources in WebQA have image facts. \texttt{text} category without image facts will be using the objective function with BCE Loss only. This may result in inconsistent loss scale during retrieval tuning, therefore, additional scaling on the $Loss_{new}$ will be needed.
+
+
+\subsection{Detection-free Visual Encoder}\label{sec:detection_free_encoder_idea}
+% 1. computationally expensive: 
+%     1. for speed concerns, store features in memory, high requirement for end devices to compute
+%     2. Since the faster-RCNN training process is actually divided into two stages, the proposal generation stage and the detection stage, the speed still cannot meet the real-time requirements.
+% 2. high requirement on environment setup
+% 3. expressive power is upper bounded by the expressive power of the visual embedder
+% 4. complexity analysis
+In WebQA, both retrieval and QA tasks utilize the VLP part of the model backbone \cite{webqa}. Although VLP uses a unified multimodal encoder to jointly encode textual and visual representation, they are still generated from different feature spaces. The image representations are extracted using the top 100 regional features from faster RCNN \cite{rcnn}. It is true that faster RCNN has avoided repetitive calculation, however, that comes with the cost of higher memory consumption. Moreover, despite the faster RCNN innovatively proposed Region proposal network (RPN) to improve the time consumption of proposal stage \cite{rcnn}, the proposal generation and the detection are still in different stages, thus the speed cannot meet the real-time requirements.
+
+Moreover, in real practice, when we try to extract RCNN features for a new image, it is very difficult to set up a proper environment that has both functional hardware and configurations. We felt that impedance in the environment setup process will be a non-trivial factor that affects the practicality of our model. Plus, object detection is both annotation-expensive and compute-expensive \cite{albef}. Furthermore, the expressive ability is limited due to the predefined visual dictionary \cite{vilt}. Thus, we are looking for an alternative approach that is able to address these concerns.
+
+Thus, our second research idea is to replace the expensive and inefficient VLP model with detector-free visual encoders. ALBEF employs a 12-layer visual transformer ViT-B/16 \cite{vit} as their image encoder, while ViLT encodes images without convolution and region supervisions \cite{vilt}.
+
+To validate our hypothesis that a detector-free visual encoder is an efficient and cheaper alternative to faster RCNN, we will analyze retrieval performance together with parameter number and computation flops in future experiments.
+
+
+
+\subsection{Cross vs. Unified Attention Modules}\label{sec:cross_attention_research_idea}
+
+One of the baseline models of WebQA is VLP, a unified encoder-decoder framework jointly encoding the visual and text representations \citep{vlp}. Meanwhile, ``two-tower'' models are also popular choices.
+These models encode multimodal information using separate encoders and fuse them using a multimodal cross-attention module.
+The authors of VLP \cite{vlp} compared it with several ``two-tower'' models, such as ViLBERT and LXMERT.
+However, there is no significant improvement between the unified model and the ``two-tower'' models. The ``two-twoer'' models achieved better performance in some cases \cite{vlp}.
+Therefore, we are interested in understanding the corresponding effect of unified attention modules and cross-modal attention modules for multi-hop VQA.
+
+The cross-attention mechanism is proposed in the early transformer structure, which combines two separate embedding sequences of the same dimension, in contrast to self-attention where the input is a single embedding sequence \citep{transformer}.
+The cross-attention mechanism based on the transformer structure can be extended to multiple modalities.
+The multimodal transformer is an end-to-end extension of the vanilla transformer framework that learns representations from unaligned modalities \citep{mult}. We will largely follow the mathematical formulation proposed in this paper.
+
+For the VQA case, we only need to align two modalities denoted as $L$ (language) and $I$ (image), which can be seen as a simplified case of the tri-modality transformer. Suppose our learned representations of two modalities are $X_\alpha \in \mathbb{R}^{T_\alpha \times d_\alpha}$ and $X_\beta \in \mathbb{R}^{T_\beta \times d_\beta}$ respectively. We pivot the $\alpha$ as the Querys: $Q_\alpha=X_\alpha W_{Q_\alpha}$, and image features as Keys and Values: $K_\beta=X_\beta W_{K_\beta}$, $V_\beta=X_\beta W_{V_\beta}$, where $W_{Q_\alpha} \in \mathbb{R}^{d_\alpha \times d_k}, W_{K_\beta} \in \mathbb{R}^{d_\beta \times d_k}$ and $W_{V_\beta} \in \mathbb{R}^{d_\beta \times d_v}$ are weights. Following the same latent adaptation in \citep{mult}, we formulate the cross-modal attention as:
+$$\begin{aligned}
+Y_\alpha &=\mathbf{C M}_{\beta \rightarrow \alpha}\left(X_\alpha, X_\beta\right) \\
+&=\operatorname{softmax}\left(\frac{Q_\alpha K_\beta^{\top}}{\sqrt{d_k}}\right) V_\beta \\
+&=\operatorname{softmax}\left(\frac{X_\alpha W_{Q_\alpha} W_{K_\beta}^{\top} X_\beta^{\top}}{\sqrt{d_k}}\right) X_\beta W_{V_\beta}
+\end{aligned}$$
+The $i$-th time step of $Y_\alpha$ is the weighted summary of values of $\beta$, which can be considered as a single-head cross-attention module between modalities.
+
+Based on the cross-attention module, we construct our multimodal transformer as follows. We denote the feature representations $X_{\{L, I\}} \in \mathbb{R}^{T_{\{L, I\}} \times d_{\{L, I\}}}$. Then we pass the input through a 1D temporal convolutional layer:
+\begin{equation}
+\hat{X}_{\{L, I\}}=\operatorname{Conv} 1 \mathrm{D}\left(X_{\{L, I\}}, k_{\{L, I\}}\right) \in \mathbb{R}^{T_{\{L, I\}} \times d}
+\end{equation}
+We then augment the output of temporal convolutions with the positional embedding: 
+\begin{equation}
+Z_{\{L, I\}}^{[0]}=\hat{X}_{\{L, I\}}+\operatorname{PE}\left(T_{\{L, I\}}, d\right)
+\end{equation}
+where $\operatorname{PE}\left(T_{\{L, I\}}, d\right) \in \mathbb{R}^{T_{\{L, I\}} \times d}$ is the computes the fixed embeddings for each position index, and $Z_{\{L, I\}}^{[0]}$ are the low-level position-aware features for different modalities. 
+
+Let's take $L$ to $I$ cross-attention as the example, the forward-computation of the cross-attention transformer for $i=1,2,..., D$ layers is:
+
+
+\begin{align*}
+Z_{L \rightarrow I}^{[0]} &= Z_I^{[0]} \\
+\hat{Z}_{L \rightarrow I}^{[i]} &= \mathrm{CM}_{L \rightarrow I}^{[i], \mathrm{mul}}\left(\mathrm{LN}\left(Z_{L \rightarrow I}^{[i-1]}\right), \mathrm{LN}\left(Z_I^{[0]}\right)\right) \\
+&+ \operatorname{LN}\left(Z_{L \rightarrow I}^{[i-1]}\right) \\
+Z_{L \rightarrow I}^{[i]} &= f_{\theta_{L \rightarrow I}^{[i]}}\left(\mathrm{LN}\left(\hat{Z}_{L \rightarrow I}^{[i]}\right)\right)+\operatorname{LN}\left(\hat{Z}_{L \rightarrow I}^{[i]}\right)
+\end{align*}
+
+where $f_\theta$ is a position-wise feed-forward sublayer. 
+
+Since only two modalities are considered, there is no need to stack the outputs from the cross-attention transformer that share the same modality. The $Z_{L\rightarrow I}$ and $Z_{I\rightarrow L}$ are passed through the self-attention transformer, and then the last elements are passed through a fully-connected layer to make predictions.
+
+In this research question, We will compare the unified attention model with the cross-attention model and discuss the places where the unified version fails.
+
+
+\subsection{Multimodal Knowledge Distillation}\label{sec:distillation_idea}
+
+Knowledge distillation is widely used in text question answering. Some models follow the retriever-reader systems, with the retriever retrieving documents from a large source of knowledge and the reader processing the support documents to solve the task \citep{distill-text}. Distillation enables us to use a lighter model for downstream tasks, which effectively compresses the pre-trained model. Now there are a few lines of research focusing on applying knowledge distillation in multimodal settings. \citet{distill-vl} proposed a compressing scheme for the visual-linguistic models (DistillVLM). Instead of using pre-trained object detectors such as fast RCNN, they aim to use a lightweight detector for faster inference. To solve the problem of the unalignment of attention distributions between the Teacher and Student's visual tokens, they utilized the same object proposals obtained from Student's lightweight detector. Then they used a loss term to enforce the Student to mimic the Teacher’s self-attention distribution at the last transformer layer. And at last, they distilled the knowledge from the outputs of the transformer layers \citep{distill-vl}. Following the similar procedure proposed in DistillVLM, we formulate our new research idea as follows.
+
+First, we will apply a lightweight object detector for both the Teacher and Student modules. We will choose the same object detector as DistillVLM, which is TEE used by MiniVLM \citep{minivlm} whose backbone is replaced with EfficientNet \citep{efficient-net} and a BiFPN module \citep{BiFPN}. Both the Teacher and the Student use the same object tags obtained from the lightweight object detectors during distillation. 
+
+Second, we will impose the distillation loss for attention distributions for the Teacher and Student. For transformer-based distillation using the last transformer block’s attention map yields equivalent results \cite{minilm}. So we can simply formulate the distillation loss by minimizing the divergence between the self-attention matrices of the last layer of the Teacher and the Student:
+\begin{equation}
+\mathcal{L}_{\mathrm{ATT}}=\frac{1}{T \cdot H} \sum_{i=1}^T \sum_{j=1}^H \operatorname{MSE}\left(\mathbf{A}_{i, j}^S, \mathbf{A}_{i, j}^T\right)
+\end{equation}
+where $\mathbf{A}=\operatorname{softmax}\left(\mathbf{Q} \cdot \mathbf{K} / \sqrt{d_k}\right)$.
+
+Third, in order to align the hidden representations for the Teacher and the Student, we want to minimize the divergence of the hidden embedding ($\mathbf{H} \in \mathbb{R}^{T \times d}$) of every Transformer block. Ths distillation for hidden representations is calculated as:
+\begin{equation}
+\mathcal{L}_{\mathrm{HID}-\mathrm{MSE}}=\frac{1}{T \cdot L} \sum_{i=1}^T \sum_{j=1}^L \operatorname{MSE}\left(\mathbf{H}_{i, j}^S \mathbf{W}_h, \mathbf{H}_{i, j}^T\right)
+\end{equation}
+where $L$ denotes the number of transformer blocks and $\mathbf{W}_h$ is a learnable linear transformation that maps the Student hidden embedding into the identical dimension of Teacher embedding. Apart from the MSE loss for the layer-to-layer method, we also use noise contrastive estimation (NCE) loss to align the Teacher \& Student’s hidden representations. Following the paper, we employ a pre-defined instance queue $\left[\mathbf{h}_0^T, \mathbf{h}_1^T \cdots \mathbf{h}_K^T\right]$ to store $K$ random sampled
+embeddings and one positive embedding from the Teacher
+network. The loss is formulated as:
+\begin{equation}
+\mathcal{L}_{\mathrm{HID}}=-\log \frac{\exp \left(\mathbf{h}_i^S \cdot \mathbf{h}_i^T / \tau\right)}{\sum_{j=0}^K \exp \left(\mathbf{h}_i^S \cdot \mathbf{h}_j / \tau\right)}
+\end{equation}
+where $\tau$ denotes the temperature hyper-parameter.
+
+Moreover, during the fine-tuning stage, we will calculate the classification loss of both the Teacher and the Student via cross-entropy loss. The loss is written as:
+\begin{equation}
+\mathcal{L}_{\mathrm{CLS}}=\mathrm{CE}\left(\mathbf{z}^S / \tau_d, \mathbf{z}^T / \tau_d\right)
+\end{equation}
+where $\mathbf{z}^T, \mathbf{z}^S$ are the soft label outputs
+from the Teacher and the Student network.
+
+During training, we will minimize the combined loss:
+\begin{equation}
+\mathcal{L}=\mathcal{L}_{\mathrm{CE}}+\mathcal{L}_{\mathrm{CLS}}+\alpha \mathcal{L}_{\mathrm{ATT}}+\beta \mathcal{L}_{\mathrm{HID}}
+\end{equation}
+where $\alpha$ and $\beta$ are the weights of the loss terms, and $\mathcal{L}_{\mathrm{CE}}$ is the original classification task in the specific downstream-task.
+
+
+\clearpage
+
+\bibliography{main}
+\bibliographystyle{icml2022}
+
+\end{document}
