@@ -71,7 +71,6 @@ if __name__ == '__main__':
                         os.path.join(args.image_dir, img_file_name) \
                         for img_file_name in batch_img_file_names
                     ]
-                    print(len(batch_img_file_names))
                     try:
                         txts = model_inference(batch_img_file_paths, gen_kwargs)
                     except:
