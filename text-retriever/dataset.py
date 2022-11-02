@@ -203,11 +203,13 @@ class WebQADataset(Dataset):
         input_ids = input_ids.view(bsz, -1, input_ids.size(-1))
         labels = labels.view(bsz, -1)
         attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
+        logit_mask = (labels != -100)
 
         return {
             'input_ids': input_ids,
             'labels': labels,
-            'attention_mask': attention_mask
+            'attention_mask': attention_mask,
+            'logit_mask': logit_mask,
         }
 
 

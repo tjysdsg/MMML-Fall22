@@ -50,10 +50,9 @@ def attach_optimizer(args, model):
     '''
     if args.optimizer_type == 'adamw':
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+        return optimizer
     else:
         raise ValueError('Invalid optimizer')
-
-    return optimizer
 
 
 def attach_scheduler(args, optimizer, total_training_steps):
@@ -101,6 +100,7 @@ def validate(args, dev_dataloader, model):
             input_ids = data['input_ids'].to(args.device)
             labels = data['labels'].to(args.device)
             attention_mask = data['attention_mask'].to(args.device)
+            logit_mask = data['logit_mask'].to(args.device)
 
             squeezed_input_ids = input_ids.view(-1, input_ids.size(-1))
             squeezed_labels = labels.view(-1)
@@ -112,12 +112,10 @@ def validate(args, dev_dataloader, model):
                 attention_mask=squeezed_attention_mask
             )
             logits = outputs['logits']
-            logit_mask = (labels != -100)
-            labels[labels == -100] = 0 # TODO: should not be considered into F1 calculation, -100 should be filtered
-            one_hot_labels = torch.nn.functional.one_hot(labels)
+            target = torch.nn.functional.one_hot(labels * logit_mask)
 
             prediction = logits.view(-1, args.choice_num, args.label_num)
-            target = one_hot_labels.view(-1, args.choice_num, args.label_num)
+            target = target.view(-1, args.choice_num, args.label_num)
             
             eval_loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
 
@@ -129,11 +127,10 @@ def validate(args, dev_dataloader, model):
 
     metric = evaluate.load("f1")
     true_predictions = []
-    for prediction in gth_labels:
-        true_predictions += prediction
     true_labels = []
-    for label in pred_labels:
-        true_labels += label
+    for pred, label in zip(pred_labels, gth_labels):
+        true_predictions += [p for p, l in zip(pred, label) if l != -100]
+        true_labels += [l for p, l in zip(pred, label) if l != -100]
 
     results = metric.compute(predictions=true_predictions, references=true_labels)
     f1 = results['f1']
@@ -161,10 +158,7 @@ def train(args, model, tokenizer):
     total_training_steps = len(train_dataloader) * args.num_epochs // args.gradient_accumulation_step
     scheduler = attach_scheduler(args, optimizer, total_training_steps)
 
-    if args.use_amp:
-        # TODO: need to figure out how to implement amp
-        from apex import amp
-        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+    scaler = torch.cuda.amp.GradScaler(enabled=args.use_fp16)
 
     train_losses = []
     for epoch in range(args.num_epochs):
@@ -172,38 +166,33 @@ def train(args, model, tokenizer):
             input_ids = data['input_ids'].to(args.device)
             labels = data['labels'].to(args.device)
             attention_mask = data['attention_mask'].to(args.device)
+            logit_mask = data['logit_mask'].to(args.device)
 
             squeezed_input_ids = input_ids.view(-1, input_ids.size(-1))
             squeezed_labels = labels.view(-1)
             squeezed_attention_mask = attention_mask.view(-1, attention_mask.size(-1))
 
-            outputs = model(
-                input_ids=squeezed_input_ids, 
-                labels=squeezed_labels, 
-                attention_mask=squeezed_attention_mask
-            )
+            with torch.cuda.amp.autocast(enabled=args.use_fp16):
+                outputs = model(
+                    input_ids=squeezed_input_ids, 
+                    labels=squeezed_labels, 
+                    attention_mask=squeezed_attention_mask
+                )
+                logits = outputs['logits']
+                target = torch.nn.functional.one_hot(labels * logit_mask)
 
-            logits = outputs['logits']
-            logit_mask = (labels != -100)
-            labels[labels == -100] = 0
-            one_hot_labels = torch.nn.functional.one_hot(labels)
+                prediction = logits.view(-1, args.choice_num, args.label_num)
+                target = target.view(-1, args.choice_num, args.label_num)
 
-            prediction = logits.view(-1, args.choice_num, args.label_num)
-            target = one_hot_labels.view(-1, args.choice_num, args.label_num)
-
-            loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
-
-            if args.use_amp:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            else:
-                loss.backward()
+                loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
+                scaler.scale(loss).backward()
 
             train_losses.append(loss.item())
             step += 1
 
             if step % args.gradient_accumulation_step == 0:
-                optimizer.step()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
                 scheduler.step()
 
@@ -327,7 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
     parser.add_argument('--choice_num', type=int, default=16)
-    parser.add_argument('--use_amp', action='store_true')
+    parser.add_argument('--use_fp16', action='store_true')
 
     args = parser.parse_args()
 
