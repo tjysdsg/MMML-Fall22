@@ -42,7 +42,6 @@ if __name__ == '__main__':
     gen_kwargs = {"max_length": args.max_length, "num_beams": args.num_beams}
 
     img_txt_dataset = []
-    img_id_line_id_dict = {}
     with jsonlines.open(args.input_file_name, 'r') as input_f:
         for obj in input_f:
             img_txt_dataset.append(obj)
