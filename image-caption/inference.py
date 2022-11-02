@@ -7,7 +7,7 @@ from PIL import Image
 from tqdm import tqdm
 
 
-def predict(image_paths, gen_kwargs):
+def model_inference(image_paths, gen_kwargs):
   images = []
   for image_path in image_paths:
     i_image = Image.open(image_path)
@@ -22,6 +22,19 @@ def predict(image_paths, gen_kwargs):
   preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
   preds = [pred.strip() for pred in preds]
   return preds
+
+def get_img_txt_dataset(args):
+    img_txt_dataset = []
+    with jsonlines.open(args.input_file_name, 'r') as input_f:
+        for obj in input_f:
+            img_txt_dataset.append(obj)
+    return img_txt_dataset
+
+def get_img_file_name_index_dict(args, img_txt_dataset):
+    img_file_name_index_dict = {} 
+    for index, img_txt in enumerate(img_txt_dataset):
+        img_file_name_index_dict[img_txt['img']['img_file_name']] = index
+    return img_file_name_index_dict
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -42,14 +55,8 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     gen_kwargs = {"max_length": args.max_length, "num_beams": args.num_beams}
 
-    img_txt_dataset = []
-    with jsonlines.open(args.input_file_name, 'r') as input_f:
-        for obj in input_f:
-            img_txt_dataset.append(obj)
-
-    img_file_name_index_dict = {} 
-    for index, img_txt in enumerate(img_txt_dataset):
-        img_file_name_index_dict[img_txt['img']['img_file_name']] = index
+    img_txt_dataset = get_img_txt_dataset(args)
+    img_file_name_index_dict = get_img_file_name_index_dict(args, img_txt_dataset)
 
     inference_cnt = 0
     batch_img_file_names = []
@@ -64,8 +71,9 @@ if __name__ == '__main__':
                         os.path.join(args.image_dir, img_file_name) \
                         for img_file_name in batch_img_file_names
                     ]
+                    print(len(batch_img_file_names))
                     try:
-                        txts = predict(batch_img_file_paths, gen_kwargs)
+                        txts = model_inference(batch_img_file_paths, gen_kwargs)
                     except:
                         txts = ['' for _ in range(args.inference_batch_size)]
                         print('ERROR: Inference is not succesful, so I just put empty token for results.')
