@@ -68,7 +68,7 @@ if __name__ == '__main__':
                         txts = predict(batch_img_file_paths, gen_kwargs)
                     except:
                         txts = ['' for _ in range(args.inference_batch_size)]
-                        print('predict not succesful, just put empty token')
+                        print('ERROR: Inference is not succesful, so I just put empty token for results.')
                     for img_file_name, txt in zip(batch_img_file_names, txts):
                         index = img_file_name_index_dict[img_file_name]
                         assert img_txt_dataset[index]['img']['img_file_name'] == img_file_name
@@ -81,5 +81,5 @@ if __name__ == '__main__':
                         with jsonlines.open(args.output_file_name, 'w') as f:
                             f.write_all(img_txt_dataset)
             else:
-                print('{} needs to exist since I need to get the generated text of this image!'.format(img_file_path))
+                print('ERROR: {} needs to exist since I need to get the generated text of this image!'.format(img_file_path))
                 continue
