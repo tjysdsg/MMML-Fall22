@@ -26,13 +26,14 @@ def predict(image_paths, gen_kwargs):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='nlpconnect/vit-gpt2-image-captioning')
+    parser.add_argument('--model_type', type=str, default='vit-gpt2')
     parser.add_argument('--max_length', type=int, default=64)
     parser.add_argument('--num_beams', type=int, default=4)
     parser.add_argument('--inference_batch_size', type=int, default=64)
     parser.add_argument('--image_dir', type=str, default='/projects/ogma2/users/haofeiy/utils/webqa_data/images/')
     parser.add_argument('--save_every_inference_step', type=int, default=100)
-    parser.add_argument('--input_file_name', type=str, default='./webqa_img_txt.jsonl')
-    parser.add_argument('--output_file_name', type=str, default='./webqa_img_txt_new.jsonl')
+    parser.add_argument('--input_file_name', type=str, default='./webqa_img_txt_new.jsonl')
+    parser.add_argument('--output_file_name', type=str, default='./webqa_img_txt_new_new.jsonl')
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -48,13 +49,14 @@ if __name__ == '__main__':
 
     img_file_name_index_dict = {} 
     for index, img_txt in enumerate(img_txt_dataset):
-        img_file_name_index_dict[img_txt['img']['image_file_name']] = index
+        img_file_name_index_dict[img_txt['img']['img_file_name']] = index
 
     inference_cnt = 0
     batch_img_file_names = []
     for img_txt_pair in tqdm(img_txt_dataset):
         if img_txt_pair['txt']['vit-gpt2'] == '':
             img_file_name = img_txt_pair['img']['img_file_name']
+
             if os.path.exists(os.path.join(args.image_dir, img_file_name)):
                 batch_img_file_names.append(img_file_name)
                 if len(batch_img_file_names) == args.inference_batch_size:
@@ -62,12 +64,16 @@ if __name__ == '__main__':
                         os.path.join(args.image_dir, img_file_name) \
                         for img_file_name in batch_img_file_names
                     ]
-                    txts = predict(batch_img_file_paths, gen_kwargs)
+                    try:
+                        txts = predict(batch_img_file_paths, gen_kwargs)
+                    except:
+                        txts = ['' for _ in range(args.inference_batch_size)]
+                        print('predict not succesful, just put empty token')
                     for img_file_name, txt in zip(batch_img_file_names, txts):
                         index = img_file_name_index_dict[img_file_name]
-                        assert img_txt_dataset[index]['txt']['vit-gpt2'] == ''
-                        assert img_txt_dataset[index]['img']['image_file_name'] == img_file_name
-                        img_txt_dataset[index]['txt']['vit-gpt2'] = txt
+                        assert img_txt_dataset[index]['img']['img_file_name'] == img_file_name
+                        assert img_txt_dataset[index]['txt'][args.model_type] == ''
+                        img_txt_dataset[index]['txt'][args.model_type] = txt
                     batch_img_file_names = []
 
                     inference_cnt += 1
