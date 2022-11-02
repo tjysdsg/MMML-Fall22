@@ -657,3 +657,4 @@ text-retriever/WebQA_tmp/
 text-retriever/__pycache__/
 text-retriever/checkpoints/
 text-retriever/apex/
+image-caption/*.jsonl

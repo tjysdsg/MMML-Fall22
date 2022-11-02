@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=2 python inference.py --input_file ./webqa_img_txt_generation_part2.jsonl --output_file ./webqa_img_txt_generation_part2_new.jsonl
