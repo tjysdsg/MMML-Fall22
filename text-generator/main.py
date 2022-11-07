@@ -43,21 +43,21 @@ def attach_dataloader(args, tokenizer):
     loader_dict = {}
     if args.train:
         train_dataset = WebQADataset(args, tokenizer, 'train')
-        dev_dataset = WebQADataset(args, tokenizer, 'val')
+        val_dataset = WebQADataset(args, tokenizer, 'val')
         train_dataloader = DataLoader(
             train_dataset,  
             batch_size=args.train_batch_size, 
             shuffle=True, 
             collate_fn=train_dataset.collate_fn
         )
-        dev_dataloader = DataLoader(
-            dev_dataset, 
-            batch_size=args.dev_batch_size, 
+        val_dataloader = DataLoader(
+            val_dataset, 
+            batch_size=args.val_batch_size, 
             shuffle=True, 
-            collate_fn=dev_dataset.collate_fn
+            collate_fn=val_dataset.collate_fn
         )
         loader_dict['train'] = train_dataloader
-        loader_dict['dev'] = dev_dataloader
+        loader_dict['val'] = val_dataloader
 
     if args.inference:
         test_dataset = WebQATestDataset(args, tokenizer, 'test')
@@ -139,14 +139,14 @@ def save_final_model(best_ckpt_name):
     return
 
 
-def validate(args, dev_dataloader, model, tokenizer):
+def validate(args, val_dataloader, model, tokenizer):
     model.eval()
 
     losses = []
     refs = []
     preds = []
     with torch.no_grad():
-        for batch in tqdm(dev_dataloader):
+        for batch in val_dataloader:
             pred_tokens = model.generate(
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
@@ -163,8 +163,7 @@ def validate(args, dev_dataloader, model, tokenizer):
 
     em = 0 
     for pred, ref in zip(preds, refs):
-        em += ems(pred, ref)
-    em = em / len(preds)
+        em += ems(pred, ref) / len(preds)
 
     return {'em': em}
 
@@ -178,7 +177,7 @@ def train(args, model, tokenizer):
     loaders = attach_dataloader(args, tokenizer)
     logging.info('=====end loading dataset====')
     train_dataloader = loaders['train']
-    dev_dataloader = loaders['dev']
+    val_dataloader = loaders['val']
     
     optimizer = attach_optimizer(args, model)
     scheduler = attach_scheduler(args, optimizer, train_dataloader)
@@ -215,57 +214,23 @@ def train(args, model, tokenizer):
                 
                 step += 1
                 if step % args.evaluation_steps == 0:
-                    metric = validate(args, dev_dataloader, model, tokenizer)
+                    metric = validate(args, val_dataloader, model, tokenizer)
                     best_ckpt_name, best_metric = save_model(best_ckpt_name, metric, best_metric)
-                    logging.info('eval em : {}'.format(metric['em']))
-
                     if args.use_wandb:
-                        wandb.log({'train loss': sum(step_losses)/len(step_losses), 'step': step})
-                        wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': step})
                         wandb.log({'eval_em': metric['em'], 'step': step})
-                    step_losses = []
+                    if use_logger:
+                        logging.info('eval em : {}'.format(metric['em']))
+
+                if args.use_wandb:
+                    wandb.log({'train loss': sum(step_losses)/len(step_losses), 'step': step})
+                    wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': step})
+                if args.use_logger:
+                    logging.info('train loss : {}'.format(sum(step_losses)/len(step_losses)))
+                step_losses = []
                     
     save_final_model(best_ckpt_name)
     return
 
-
-def ner_pipeline(args, sent, model, tokenizer):
-    tokenized_sent = tokenizer.tokenize(sent)
-    input_ids = tokenizer.encode(sent)
-    token_starts = [0] + [1 - int(token.startswith('##')) for token in tokenized_sent] + [0]
-    input_ids = torch.LongTensor([input_ids])
-    input_ids = input_ids[:, :args.max_length].to(args.device)
-    token_starts = torch.ByteTensor([token_starts])
-    token_starts = token_starts[:, :args.max_length].to(args.device)
-    outputs = model(
-        input_ids=input_ids,
-        token_starts=token_starts,
-    )
-    logits = outputs[0]
-    entities = []
-    words = []
-    # A SMALL TRICK FOR TEST
-    # since our training data has much denser label
-    # while testing data has much sparser label
-    # we want to modify the logits to increase the rate of "O" label
-    logits[:, :, 0] += 7
-    # ==========================
-    if args.model_type == 'bert':
-        preds = torch.argmax(logits, dim=-1)[0].tolist()
-    else:
-        preds = model.crf.decode(logits)[0]
-
-    token_starts = [1 - int(token.startswith('##')) for token in tokenized_sent]
-    for token_start, token in zip(token_starts, tokenized_sent):
-        if token_start == 0:
-            entities.append('O')
-            words.append(token.replace('##', ''))
-        else:
-            entities.append(args.id2entity[preds.pop(0)])
-            words.append(token)
-
-    assert len(entities) == len(words)
-    return words, entities
 
 
 def inference(args, model, tokenizer):
@@ -320,7 +285,7 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_save_dir', type=str, default='./checkpoints/')
     parser.add_argument('--train_batch_size', type=int, default=4)
     parser.add_argument('--gradient_accumulation_step', type=int, default=4)
-    parser.add_argument('--dev_batch_size', type=int, default=4)
+    parser.add_argument('--val_batch_size', type=int, default=4)
     parser.add_argument('--test_batch_size', type=int, default=4)
     parser.add_argument('--encoder_max_length', type=int, default=512)
     parser.add_argument('--decoder_max_length', type=int, default=128)
@@ -336,6 +301,7 @@ if __name__ == '__main__':
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
+    parser.add_argument('--use_logger', action='store_true')
     parser.add_argument('--max_norm', type=float, default=5.0)
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--use_fp16', action='store_true')

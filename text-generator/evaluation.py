@@ -173,3 +173,5 @@ def score(x, inversions, avg_topk, idx_topk):
         # number of passages required to obtain all passages from gold top-k
         idx_gold_topk = len(x) - np.argmax(below_k[::-1])
         idx_topk[k].append(idx_gold_topk)
+
+
