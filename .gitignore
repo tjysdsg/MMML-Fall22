@@ -658,3 +658,8 @@ text-retriever/__pycache__/
 text-retriever/checkpoints/
 text-retriever/apex/
 image-caption/*.jsonl
+text-generator/data/
+text-generator/cache/
+text-generator/WebQA_tmp/
+text-generator/__pycache__/
+text-generator/checkpoints/
