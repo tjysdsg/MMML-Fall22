@@ -29,7 +29,6 @@ class WebQATestDataset(Dataset):
                     data[key] = value
                 else:
                     data[key] = self.recursive_tokenize(value)
-
             return data
         
         lists = list(self.recursive_tokenize(subdata) for subdata in data)
@@ -100,7 +99,6 @@ class WebQATestDataset(Dataset):
         }
 
 
-
 class WebQADataset(Dataset):
     def __init__(self, 
                  args, 
@@ -127,7 +125,12 @@ class WebQADataset(Dataset):
         elif isinstance(data, str):
             return self.tokenizer(data.strip(), truncation=True, add_special_tokens=False)['input_ids']
         elif isinstance(data, dict):
-            return dict((key, self.recursive_tokenize(value)) for key, value in data.items())
+            for key, value in data.items():
+                if key == 'topic' or key == 'Qcate':
+                    data[key] = value
+                else:
+                    data[key] = self.recursive_tokenize(value)
+            return data
         
         lists = list(self.recursive_tokenize(subdata) for subdata in data)
         return lists    
@@ -145,19 +148,23 @@ class WebQADataset(Dataset):
             else:
                 raise ValueError('no right dataset split')
             
-        print('=====begin tokenize======')
-        dataset = self.recursive_tokenize(dataset)
-        print('=====end   tokenize======')
-        torch.save(dataset, os.path.join(self.args.cache_dir, 'WebQA_{}_dataset'.format(split)))
+            print('=====begin tokenize======')
+            dataset = self.recursive_tokenize(dataset)
+            print('=====end   tokenize======')
+            torch.save(dataset, os.path.join(self.args.cache_dir, 'WebQA_{}_dataset'.format(split)))
         return dataset
 
     def collate_fn(self, batch):
+        Qcates = []
         input_ids = []
         labels = []
         attention_mask = []
         bsz = len(batch)
 
         for instance in batch:
+            Qcate = instance['Qcate']
+            Qcates.append(Qcate)
+
             token_facts = []
             tokens_question = self.question_prefix + instance['Q']
             for pos_txt_fact in instance['pos_txt_facts']:
@@ -198,6 +205,7 @@ class WebQADataset(Dataset):
             'labels': labels.to(self.args.device),
             'attention_mask': attention_mask.to(self.args.device),
             'decoder_attention_mask': decoder_attention_mask.to(self.args.device),
+            'Qcates': Qcates,
         }
 
 

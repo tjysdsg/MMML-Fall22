@@ -11,6 +11,8 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                 Qcate = data['Qcate']
                 Q = data['Q'].replace('"', "")
                 A = data['A'][0].replace('"', "")
+                topic = data['topic']
+                Qcate = data['Qcate']
                 pos_txt_facts = []
                 neg_txt_facts = []
                 pos_img_facts = []
@@ -40,6 +42,8 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                 dataset.append({
                     'Q': Q, 
                     'A': A, 
+                    'topic': topic,
+                    'Qcate': Qcate,
                     'pos_img_facts': pos_img_facts, 
                     'pos_txt_facts': pos_txt_facts,
                     'neg_img_facts': neg_img_facts,

@@ -5,7 +5,6 @@ import time
 import csv
 import shutil
 import evaluate
-import logging
 import wandb
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -17,10 +16,18 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torchcrf import CRF
-from evaluation import ems
+from val_eval import webqa_metrics_approx
 
 import warnings
 warnings.filterwarnings('ignore')
+
+import logging
+logging.basicConfig(
+    level=logging.INFO, 
+    filename='./webqa.log', 
+    filemode='w', 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 
 def set_seed(args):
@@ -115,20 +122,23 @@ def attach_scheduler(args, optimizer, train_dataloader):
 
 def save_model(best_ckpt_name, metric, best_metric):
     eps = 1e-5
-    if (args.model_chosen_metric == 'em' and metric['em'] > best_metric['em'] + eps):
+    if metric['acc'] > (best_metric['acc'] + eps):
         if best_ckpt_name is not None:
             os.remove(os.path.join(args.ckpt_save_dir,best_ckpt_name))
-        best_ckpt_name = 'best_{}4{}_{}_{}_{}.ckpt'.format(
+        best_ckpt_name = 'best_{}4{}_f1{}_recall{}_acc{}_{}.ckpt'.format(
             args.model_type, 
             args.task, 
-            args.model_chosen_metric, 
-            round(metric[args.model_chosen_metric],3), 
+            round(metric['f1'],3), 
+            round(metric['recall'],3),
+            round(metric['acc'],3),
             args.timestamp
         )
         output_model_file = os.path.join(args.ckpt_save_dir, best_ckpt_name)
         model_to_save = model.module if hasattr(model, 'module') else model
         torch.save(model_to_save.state_dict(), output_model_file)
-        best_metric[args.model_chosen_metric] = metric[args.model_chosen_metric]
+        best_metric['f1'] = metric['f1']
+        best_metric['recall'] = metric['recall']
+        best_metric['acc'] = metric['acc']
     return best_ckpt_name, best_metric
 
 
@@ -145,8 +155,10 @@ def validate(args, val_dataloader, model, tokenizer):
     losses = []
     refs = []
     preds = []
+    Qcates = []
     with torch.no_grad():
-        for batch in val_dataloader:
+        val_iter = tqdm(val_dataloader, desc="Validation", disable=0)
+        for batch in val_iter:
             pred_tokens = model.generate(
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
@@ -159,18 +171,45 @@ def validate(args, val_dataloader, model, tokenizer):
             ref = tokenizer.batch_decode(ref_tokens, skip_special_tokens=True)
             preds += pred
             refs += ref
-    assert len(preds) == len(refs)
+            Qcates += batch['Qcates']
+    assert len(preds) == len(refs) == len(Qcates)
 
-    em = 0 
-    for pred, ref in zip(preds, refs):
-        em += ems(pred, ref) / len(preds)
+    f1 = 0
+    recall = 0
 
-    return {'em': em}
+    eval_metric = {
+        'color': [], 
+        'shape': [], 
+        'number': [], 
+        'YesNo': [],
+        'number': [],
+        'text': [],
+        'Others': [],
+        'choose': [],
+        'f1': [],
+        'recall': [],
+        'acc': [],
+    }
+    for pred, ref, Qcate in zip(preds, refs, Qcates):
+        eval_output = webqa_metrics_approx(pred, ref, Qcate)['acc_approx']
+        eval_metric[Qcate].append(eval_output)
+        if Qcate in ['color', 'shape', 'number', 'YesNo']:
+            eval_metric['f1'].append(eval_output)
+        else:
+            eval_metric['recall'].append(eval_output)
+        eval_metric['acc'].append(eval_output)
+    for key, value in eval_metric.items():
+        if len(eval_metric[key]) == 0:
+            eval_metric[key] = 0
+        else:
+            eval_metric[key] = sum(eval_metric[key]) / len(eval_metric[key])
+
+    return eval_metric
 
 
 def train(args, model, tokenizer):
     best_ckpt_name = None
-    best_metric = {'em': -float('inf'), 'loss': float('inf')}
+    best_metric = {'f1': -float('inf'), 'recall': -float('inf'), 'acc': -float('inf')}
     step = 0
     iteration = 0
     logging.info('=====begin loading dataset====')
@@ -217,9 +256,13 @@ def train(args, model, tokenizer):
                     metric = validate(args, val_dataloader, model, tokenizer)
                     best_ckpt_name, best_metric = save_model(best_ckpt_name, metric, best_metric)
                     if args.use_wandb:
-                        wandb.log({'eval_em': metric['em'], 'step': step})
-                    if use_logger:
-                        logging.info('eval em : {}'.format(metric['em']))
+                        wandb.log({'eval_f1': metric['f1'], 'step': step})
+                        wandb.log({'eval_recall': metric['recall'], 'step': step})
+                        wandb.log({'eval_acc': metric['acc'], 'step': step})
+                    if args.use_logger:
+                        logging.info('eval f1 : {}'.format(metric['f1']))
+                        logging.info('eval recall : {}'.format(metric['recall']))
+                        logging.info('eval acc : {}'.format(metric['acc']))
 
                 if args.use_wandb:
                     wandb.log({'train loss': sum(step_losses)/len(step_losses), 'step': step})
@@ -274,18 +317,17 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', type=str, default='t5', choices=['t5'])
     parser.add_argument('--model_name', type=str, default='t5-small')
     parser.add_argument('--have_cached_dataset', action='store_true')
-    parser.add_argument('--cache_dir', type=str, default='./cache')
-    parser.add_argument('--train_file', type=str, default='./data/WebQA_sub_data/train.jsonl')
-    parser.add_argument('--val_file', type=str, default='./data/WebQA_sub_data/val.jsonl')
-    parser.add_argument('--test_file', type=str, default='./data/val.jsonl')
-    parser.add_argument('--output_file', type=str, default='./data/submission.jsonl')
+    parser.add_argument('--cache_dir', type=str, default='../cache')
+    parser.add_argument('--train_file', type=str, default='../data/WebQA_sub_data/train.jsonl')
+    parser.add_argument('--val_file', type=str, default='../data/WebQA_sub_data/val.jsonl')
+    parser.add_argument('--test_file', type=str, default='../data/val.jsonl')
+    parser.add_argument('--output_file', type=str, default='../data/submission.jsonl')
     parser.add_argument('--task', type=str, default='webqa-finetune', choices=['webqa-finetune'])
     parser.add_argument('--load_from_ckpt', type=str, default=None)
-    parser.add_argument('--model_chosen_metric', type=str, default='em')
-    parser.add_argument('--ckpt_save_dir', type=str, default='./checkpoints/')
-    parser.add_argument('--train_batch_size', type=int, default=4)
-    parser.add_argument('--gradient_accumulation_step', type=int, default=4)
-    parser.add_argument('--val_batch_size', type=int, default=4)
+    parser.add_argument('--ckpt_save_dir', type=str, default='../checkpoints/')
+    parser.add_argument('--train_batch_size', type=int, default=16)
+    parser.add_argument('--gradient_accumulation_step', type=int, default=1)
+    parser.add_argument('--val_batch_size', type=int, default=128)
     parser.add_argument('--test_batch_size', type=int, default=4)
     parser.add_argument('--encoder_max_length', type=int, default=512)
     parser.add_argument('--decoder_max_length', type=int, default=128)
