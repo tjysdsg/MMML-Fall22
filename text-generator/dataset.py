@@ -7,10 +7,17 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 class WebQATestDataset(Dataset):
-    def __init__(self, args, tokenizer):
+    def __init__(self, 
+                 args, 
+                 tokenizer,
+                 question_prefix='question:',
+                 title_prefix='title:',
+                 passage_prefix='context:'):
         self.args = args
         self.tokenizer = tokenizer
         self.data = self.build_dataset()
+        self.question_prefix = tokenizer.encode(question_prefix, add_special_tokens=False)
+        self.passage_prefix = tokenizer.encode(passage_prefix, add_special_tokens=False)
 
     def __len__(self):
         return len(self.data)
@@ -38,7 +45,7 @@ class WebQATestDataset(Dataset):
         if self.args.have_cached_dataset:
             dataset = torch.load(os.path.join(self.args.cache_dir, 'WebQA_test_dataset'))
         else:
-            with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.test_file), 'r') as jsonl_f:
+            with jsonlines.open(self.args.test_file, 'r') as jsonl_f:
                 dataset = [obj for obj in jsonl_f]
             
             print('=====begin tokenize======')
@@ -48,54 +55,40 @@ class WebQATestDataset(Dataset):
         return dataset
 
     def collate_fn(self, batch, max_length=None):
+        qids = []
         input_ids = []
-        labels = []
         attention_mask = []
-        source_types = []
-        q_ids = []
-        source_ids = []
+        bsz = len(batch)
 
         for instance in batch:
-            instance_token_ids = [self.tokenizer.cls_token_id]
-            # QA part
-            instance_token_ids += instance['Q']
-            #instance_token_ids += instance['A'] # answer is all empty in test cases
-            # add one [SEP] after QA part
-            instance_token_ids += [self.tokenizer.sep_token_id]
-            # fact part (both for text and image)
-            if 'txt_fact' in instance.keys():
-                instance_token_ids += instance['txt_fact']['fact']
-                source_types.append('txt')
-                source_ids.append(instance['txt_fact']['snippet_id'])
-            elif 'img_fact' in instance.keys():
-                instance_token_ids += instance['img_fact']['caption']
-                source_types.append('img')
-                source_ids.append(instance['img_fact']['image_id'])
-            else:
-                raise ValueError('instance should either be image-based or text-based')
+            token_facts = []
+            tokens_question = self.question_prefix + instance['Q']
+            for pos_txt_fact in instance['txt_facts']:
+                token_facts += self.passage_prefix + pos_txt_fact['fact']
+            for pos_img_fact in instance['img_facts']:
+                token_facts += self.passage_prefix + pos_img_fact['caption']
 
-            instance_token_ids = instance_token_ids[:self.args.max_length-1] # since there is one last [SEP]
-            # add [SEP] after truncation
-            instance_token_ids += [self.tokenizer.sep_token_id]
-            instance_token_ids = torch.LongTensor(instance_token_ids)
+            batch_input_ids = tokens_question + token_facts
+            batch_input_ids = batch_input_ids[:self.args.encoder_max_length-1]
+            batch_input_ids += [self.tokenizer.eos_token_id]
+            batch_input_ids = torch.LongTensor(batch_input_ids)
+            
+            input_ids += [batch_input_ids] # get bsz x seq_len 
 
-            input_ids.append(instance_token_ids)
-            q_ids.append(instance['Q_id'])
+            qids += [instance['Q_id']]
 
 
         input_ids = pad_sequence(
             input_ids, 
             batch_first=True, 
-            padding_value=self.tokenizer.pad_token_id)
+            padding_value=self.tokenizer.pad_token_id
+        )
         attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
 
-
         return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'source_ids': source_ids,
-            'source_types': source_types,
-            'q_ids': q_ids,
+            'qids': qids,
+            'input_ids': input_ids.to(self.args.device),
+            'attention_mask': attention_mask.to(self.args.device),
         }
 
 

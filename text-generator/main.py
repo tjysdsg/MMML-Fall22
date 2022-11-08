@@ -6,6 +6,8 @@ import csv
 import shutil
 import evaluate
 import wandb
+import json
+import jsonlines
 import torch.distributed as dist
 import torch.nn.functional as F
 from tqdm import tqdm, trange
@@ -23,7 +25,7 @@ warnings.filterwarnings('ignore')
 
 import logging
 logging.basicConfig(
-    level=logging.INFO, 
+    level=logging.DEBUG, 
     filename='./webqa.log', 
     filemode='w', 
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -67,7 +69,7 @@ def attach_dataloader(args, tokenizer):
         loader_dict['val'] = val_dataloader
 
     if args.inference:
-        test_dataset = WebQATestDataset(args, tokenizer, 'test')
+        test_dataset = WebQATestDataset(args, tokenizer)
         test_dataloader = DataLoader(
             test_dataset, 
             batch_size=args.test_batch_size, 
@@ -84,7 +86,7 @@ def attach_tokenizer(args):
 
 
 def attach_model(args):
-    if args.model_type == 't5':
+    if args.model_type == 't5-small' or args.model_type == 't5-base':
         model = T5ForConditionalGeneration.from_pretrained(args.model_name)
     else:
         raise ValueError('Invalid model type')
@@ -152,7 +154,6 @@ def save_final_model(best_ckpt_name):
 def validate(args, val_dataloader, model, tokenizer):
     model.eval()
 
-    losses = []
     refs = []
     preds = []
     Qcates = []
@@ -275,60 +276,61 @@ def train(args, model, tokenizer):
     return
 
 
-
 def inference(args, model, tokenizer):
-    def unk_wrapper(word):
-        return tokenizer.decode(tokenizer.encode(word), skip_special_tokens=True)
+    loader = attach_dataloader(args, tokenizer)
+    test_dataloader = loader['test']
 
     model.load_state_dict(
         torch.load(
             os.path.join(args.ckpt_save_dir, 'best_{}4{}.ckpt'.format(args.model_type, args.task))
     ))
-    with open(args.output_file, 'w', newline='') as output_f, open(args.inference_file, 'r') as input_f:
-        sents = input_f.readlines()
-        for sent in tqdm(sents):
-            words = sent.strip().split(' ')
-            src_words, src_entities = ner_pipeline(args, sent, model, tokenizer)
-            tgt_words = []
-            tgt_entities = []
-            src_index = 0
-            tgt_index = 0
-            while src_index < len(src_words):
-                output_word = words[tgt_index]
-                output_entity = src_entities[src_index]
-                tgt_words.append(src_words[src_index])
-                tgt_entities.append(src_entities[src_index])
-                matcher = unk_wrapper(words[tgt_index])
-                matchee = unk_wrapper(tgt_words[-1])
-                src_index += 1
-                tgt_index += 1
-                while matcher != matchee:
-                    tgt_words[-1] += src_words[src_index]
-                    src_index += 1
-                    matchee = unk_wrapper(tgt_words[-1])
-                output_f.write(output_word + '\t' + output_entity + '\n')
-            output_f.write('\n')
+
+    model.eval()
+
+    preds = []
+    qids = []
+    with torch.no_grad():
+        test_iter = tqdm(test_dataloader, desc="Testing", disable=0)
+        for batch in test_iter:
+            pred_tokens = model.generate(
+                input_ids=batch['input_ids'],
+                attention_mask=batch['attention_mask'],
+                max_length=30,
+                num_beams=5,
+            )
+            qids += batch['qids']
+            pred = tokenizer.batch_decode(pred_tokens, skip_special_tokens=True)
+            preds += pred
+    assert len(preds) == len(qids)
+
+    with open(args.retrieved_result_file, 'r') as f1, open(args.result_file, 'w') as f2:
+        retrieved_result = json.load(f1)
+        for qid, pred in zip(qids, preds):
+            retrieved_result[qid]['answer'] = pred
+        json.dump(retrieved_result, f2, indent=4)
     return
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--timestamp', type=str, default=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(round(time.time()*1000))/1000)))
-    parser.add_argument('--model_type', type=str, default='t5', choices=['t5'])
+    parser.add_argument('--model_type', type=str, default='t5-small', choices=['t5-small', 't5-base'])
     parser.add_argument('--model_name', type=str, default='t5-small')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--cache_dir', type=str, default='../cache')
-    parser.add_argument('--train_file', type=str, default='../data/WebQA_sub_data/train.jsonl')
-    parser.add_argument('--val_file', type=str, default='../data/WebQA_sub_data/val.jsonl')
-    parser.add_argument('--test_file', type=str, default='../data/val.jsonl')
+    parser.add_argument('--train_file', type=str, default='../data/WebQA_full_data/train.jsonl')
+    parser.add_argument('--val_file', type=str, default='../data/WebQA_full_data/val.jsonl')
+    parser.add_argument('--test_file', type=str, default='../data/WebQA_test_data/retrieved_test.jsonl')
+    parser.add_argument('--retrieved_result_file', type=str, default='../data/WebQA_test_data/submission_test.json')
+    parser.add_argument('--result_file', type=str, default='../data/WebQA_test_data/final_submission.json')
     parser.add_argument('--output_file', type=str, default='../data/submission.jsonl')
     parser.add_argument('--task', type=str, default='webqa-finetune', choices=['webqa-finetune'])
     parser.add_argument('--load_from_ckpt', type=str, default=None)
     parser.add_argument('--ckpt_save_dir', type=str, default='../checkpoints/')
-    parser.add_argument('--train_batch_size', type=int, default=16)
+    parser.add_argument('--train_batch_size', type=int, default=8)
     parser.add_argument('--gradient_accumulation_step', type=int, default=1)
-    parser.add_argument('--val_batch_size', type=int, default=128)
-    parser.add_argument('--test_batch_size', type=int, default=4)
+    parser.add_argument('--val_batch_size', type=int, default=64)
+    parser.add_argument('--test_batch_size', type=int, default=32)
     parser.add_argument('--encoder_max_length', type=int, default=512)
     parser.add_argument('--decoder_max_length', type=int, default=128)
     parser.add_argument('--num_epochs', type=int, default=10)
