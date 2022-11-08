@@ -1,0 +1,25 @@
+Step1 image caption inference
+
+python inference.py
+
+Step2 Do retrieval task 
+
+python preprocess_webqa_raw_data.py (different from the one used in text generation when it comes to test dataset construction) --> build ./data
+
+sh webqa_finetune_full_data_v2.sh --> get the model checkpoint
+
+sh webqa_test.sh --> get the ./data/WebQA_test_data/submission.json 
+
+sh webqa_submit.sh --> get the retrieval result evaluation from leaderboard
+
+Step3 Do generation task
+
+python preprocess_webqa_raw_data (different from the one used in text retrieval when it comes to test dataset construction) --> build ./data 
+
+sh webqa_finetune.sh --> get the model checkpoint 
+
+python get_retrieved_webqa.py --> get retrieved_test.jsonl from the retrieval results submission.json 
+
+sh webqa_inference.sh --> use the retrieved_test.jsonl and submission.json to construct final_submission.json 
+
+sh webqa_submit.sh --> get the whole result evaluation from the leaderboard
