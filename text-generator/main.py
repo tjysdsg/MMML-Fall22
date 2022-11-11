@@ -349,12 +349,6 @@ if __name__ == '__main__':
     parser.add_argument('--max_norm', type=float, default=5.0)
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--use_fp16', action='store_true')
-    parser.add_argument('-n', '--id2entity', nargs='+', default=[
-        'O',
-        'B-MethodName', 'I-MethodName', 'B-HyperparameterName', 'I-HyperparameterName',
-        'B-HyperparameterValue', 'I-HyperparameterValue', 'B-MetricName', 'I-MetricName',
-        'B-MetricValue', 'I-MetricValue', 'B-TaskName', 'I-TaskName', 'B-DatasetName', 'I-DatasetName',
-    ])
     args = parser.parse_args()
     set_seed(args)
     set_wandb(args)
