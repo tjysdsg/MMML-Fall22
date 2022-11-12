@@ -650,7 +650,11 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-text-retriever/data/
+text-retriever/data/WebQA_full_data/
+text-retriever/data/WebQA_sub_data/
+text-retriever/data/WebQA_test_data/*
+!text-retriever/data/WebQA_test_data/submission_image-based_val.json
+!text-retriever/data/WebQA_test_data/submission_text-based_val.json
 text-retriever/cache/
 text-retriever/raw_data/
 text-retriever/WebQA_tmp/
@@ -664,4 +668,3 @@ text-generator/raw_data/
 text-generator/WebQA_tmp/
 text-generator/__pycache__/
 text-generator/checkpoints/
-!**/text-retriever/data/WebQA_test_data/*
