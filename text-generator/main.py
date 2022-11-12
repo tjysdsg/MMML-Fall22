@@ -12,12 +12,12 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from tqdm import tqdm, trange
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from transformers import AdamW, get_cosine_schedule_with_warmup
+from transformers import Adafactor, get_cosine_schedule_with_warmup
+from transformers.optimization import AdafactorSchedule
 from dataset import WebQADataset, WebQATestDataset
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torchcrf import CRF
 from val_eval import webqa_metrics_approx
 
 import warnings
@@ -101,7 +101,19 @@ def attach_model(args):
 
 def attach_optimizer(args, model):
     if args.optimizer_type == 'adamw':
-        optimizer = AdamW(model.parameters(), lr=args.learning_rate, correct_bias=False)
+        optimizer = AdamW(
+            model.parameters(), 
+            lr=args.learning_rate, 
+            correct_bias=False
+        )
+    elif args.optimizer_type == 'adafactor':
+        optimizer = Adafactor(
+            model.parameters(), 
+            scale_parameter=True, 
+            relative_step=True, 
+            warmup_init=True, 
+            lr=None
+        )
     else:
         raise ValueError('Invalid optimizer type')
     return optimizer
@@ -117,6 +129,9 @@ def attach_scheduler(args, optimizer, train_dataloader):
             num_warmup_steps=total_warmup_steps,
             num_training_steps=total_training_steps,
         )
+        return scheduler
+    elif args.scheduler_type == 'adafactorschedule':
+        scheduler = AdafactorSchedule(optimizer)
         return scheduler
     else:
         raise ValueError('Invalid scheduler type')
@@ -163,6 +178,7 @@ def validate(args, val_dataloader, model, tokenizer):
             pred_tokens = model.generate(
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
+                decoder_start_token_id=tokenizer.pad_token_id,
                 max_length=30,
                 num_beams=5,
             )
@@ -243,10 +259,6 @@ def train(args, model, tokenizer):
 
             iteration += 1
             if iteration % args.gradient_accumulation_step == 0:
-                torch.nn.utils.clip_grad_norm_(
-                    parameters=model.parameters(), 
-                    max_norm=args.max_norm
-                )
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
@@ -295,6 +307,7 @@ def inference(args, model, tokenizer):
             pred_tokens = model.generate(
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
+                decoder_start_token_id=tokenizer.cls_token_id,
                 max_length=30,
                 num_beams=5,
             )
@@ -334,10 +347,9 @@ if __name__ == '__main__':
     parser.add_argument('--encoder_max_length', type=int, default=512)
     parser.add_argument('--decoder_max_length', type=int, default=128)
     parser.add_argument('--num_epochs', type=int, default=10)
-    parser.add_argument('--learning_rate', type=float, default=5e-5)
-    parser.add_argument('--crf_learning_rate', type=float, default=5e-2)
-    parser.add_argument('--optimizer_type', type=str, default='adamw')
-    parser.add_argument('--scheduler_type', type=str, default='cosine')
+    parser.add_argument('--learning_rate', type=float, default=1e-4)
+    parser.add_argument('--optimizer_type', type=str, default='adafactor')
+    parser.add_argument('--scheduler_type', type=str, default='adafactorschedule')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--dataset', type=str, default='webqa')
@@ -346,7 +358,6 @@ if __name__ == '__main__':
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--use_logger', action='store_true')
-    parser.add_argument('--max_norm', type=float, default=5.0)
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--use_fp16', action='store_true')
     args = parser.parse_args()
