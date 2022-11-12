@@ -109,10 +109,15 @@ def attach_optimizer(args, model):
     elif args.optimizer_type == 'adafactor':
         optimizer = Adafactor(
             model.parameters(), 
-            scale_parameter=False, 
-            relative_step=False, 
-            warmup_init=False, 
-            lr=args.learning_rate
+            lr=args.learning_rate,
+            eps=(1e-30, 1e-3),
+            clip_threshold=1.0,
+            decay_rate=-0.8,
+            beta1=None,
+            weight_decay=0.0,
+            relative_step=False,
+            scale_parameter=False,
+            warmup_init=False,
         )
     else:
         raise ValueError('Invalid optimizer type')
@@ -131,7 +136,8 @@ def attach_scheduler(args, optimizer, train_dataloader):
         )
         return scheduler
     elif args.scheduler_type == 'adafactorschedule':
-        scheduler = AdafactorSchedule(optimizer)
+        #scheduler = AdafactorSchedule(optimizer)
+        scheduler = None
         return scheduler
     else:
         raise ValueError('Invalid scheduler type')
@@ -279,7 +285,7 @@ def train(args, model, tokenizer):
 
                 if args.use_wandb:
                     wandb.log({'train loss': sum(step_losses)/len(step_losses), 'step': step})
-                    wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': step})
+                    wandb.log({'learning rate': args.learning_rate, 'step': step})
                 if args.use_logger:
                     logging.info('train loss : {}'.format(sum(step_losses)/len(step_losses)))
                 step_losses = []
@@ -345,7 +351,7 @@ if __name__ == '__main__':
     parser.add_argument('--val_batch_size', type=int, default=64)
     parser.add_argument('--test_batch_size', type=int, default=32)
     parser.add_argument('--encoder_max_length', type=int, default=512)
-    parser.add_argument('--decoder_max_length', type=int, default=128)
+    parser.add_argument('--decoder_max_length', type=int, default=256)
     parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--learning_rate', type=float, default=1e-4)
     parser.add_argument('--optimizer_type', type=str, default='adafactor')
