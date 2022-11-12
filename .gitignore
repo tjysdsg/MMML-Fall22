@@ -664,3 +664,4 @@ text-generator/raw_data/
 text-generator/WebQA_tmp/
 text-generator/__pycache__/
 text-generator/checkpoints/
+!**/text-retriever/data/WebQA_test_data/*
