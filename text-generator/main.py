@@ -179,7 +179,7 @@ def validate(args, val_dataloader, model, tokenizer):
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
                 decoder_start_token_id=tokenizer.pad_token_id,
-                max_length=30,
+                max_length=args.decoding_max_length,
                 num_beams=5,
             )
             ref_tokens = batch['labels']
@@ -308,7 +308,7 @@ def inference(args, model, tokenizer):
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
                 decoder_start_token_id=tokenizer.pad_token_id,
-                max_length=128,
+                max_length=args.decoding_max_length,
                 num_beams=5,
             )
             qids += batch['qids']
@@ -360,6 +360,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_logger', action='store_true')
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--use_fp16', action='store_true')
+    parser.add_argument('--decoding_max_length', type=int, default=256)
     args = parser.parse_args()
     set_seed(args)
     set_wandb(args)
