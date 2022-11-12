@@ -8,16 +8,17 @@ def get_args():
     parser = ArgumentParser()
     parser.add_argument('--preds', type=str, default=r'vlp/result/baseline_predictions_val.json')
     parser.add_argument('--labels', type=str, default=r'E:\webqa\data\WebQA_train_val.json')
+    parser.add_argument('--split', type=str, default='val')
     return parser.parse_args()
 
 
 class RetrievalStatsCollector:
-    def __init__(self, n_questions: int):
+    def __init__(self, n_questions: int, split='train|val'):
         self.n_questions = n_questions
-        self.num_sources = {}
+        self.question_source_count_freq = {}
         self.full_correct_q = 0
-        self.overshoot_q = 0
-        self.undershoot_q = 0
+        self.n_questoins_with_too_many_predicted_sources = 0
+        self.n_questions_with_too_few_predicted_sources = 0
         self.correct_per_qcate = {}
         self.n_incorrect = 0
         self.n_multi_source = 0
@@ -27,6 +28,8 @@ class RetrievalStatsCollector:
 
         self.gth_labels = []
         self.pred_labels = []
+
+        self.split = split
 
     def update_f1(self, positive_sources, negative_sources, pred_sources):
         self.gth_labels += [1 for _ in range(len(positive_sources))] + [0 for _ in range(len(negative_sources))]
@@ -43,6 +46,9 @@ class RetrievalStatsCollector:
         assert len(self.gth_labels) == len(self.pred_labels)
 
     def update(self, pred_sources, question_meta):
+        if question_meta['split'] not in self.split:
+            return
+
         pred_sources = [str(p) for p in pred_sources]
         n_pred = len(pred_sources)
 
@@ -54,8 +60,8 @@ class RetrievalStatsCollector:
         self.update_f1(positive_sources, negative_sources, pred_sources)
 
         n_true = len(positive_sources)
-        self.num_sources.setdefault(n_pred, 0)
-        self.num_sources[n_pred] += 1
+        self.question_source_count_freq.setdefault(n_pred, 0)
+        self.question_source_count_freq[n_pred] += 1
 
         qcate = question_meta['Qcate']
         self.correct_per_qcate.setdefault(qcate, [])
@@ -77,9 +83,9 @@ class RetrievalStatsCollector:
             self.n_incorrect += 1
             self.correct_per_qcate[qcate].append(0)
             if n_pred > n_true:
-                self.overshoot_q += 1
+                self.n_questoins_with_too_many_predicted_sources += 1
             elif n_pred < n_true:
-                self.undershoot_q += 1
+                self.n_questions_with_too_few_predicted_sources += 1
 
         if n_true >= 2:
             self.n_multi_source += 1
@@ -87,16 +93,29 @@ class RetrievalStatsCollector:
             self.n_single_source += 1
 
     def summary(self):
-        print('# of sources', {k: self.num_sources[k] for k in sorted(self.num_sources)})
+        print(
+            'Number of sources per question:',
+            {k: self.question_source_count_freq[k] for k in sorted(self.question_source_count_freq)}
+        )
         print(f'Full correct questions: {self.full_correct_q / self.n_questions}')
-        print(f'Undershoot questions: {self.undershoot_q / self.n_questions}')
-        print(f'Overshoot questions: {self.overshoot_q / self.n_questions}')
+        print(
+            f'Number of questions with too many predicted sources: '
+            f'{self.n_questions_with_too_few_predicted_sources / self.n_questions}')
+        print(
+            f'Number of questions with too few predicted sources: '
+            f'{self.n_questoins_with_too_many_predicted_sources / self.n_questions}')
 
-        print(f'Correct out of multi source: {self.correct_multi_source / self.n_multi_source}')
-        print(f'Correct out of single source: {self.correct_single_source / self.n_single_source}')
+        print(
+            f'% of fully correct questions in multi source questions: '
+            f'{self.correct_multi_source / self.n_multi_source}'
+        )
+        print(
+            f'% of fully correct in single source questions: '
+            f'{self.correct_single_source / self.n_single_source}'
+        )
 
         correct_per_qcate = {k: np.mean(v) for k, v in self.correct_per_qcate.items()}
-        print(f'correct per cate: {correct_per_qcate}')
+        print(f'Correct per cate: {correct_per_qcate}')
 
         # classification evaluation metrics
         f1_metric = evaluate.load('f1')
@@ -118,7 +137,7 @@ def main():
     with open(args.labels, 'r', encoding='utf-8') as f:
         labels = json.load(f)
 
-    stats = RetrievalStatsCollector(len(preds))
+    stats = RetrievalStatsCollector(len(preds), split=args.split)
 
     for q, data in preds.items():
         pred_sources = [str(s) for s in data['sources']]
