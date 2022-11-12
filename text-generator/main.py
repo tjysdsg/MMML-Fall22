@@ -109,10 +109,10 @@ def attach_optimizer(args, model):
     elif args.optimizer_type == 'adafactor':
         optimizer = Adafactor(
             model.parameters(), 
-            scale_parameter=True, 
-            relative_step=True, 
-            warmup_init=True, 
-            lr=None
+            scale_parameter=False, 
+            relative_step=False, 
+            warmup_init=False, 
+            lr=args.learning_rate
         )
     else:
         raise ValueError('Invalid optimizer type')
@@ -262,7 +262,7 @@ def train(args, model, tokenizer):
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-                scheduler.step()
+                #scheduler.step()
                 
                 step += 1
                 if step % args.evaluation_steps == 0:
@@ -294,7 +294,7 @@ def inference(args, model, tokenizer):
 
     model.load_state_dict(
         torch.load(
-            os.path.join(args.ckpt_save_dir, 'best_{}4{}.ckpt'.format(args.model_type, args.task))
+            os.path.join(args.ckpt_save_dir, 'best_{}4{}-firstrun.ckpt'.format(args.model_type, args.task))
     ))
 
     model.eval()
@@ -307,8 +307,8 @@ def inference(args, model, tokenizer):
             pred_tokens = model.generate(
                 input_ids=batch['input_ids'],
                 attention_mask=batch['attention_mask'],
-                decoder_start_token_id=tokenizer.cls_token_id,
-                max_length=30,
+                decoder_start_token_id=tokenizer.pad_token_id,
+                max_length=128,
                 num_beams=5,
             )
             qids += batch['qids']
