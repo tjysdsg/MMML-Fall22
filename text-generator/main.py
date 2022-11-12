@@ -300,7 +300,7 @@ def inference(args, model, tokenizer):
 
     model.load_state_dict(
         torch.load(
-            os.path.join(args.ckpt_save_dir, 'best_{}4{}-firstrun.ckpt'.format(args.model_type, args.task))
+            os.path.join(args.ckpt_save_dir, 'best_{}4{}.ckpt'.format(args.model_type, args.task))
     ))
 
     model.eval()
@@ -348,7 +348,7 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_save_dir', type=str, default='../checkpoints/')
     parser.add_argument('--train_batch_size', type=int, default=8)
     parser.add_argument('--gradient_accumulation_step', type=int, default=1)
-    parser.add_argument('--val_batch_size', type=int, default=64)
+    parser.add_argument('--val_batch_size', type=int, default=32)
     parser.add_argument('--test_batch_size', type=int, default=32)
     parser.add_argument('--encoder_max_length', type=int, default=512)
     parser.add_argument('--decoder_max_length', type=int, default=256)
@@ -366,7 +366,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_logger', action='store_true')
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--use_fp16', action='store_true')
-    parser.add_argument('--decoding_max_length', type=int, default=256)
+    parser.add_argument('--decoding_max_length', type=int, default=128)
     args = parser.parse_args()
     set_seed(args)
     set_wandb(args)
