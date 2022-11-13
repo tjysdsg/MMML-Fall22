@@ -10,14 +10,16 @@ class WebQATestDataset(Dataset):
     def __init__(self, 
                  args, 
                  tokenizer,
-                 question_prefix='question:',
-                 title_prefix='title:',
-                 passage_prefix='context:'):
+                 question_prefix='question: ',
+                 context_prefix='context:',
+                 txt_fact_prefix='This is text.',
+                 img_fact_prefix='This is a image.'):
         self.args = args
         self.tokenizer = tokenizer
         self.data = self.build_dataset()
-        self.question_prefix = tokenizer.encode(question_prefix, add_special_tokens=False)
-        self.passage_prefix = tokenizer.encode(passage_prefix, add_special_tokens=False)
+        self.context_prefix = tokenizer.encode(context_prefix, add_special_tokens=False)
+        self.txt_fact_prefix = tokenizer.encode(txt_fact_prefix, add_special_tokens=False)
+        self.img_fact_prefix = tokenizer.encode(img_fact_prefix, add_special_tokens=False)
 
     def __len__(self):
         return len(self.data)
@@ -63,10 +65,11 @@ class WebQATestDataset(Dataset):
         for instance in batch:
             token_facts = []
             tokens_question = self.question_prefix + instance['Q']
+            token_facts += self.context_prefix
             for pos_txt_fact in instance['txt_facts']:
-                token_facts += self.passage_prefix + pos_txt_fact['fact']
+                token_facts += self.txt_fact_prefix + pos_txt_fact['fact']
             for pos_img_fact in instance['img_facts']:
-                token_facts += self.passage_prefix + pos_img_fact['caption']
+                token_facts += self.img_fact_prefix + pos_img_fact['caption']
 
             batch_input_ids = tokens_question + token_facts
             batch_input_ids = batch_input_ids[:self.args.encoder_max_length-1]
@@ -97,14 +100,17 @@ class WebQADataset(Dataset):
                  args, 
                  tokenizer, 
                  split,
-                 question_prefix='question:',
-                 title_prefix='title:',
-                 passage_prefix='context:'):
+                 question_prefix='question: ',
+                 context_prefix='context:',
+                 txt_fact_prefix='This is text.',
+                 img_fact_prefix='This is a image.'):
         self.args = args
         self.tokenizer = tokenizer
         self.data = self.build_dataset(split=split)
         self.question_prefix = tokenizer.encode(question_prefix, add_special_tokens=False)
-        self.passage_prefix = tokenizer.encode(passage_prefix, add_special_tokens=False)
+        self.context_prefix = tokenizer.encode(context_prefix, add_special_tokens=False)
+        self.txt_fact_prefix = tokenizer.encode(txt_fact_prefix, add_special_tokens=False)
+        self.img_fact_prefix = tokenizer.encode(img_fact_prefix, add_special_tokens=False)
 
     def __len__(self):
         return len(self.data)
@@ -160,10 +166,11 @@ class WebQADataset(Dataset):
 
             token_facts = []
             tokens_question = self.question_prefix + instance['Q']
+            token_facts += self.context_prefix
             for pos_txt_fact in instance['pos_txt_facts']:
-                token_facts += self.passage_prefix + pos_txt_fact['fact']
+                token_facts += self.txt_fact_prefix + pos_txt_fact['fact']
             for pos_img_fact in instance['pos_img_facts']:
-                token_facts += self.passage_prefix + pos_img_fact['caption']
+                token_facts += self.img_fact_prefix + pos_img_fact['caption']
 
             batch_input_ids = tokens_question + token_facts
             batch_input_ids = batch_input_ids[:self.args.encoder_max_length-1]
@@ -175,6 +182,7 @@ class WebQADataset(Dataset):
             tokens_answer = instance['A']
             batch_labels = tokens_answer  
             batch_labels = batch_labels[:self.args.decoder_max_length-1]
+            batch_labels += [self.tokenizer.eos_token_id]
             batch_labels = torch.LongTensor(batch_labels)
             labels += [batch_labels] # get bsz x seq_len
 
