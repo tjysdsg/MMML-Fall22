@@ -17,6 +17,7 @@ class WebQATestDataset(Dataset):
         self.args = args
         self.tokenizer = tokenizer
         self.data = self.build_dataset()
+        self.question_prefix = tokenizer.encode(question_prefix, add_special_tokens=False)
         self.context_prefix = tokenizer.encode(context_prefix, add_special_tokens=False)
         self.txt_fact_prefix = tokenizer.encode(txt_fact_prefix, add_special_tokens=False)
         self.img_fact_prefix = tokenizer.encode(img_fact_prefix, add_special_tokens=False)
