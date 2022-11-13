@@ -238,7 +238,7 @@ def validate(args, val_dataloader, model, tokenizer):
 
 def train(args, model, tokenizer):
     best_ckpt_name = None
-    best_metric = {'f1': 0, 'recall': 0, 'acc': 0, 'fl': 0)}
+    best_metric = {'f1': 0, 'recall': 0, 'acc': 0, 'fl': 0}
     step = 0
     iteration = 0
     logging.info('=====begin loading dataset====')
