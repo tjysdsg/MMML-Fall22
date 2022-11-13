@@ -6,9 +6,11 @@ import math
 from tqdm import tqdm
 import random
 import pickle
+import numpy as np
 from datetime import datetime
 from pytz import timezone
 from word2number import w2n
+from bart_score import BARTScorer
 import string, re
 from collections import Counter, defaultdict
 from pprint import pprint
@@ -61,7 +63,6 @@ def normalize_text(s):
     return lemmatization(white_space_fix(remove_articles(remove_punc(lower(s)))))
 
 
-
 def _webqa_acc_approx(predction, ground_truth, domain=None):
     """VQA Eval (SQuAD style EM, F1)"""
     bow_pred = normalize_text(predction).split()
@@ -88,7 +89,8 @@ def _webqa_acc_approx(predction, ground_truth, domain=None):
     return f1, recall, precision
 
 
-def webqa_metrics_approx(prediction, ground_truth, Qcate="text"):
+
+def webqa_acc_approx(prediction, ground_truth, Qcate="text"):
     f1, recall, precision = _webqa_acc_approx(
         prediction,
         ground_truth,
@@ -103,10 +105,35 @@ def webqa_metrics_approx(prediction, ground_truth, Qcate="text"):
         }[Qcate],
     )
     if Qcate in ["color", "shape", "number", "YesNo"]:
-        accuracy = f1
+        acc = f1
     else:
-        accuracy = recall
-    return {"acc_approx": accuracy}
+        acc = recall
+    return {"acc_approx": acc}
+
+
+TABLE = str.maketrans(dict.fromkeys(string.punctuation)) 
+
+def normalize_text_for_bart(x): # Light text normalization for WebQA eval: white space fix + punctuation removal
+    return " ".join(x.translate(TABLE).split())
+
+
+def compute_bartscore_ParaBank(c, a, model, switch=False):
+    c_removepunc = [normalize_text_for_bart(x) for x in c]
+    a_removepunc = [normalize_text_for_bart(x) for x in a]
+    if switch: score = np.exp(model.score(c_removepunc, a_removepunc))
+    else: score = np.exp(model.score(a_removepunc, c_removepunc))
+    return score
+
+
+def webqa_fl(predictions, ground_truths):
+    model = BARTScorer(device='cuda:0', checkpoint='facebook/bart-large-cnn')
+    model.load(path='../bart_score.pth') # Please change the path to bart.pth
+    score = compute_bartscore_ParaBank(predictions, ground_truths, model)
+    score = score.tolist()
+    fl = sum(score) / len(score)
+    return {'fl': fl}
+
+
 
 if __name__ == '__main__':
     prediction = 'yes, it is a blue circle'

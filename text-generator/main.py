@@ -18,7 +18,7 @@ from dataset import WebQADataset, WebQATestDataset
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torch.nn.parallel import DistributedDataParallel as DDP
-from val_eval import webqa_metrics_approx
+from val_eval import webqa_acc_approx, webqa_fl
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -145,15 +145,16 @@ def attach_scheduler(args, optimizer, train_dataloader):
 
 def save_model(best_ckpt_name, metric, best_metric):
     eps = 1e-5
-    if metric['acc'] > (best_metric['acc'] + eps):
+    if (metric['acc']*metric['fl']) > ((best_metric['acc']*best_metric['fl']) + eps):
         if best_ckpt_name is not None:
             os.remove(os.path.join(args.ckpt_save_dir,best_ckpt_name))
-        best_ckpt_name = 'best_{}4{}_f1{}_recall{}_acc{}_{}.ckpt'.format(
+        best_ckpt_name = 'best_{}4{}_f1_{}_recall_{}_acc_{}_fl_{}_{}.ckpt'.format(
             args.model_type, 
             args.task, 
             round(metric['f1'],3), 
             round(metric['recall'],3),
             round(metric['acc'],3),
+            round(metric['fl'],3),
             args.timestamp
         )
         output_model_file = os.path.join(args.ckpt_save_dir, best_ckpt_name)
@@ -162,6 +163,7 @@ def save_model(best_ckpt_name, metric, best_metric):
         best_metric['f1'] = metric['f1']
         best_metric['recall'] = metric['recall']
         best_metric['acc'] = metric['acc']
+        best_metric['fl'] = metric['fl']
     return best_ckpt_name, best_metric
 
 
@@ -212,9 +214,11 @@ def validate(args, val_dataloader, model, tokenizer):
         'f1': [],
         'recall': [],
         'acc': [],
+        'fl': 0,
     }
+    eval_metric['fl'] = webqa_fl(preds, refs)['fl']
     for pred, ref, Qcate in zip(preds, refs, Qcates):
-        eval_output = webqa_metrics_approx(pred, ref, Qcate)['acc_approx']
+        eval_output = webqa_acc_approx(pred, ref, Qcate)['acc_approx']
         eval_metric[Qcate].append(eval_output)
         if Qcate in ['color', 'shape', 'number', 'YesNo']:
             eval_metric['f1'].append(eval_output)
@@ -222,6 +226,8 @@ def validate(args, val_dataloader, model, tokenizer):
             eval_metric['recall'].append(eval_output)
         eval_metric['acc'].append(eval_output)
     for key, value in eval_metric.items():
+        if key == 'fl':
+            continue
         if len(eval_metric[key]) == 0:
             eval_metric[key] = 0
         else:
@@ -232,7 +238,7 @@ def validate(args, val_dataloader, model, tokenizer):
 
 def train(args, model, tokenizer):
     best_ckpt_name = None
-    best_metric = {'f1': -float('inf'), 'recall': -float('inf'), 'acc': -float('inf')}
+    best_metric = {'f1': -float('inf'), 'recall': -float('inf'), 'acc': -float('inf'), 'fl': -float('inf')}
     step = 0
     iteration = 0
     logging.info('=====begin loading dataset====')
@@ -278,10 +284,14 @@ def train(args, model, tokenizer):
                         wandb.log({'eval_f1': metric['f1'], 'step': step})
                         wandb.log({'eval_recall': metric['recall'], 'step': step})
                         wandb.log({'eval_acc': metric['acc'], 'step': step})
+                        wandb.log({'eval_FL': metric['fl'], 'step': step})
+                        wandb.log({'eval_qa': metric['acc']*metric['fl'], 'step': step})
                     if args.use_logger:
                         logging.info('eval f1 : {}'.format(metric['f1']))
                         logging.info('eval recall : {}'.format(metric['recall']))
                         logging.info('eval acc : {}'.format(metric['acc']))
+                        logging.info('eval fl : {}'.format(metric['fl']))
+                        logging.info('eval qa : {}'.format(metric['acc']*metric['fl']))
 
                 if args.use_wandb:
                     wandb.log({'train loss': sum(step_losses)/len(step_losses), 'step': step})
