@@ -155,3 +155,11 @@ th = 0.95
    re.mean = 0.10066195826147249
    f1.mean = 0.10734452239323374
 ```
+
+## Same as above, but without image input
+
+Threshold = 0.2
+
+- Pr = 0.36
+- Re = 0.33
+- F1 = 0.33

@@ -396,18 +396,12 @@ def validate(
                 score_dict[th][1].append(re)
                 score_dict[th][2].append(f1)
 
-        if not silent:
-            logger.info(qa_loss)
-            logger.info(filter_loss)
-            logger.info(loss)
-            logger.info(f"Mean total loss = {np.mean(all_loss)}")
-
     for th in score_dict:
         score_dict[th][0] = np.mean(score_dict[th][0])
         score_dict[th][1] = np.mean(score_dict[th][1])
         score_dict[th][2] = np.mean(score_dict[th][2])
 
-    torch.cuda.empty_cache()
+    logger.info(score_dict)
     return np.mean(all_loss), score_dict
 
 
