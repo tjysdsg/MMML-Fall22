@@ -145,8 +145,7 @@ def attach_scheduler(args, optimizer, train_dataloader):
 
 def save_model(best_ckpt_name, metric, best_metric):
     eps = 1e-5
-    if (metric['acc']*metric['fl']) > ((best_metric['acc']*best_metric['fl']) + eps) and \
-        best_metric['acc'] > 0 and best_metric['fl'] > 0:
+    if (metric['acc']*metric['fl']) > ((best_metric['acc']*best_metric['fl']) + eps):
         if best_ckpt_name is not None:
             os.remove(os.path.join(args.ckpt_save_dir,best_ckpt_name))
         best_ckpt_name = 'best_{}4{}_f1_{}_recall_{}_acc_{}_fl_{}_{}.ckpt'.format(
@@ -239,7 +238,7 @@ def validate(args, val_dataloader, model, tokenizer):
 
 def train(args, model, tokenizer):
     best_ckpt_name = None
-    best_metric = {'f1': -float('inf'), 'recall': -float('inf'), 'acc': -float('inf'), 'fl': -float('inf')}
+    best_metric = {'f1': 0, 'recall': 0, 'acc': 0, 'fl': 0)}
     step = 0
     iteration = 0
     logging.info('=====begin loading dataset====')
