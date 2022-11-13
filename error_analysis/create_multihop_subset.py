@@ -24,7 +24,7 @@ def main():
     print(len(res))
 
     with open(args.output, 'w', encoding='utf-8') as f:
-        json.dump(res, f)
+        json.dump(res, f, indent=4)
 
 
 if __name__ == '__main__':

@@ -36,11 +36,11 @@ def main():
         roberta_unique[k] = roberta[k]
 
     with open(os.path.join(out_dir, 'common_error_subset.json'), 'w', encoding='utf-8') as f:
-        json.dump(common, f)
+        json.dump(common, f, indent=4)
     with open(os.path.join(out_dir, 'vlp_unique_error_subset.json'), 'w', encoding='utf-8') as f:
-        json.dump(vlp_unique, f)
+        json.dump(vlp_unique, f, indent=4)
     with open(os.path.join(out_dir, 'roberta_unique_error_subset.json'), 'w', encoding='utf-8') as f:
-        json.dump(roberta_unique, f)
+        json.dump(roberta_unique, f, indent=4)
 
 
 if __name__ == '__main__':
