@@ -140,8 +140,7 @@ def main():
     stats = RetrievalStatsCollector(len(preds), split=args.split)
 
     for q, data in preds.items():
-        pred_sources = [str(s) for s in data['sources']]
-        stats.update(pred_sources, labels[q])
+        stats.update(data['sources'], labels[q])
 
     stats.summary()
 
