@@ -376,7 +376,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_logger', action='store_true')
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--use_fp16', action='store_true')
-    parser.add_argument('--decoding_max_length', type=int, default=128)
+    parser.add_argument('--decoding_max_length', type=int, default=30)
     args = parser.parse_args()
     set_seed(args)
     set_wandb(args)

@@ -128,7 +128,10 @@ def compute_bartscore_ParaBank(c, a, model, switch=False):
 def webqa_fl(predictions, ground_truths):
     model = BARTScorer(device='cuda:0', checkpoint='facebook/bart-large-cnn')
     model.load(path='../bart_score.pth') # Please change the path to bart.pth
+    normalizer = compute_bartscore_ParaBank(ground_truths, ground_truths, model)
     score = compute_bartscore_ParaBank(predictions, ground_truths, model)
+    normalized_score = score / np.array(normalizer)
+    normalized_score[normalized_score > 1] = 1
     score = score.tolist()
     fl = sum(score) / len(score)
     return {'fl': fl}
