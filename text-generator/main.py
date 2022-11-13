@@ -145,7 +145,7 @@ def attach_scheduler(args, optimizer, train_dataloader):
 
 def save_model(best_ckpt_name, metric, best_metric):
     eps = 1e-5
-    if (metric['acc']*metric['fl']) > ((best_metric['acc']*best_metric['fl']) + eps) and
+    if (metric['acc']*metric['fl']) > ((best_metric['acc']*best_metric['fl']) + eps) and \
         best_metric['acc'] > 0 and best_metric['fl'] > 0:
         if best_ckpt_name is not None:
             os.remove(os.path.join(args.ckpt_save_dir,best_ckpt_name))
