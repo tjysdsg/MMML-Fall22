@@ -130,10 +130,10 @@ def webqa_fl(predictions, ground_truths):
     model.load(path='../bart_score.pth') # Please change the path to bart.pth
     normalizer = compute_bartscore_ParaBank(ground_truths, ground_truths, model)
     score = compute_bartscore_ParaBank(predictions, ground_truths, model)
-    normalized_score = score / np.array(normalizer)
-    normalized_score[normalized_score > 1] = 1
-    score = score.tolist()
-    fl = sum(score) / len(score)
+    norm_score = score / normalizer
+    norm_score[norm_score > 1] = 1
+    norm_score = norm_score.tolist()
+    fl = sum(norm_score) / len(norm_score)
     return {'fl': fl}
 
 
