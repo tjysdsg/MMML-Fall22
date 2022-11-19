@@ -11,7 +11,7 @@ import jsonlines
 import torch.distributed as dist
 import torch.nn.functional as F
 from tqdm import tqdm, trange
-from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import T5Tokenizer, T5ForConditionalGeneration, AdamW
 from transformers import Adafactor, get_cosine_schedule_with_warmup
 from transformers.optimization import AdafactorSchedule
 from dataset import WebQADataset, WebQATestDataset
