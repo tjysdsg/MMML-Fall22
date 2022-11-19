@@ -663,6 +663,7 @@ text-retriever/checkpoints/
 text-retriever/apex/
 image-caption/*.jsonl
 text-generator/data/
+!text-generator/data/WebQA_test_data/submission_test.json
 text-generator/cache/
 text-generator/raw_data/
 text-generator/WebQA_tmp/
