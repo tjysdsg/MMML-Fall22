@@ -1,7 +1,7 @@
-vqa_root: '/export/share/datasets/vision/VQA/Images/mscoco/' #followed by train2014/
-vg_root: '/export/share/datasets/vision/visual-genome/'  #followed by image/
-train_files: [ 'vqa_train','vqa_val','vg_qa' ]
-ann_root: 'annotation'
+train_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
+val_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
+test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
+image_dir: '/ocean/projects/cis210027p/shared/corpora/webqa/images'
 
 # set pretrained as a file path or an url
 pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth'

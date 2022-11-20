@@ -1,10 +1,3 @@
-'''
- * Copyright (c) 2022, salesforce.com, inc.
- * All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- * For full license text, see LICENSE.txt file in the repo root or https://opensource.org/licenses/BSD-3-Clause
- * By Junnan Li
-'''
 import argparse
 import os
 import ruamel_yaml as yaml
@@ -14,19 +7,17 @@ import time
 import datetime
 import json
 from pathlib import Path
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-
-from models.blip_vqa import blip_vqa
+from models.blip_webqa import blip_vqa
 import utils
 from utils import cosine_lr_schedule
 from data import create_dataset, create_sampler, create_loader
-from data.vqa_dataset import vqa_collate_fn
+from data.webqa_dataset import webqa_collate_fn
 from data.utils import save_result
 
 
@@ -38,7 +29,7 @@ def train(model, data_loader, optimizer, epoch, device):
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('loss', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
 
-    header = 'Train Epoch: [{}]'.format(epoch)
+    header = f'Train Epoch: [{epoch}]'
     print_freq = 50
 
     for i, (image, question, answer, weights, n) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
@@ -108,8 +99,8 @@ def main(args, config):
     cudnn.benchmark = True
 
     #### Dataset #### 
-    print("Creating vqa datasets")
-    datasets = create_dataset('vqa', config)
+    print("Creating webqa datasets")
+    datasets = create_dataset('webqa', config)
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -118,11 +109,12 @@ def main(args, config):
     else:
         samplers = [None, None]
 
-    train_loader, test_loader = create_loader(datasets, samplers,
-                                              batch_size=[config['batch_size_train'], config['batch_size_test']],
-                                              num_workers=[4, 4], is_trains=[True, False],
-                                              collate_fns=[vqa_collate_fn, None])
-    #### Model #### 
+    train_loader, val_loader = create_loader(datasets, samplers,
+                                             batch_size=[config['batch_size_train'], config['batch_size_test']],
+                                             num_workers=[4, 4], is_trains=[True, False],
+                                             collate_fns=[webqa_collate_fn, None])
+
+    #### Model ####
     print("Creating model")
     model = blip_vqa(pretrained=config['pretrained'], image_size=config['image_size'],
                      vit=config['vit'], vit_grad_ckpt=config['vit_grad_ckpt'], vit_ckpt_layer=config['vit_ckpt_layer'])
@@ -170,7 +162,7 @@ def main(args, config):
 
         dist.barrier()
 
-    vqa_result = evaluation(model_without_ddp, test_loader, device, config)
+    vqa_result = evaluation(model_without_ddp, val_loader, device, config)
     result_file = save_result(vqa_result, args.result_dir, 'vqa_result')
 
     total_time = time.time() - start_time
@@ -178,10 +170,10 @@ def main(args, config):
     print('Training time {}'.format(total_time_str))
 
 
-if __name__ == '__main__':
+def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='./configs/vqa.yaml')
-    parser.add_argument('--output_dir', default='output/VQA')
+    parser.add_argument('--config', default='./configs/webqa.yaml')
+    parser.add_argument('--output_dir', default='output/WebQA')
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
@@ -198,5 +190,8 @@ if __name__ == '__main__':
     Path(args.result_dir).mkdir(parents=True, exist_ok=True)
 
     yaml.dump(config, open(os.path.join(args.output_dir, 'config.yaml'), 'w'))
+    return args, config
 
-    main(args, config)
+
+if __name__ == '__main__':
+    main(*load_args_configs())
