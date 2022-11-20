@@ -10,7 +10,6 @@ from data.utils import pre_question, pre_caption
 import torch.nn.functional as F
 
 
-# TODO
 class WebQADataset(Dataset):
     def __init__(
             self, data_json, transform, image_dir, eos='[SEP]', split="train", max_ques_words=30,
@@ -55,7 +54,7 @@ class WebQADataset(Dataset):
 
                         # ========================
                         self.instance_list.append(
-                            (gold_text_facts, gold_img_and_caps, Q, A, question_id)
+                            (gold_text_facts, gold_img_and_caps, Q, A, question_id, datum['Qcate'])
                         )
                         count += 1
 
@@ -103,7 +102,7 @@ class WebQADataset(Dataset):
             answers: a list of strings
         """
 
-        text_facts, img_and_caps, Q, A, question_id = self.instance_list[index]
+        text_facts, img_and_caps, Q, A, question_id, qcate = self.instance_list[index]
 
         # [(channel, width, height), ...]
         images = [self.transform(Image.open(img_path).convert('RGB')) for img_path, _ in img_and_caps]
@@ -114,6 +113,8 @@ class WebQADataset(Dataset):
             captions,
             pre_question(Q, self.max_ques_words),
             pre_question(A, self.max_ques_words),
+            question_id,
+            qcate,
         )
 
 
@@ -127,8 +128,8 @@ def webqa_collate_fn(batch):
         - n_facts: a list of integers
     """
     max_n_facts = 0
-    image_lists, caption_lists, questions, answers, n_facts = [], [], [], [], []
-    for image, caption, question, answer in batch:
+    image_lists, caption_lists, questions, answers, n_facts, question_ids, qcates = [], [], [], [], [], [], []
+    for image, caption, question, answer, qid, qcate in batch:
         image_lists.append(image)
         max_n_facts = max(max_n_facts, image.size(0))
 
@@ -137,9 +138,12 @@ def webqa_collate_fn(batch):
         questions.append(question)
         answers.append(answer)
 
+        question_ids.append(qid)
+        qcates.append(qcate)
+
     image_pad = [
         F.pad(img, (0, 0, 0, 0, 0, 0, 0, max_n_facts - img.size(0)))
         for img in image_lists
     ]
     image_pad = torch.stack(image_pad)
-    return image_pad, caption_lists, questions, answers, n_facts
+    return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates

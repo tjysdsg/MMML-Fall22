@@ -3,8 +3,6 @@ import os
 import ruamel_yaml as yaml
 import numpy as np
 import random
-import time
-import datetime
 import json
 from pathlib import Path
 import torch
@@ -15,13 +13,48 @@ import utils
 from utils import cosine_lr_schedule
 from data import create_dataset, create_sampler, create_loader
 from data.webqa_dataset import webqa_collate_fn
-from data.utils import save_result
 
 
-# from apex import amp
+def train(config, args, model, train_loader, device):
+    model_without_ddp = model
+    if args.distributed:
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model_without_ddp = model.module
+
+    optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay'])
+
+    print("Start training")
+    for epoch in range(0, config['max_epoch']):
+        if not args.inference:
+            if args.distributed:
+                train_loader.sampler.set_epoch(epoch)
+
+            cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
+
+            train_stats = train_1epoch(config, model, train_loader, optimizer, epoch, device)
+        else:
+            break
+
+        if utils.is_main_process():
+            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                         'epoch': epoch,
+                         }
+            with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
+                f.write(json.dumps(log_stats) + "\n")
+
+            save_obj = {
+                'model': model_without_ddp.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'config': config,
+                'epoch': epoch,
+            }
+            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth' % epoch))
+
+        if args.distributed:
+            dist.barrier()
 
 
-def train(config, model, data_loader, optimizer, epoch, device):
+def train_1epoch(config, model, data_loader, optimizer, epoch, device):
     # train
     model.train()
 
@@ -38,13 +71,11 @@ def train(config, model, data_loader, optimizer, epoch, device):
     assert grad_clip > 0
 
     for i, (
-            images, captions, question, answer, n_facts
+            images, captions, question, answer, n_facts, _, _,
     ) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         images = images.to(device, non_blocking=True)
         loss = model(images, captions, question, answer, n_facts, train=True)
 
-        # with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #     scaled_loss.backward()
         loss = loss / grad_accum
         loss.backward()
 
@@ -59,42 +90,25 @@ def train(config, model, data_loader, optimizer, epoch, device):
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger.global_avg())
-    return {k: "{:.3f}".format(meter.global_avg) for k, meter in metric_logger.meters.items()}
+    return {k: f"{meter.global_avg:.3f}" for k, meter in metric_logger.meters.items()}
 
 
 @torch.no_grad()
-def evaluation(model, data_loader, device, config):
-    # FIXME:
-    # test
+def inference(config, model, data_loader, device):
     model.eval()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
-    header = 'Generate VQA test result:'
+    header = 'Inference:'
     print_freq = 50
 
     result = []
+    for i, (images, captions, question, answer, n_facts, question_ids, qcates) in enumerate(
+            metric_logger.log_every(data_loader, print_freq, header)):
+        images = images.to(device, non_blocking=True)
+        pred = model(images, captions, question, answer, n_facts, train=False)
 
-    if config['inference'] == 'rank':
-        answer_list = data_loader.dataset.answer_list
-        answer_candidates = model.tokenizer(answer_list, padding='longest', return_tensors='pt').to(device)
-        answer_candidates.input_ids[:, 0] = model.tokenizer.bos_token_id
-
-    for n, (image, question, question_id) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        image = image.to(device, non_blocking=True)
-
-        if config['inference'] == 'generate':
-            answers = model(image, question, train=False, inference='generate')
-
-            for answer, ques_id in zip(answers, question_id):
-                ques_id = int(ques_id.item())
-                result.append({"question_id": ques_id, "answer": answer})
-
-        elif config['inference'] == 'rank':
-            answer_ids = model(image, question, answer_candidates, train=False, inference='rank',
-                               k_test=config['k_test'])
-
-            for ques_id, answer_id in zip(question_id, answer_ids):
-                result.append({"question_id": int(ques_id.item()), "answer": answer_list[answer_id]})
+        for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
+            result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
 
     return result
 
@@ -124,7 +138,7 @@ def main(args, config):
     train_loader, val_loader = create_loader(datasets, samplers,
                                              batch_size=[config['batch_size_train'], config['batch_size_test']],
                                              num_workers=[4, 4], is_trains=[True, False],
-                                             collate_fns=[webqa_collate_fn, None])
+                                             collate_fns=[webqa_collate_fn, webqa_collate_fn])
 
     #### Model ####
     print("Creating model")
@@ -133,59 +147,21 @@ def main(args, config):
 
     model = model.to(device)
 
-    model_without_ddp = model
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model_without_ddp = model.module
-
-    optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay'])
-
-    # model, optimizer = amp.initialize(model, optimizer, opt_level="O2")
-
-    print("Start training")
-    start_time = time.time()
-    for epoch in range(0, config['max_epoch']):
-        if not args.evaluate:
-            if args.distributed:
-                train_loader.sampler.set_epoch(epoch)
-
-            cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
-
-            train_stats = train(config, model, train_loader, optimizer, epoch, device)
-
-        else:
-            break
-
-        if utils.is_main_process():
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         'epoch': epoch,
-                         }
-            with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
-            save_obj = {
-                'model': model_without_ddp.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'config': config,
-                'epoch': epoch,
-            }
-            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth' % epoch))
-
-        dist.barrier()
-
-    vqa_result = evaluation(model_without_ddp, val_loader, device, config)
-    result_file = save_result(vqa_result, args.result_dir, 'vqa_result')
-
-    total_time = time.time() - start_time
-    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
+    if args.inference:
+        result = inference(config, model, val_loader, device)
+        result_file = os.path.join(args.output_dir, 'eval_pred.json')
+        with open(result_file, 'w') as f:
+            json.dump(result, f)
+        print(f'result file saved to {result_file}')
+    else:
+        train(config, args, model, train_loader, device)
 
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='./configs/webqa.yaml')
     parser.add_argument('--output_dir', default='output/WebQA')
-    parser.add_argument('--evaluate', action='store_true')
+    parser.add_argument('--inference', action='store_true')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')

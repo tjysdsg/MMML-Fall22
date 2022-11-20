@@ -1,7 +1,10 @@
+# data related
 train_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 val_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
 image_dir: '/ocean/projects/cis210027p/shared/corpora/webqa/images'
+
+image_size: 480
 
 # set pretrained as a file path or an url
 pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth'
@@ -13,11 +16,6 @@ batch_size_test: 32
 vit_grad_ckpt: False
 vit_ckpt_layer: 0
 init_lr: 2e-5
-
-image_size: 480
-
-k_test: 128
-inference: 'rank'
 
 # optimizer
 weight_decay: 0.05
