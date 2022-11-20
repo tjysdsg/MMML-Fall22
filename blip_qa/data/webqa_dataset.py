@@ -1,11 +1,13 @@
 import os
 from random import shuffle
 import json
+
+import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from typing import List, Literal
-from data.utils import pre_question
-import torch
+from data.utils import pre_question, pre_caption
+import torch.nn.functional as F
 
 
 # TODO
@@ -93,28 +95,51 @@ class WebQADataset(Dataset):
         return len(self.instance_list)
 
     def __getitem__(self, index):
+        """
+        :return:
+            images: (n_facts, channel, H, W)
+            captions: a list of strings
+            questions: a list of strings
+            answers: a list of strings
+        """
+
         text_facts, img_and_caps, Q, A, question_id = self.instance_list[index]
 
+        # [(channel, width, height), ...]
         images = [self.transform(Image.open(img_path).convert('RGB')) for img_path, _ in img_and_caps]
-        captions = [cap for _, cap in img_and_caps]
+        captions = [pre_caption(cap, self.max_ques_words) for _, cap in img_and_caps]
 
-        print(f'Q before: {Q}')
-        Q = pre_question(Q, self.max_ques_words)
-        print(f'Q after: {Q}')
-
-        # FIXME: answer
-        answers = [A]
-        weights = [0.5]
-        return images, captions, Q, answers, weights
+        return (
+            torch.stack(images),
+            captions,
+            pre_question(Q, self.max_ques_words),
+            pre_question(A, self.max_ques_words),
+        )
 
 
 def webqa_collate_fn(batch):
-    image_list, question_list, answer_list, weight_list, n = [], [], [], [], []
-    for image, question, answer, weights in batch:
-        image_list.append(image)
-        question_list.append(question)
-        weight_list += weights
-        answer_list += answer
-        n.append(len(answer))
+    """
+    :return:
+        - image_pad: (batch, n_facts, channel, H, W), with 0 padded to the end of n_facts dimension
+        - caption_lists: a batch of list of captions
+        - questions: a batch of questions
+        - answers: a batch of answers
+        - n_facts: a list of integers
+    """
+    max_n_facts = 0
+    image_lists, caption_lists, questions, answers, n_facts = [], [], [], [], []
+    for image, caption, question, answer in batch:
+        image_lists.append(image)
+        max_n_facts = max(max_n_facts, image.size(0))
 
-    return torch.stack(image_list, dim=0), question_list, answer_list, torch.Tensor(weight_list), n
+        n_facts.append(image.size(0))
+        caption_lists.append(caption)
+        questions.append(question)
+        answers.append(answer)
+
+    image_pad = [
+        F.pad(img, (0, 0, 0, 0, 0, 0, 0, max_n_facts - img.size(0)))
+        for img in image_lists
+    ]
+    image_pad = torch.stack(image_pad)
+    return image_pad, caption_lists, questions, answers, n_facts
