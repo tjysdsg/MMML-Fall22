@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 
+cv2.setNumThreads(1)
+
 
 ## aug functions
 def identity_func(img):
