@@ -32,10 +32,11 @@ def train(model, data_loader, optimizer, epoch, device):
     header = f'Train Epoch: [{epoch}]'
     print_freq = 50
 
-    for i, (image, question, answer, weights, n) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        image, weights = image.to(device, non_blocking=True), weights.to(device, non_blocking=True)
-
-        loss = model(image, question, answer, train=True, n=n, weights=weights)
+    for i, (
+            images, captions, question, answer, n_facts
+    ) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        images = images.to(device, non_blocking=True)
+        loss = model(images, captions, question, answer, n_facts, train=True)
 
         optimizer.zero_grad()
         loss.backward()
@@ -52,6 +53,7 @@ def train(model, data_loader, optimizer, epoch, device):
 
 @torch.no_grad()
 def evaluation(model, data_loader, device, config):
+    # FIXME:
     # test
     model.eval()
 
@@ -88,8 +90,7 @@ def evaluation(model, data_loader, device, config):
 
 def main(args, config):
     utils.init_distributed_mode(args)
-
-    device = torch.device(args.device)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
@@ -175,7 +176,6 @@ def load_args_configs():
     parser.add_argument('--config', default='./configs/webqa.yaml')
     parser.add_argument('--output_dir', default='output/WebQA')
     parser.add_argument('--evaluate', action='store_true')
-    parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
