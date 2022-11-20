@@ -68,7 +68,8 @@ def create_dataset(dataset, config, min_scale=0.5):
     elif dataset == 'webqa':
         train_dataset = WebQADataset(config['train_file'], transform_train, config['image_dir'], split='train')
         val_dataset = WebQADataset(config['val_file'], transform_test, config['image_dir'], split='val')
-        return train_dataset, val_dataset
+        test_dataset = WebQADataset(config['test_file'], transform_test, config['image_dir'], split='test')
+        return train_dataset, val_dataset, test_dataset
 
     elif dataset == 'nlvr':
         train_dataset = nlvr_dataset(transform_train, config['image_root'], config['ann_root'], 'train')

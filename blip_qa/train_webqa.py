@@ -84,7 +84,7 @@ def train_1epoch(config, model, data_loader, optimizer, epoch, device):
             optimizer.step()
             optimizer.zero_grad()
 
-        metric_logger.update(loss=loss.item() / grad_accum)
+        metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
     # gather the stats from all processes
@@ -135,10 +135,12 @@ def main(args, config):
     else:
         samplers = [None, None]
 
-    train_loader, val_loader = create_loader(datasets, samplers,
-                                             batch_size=[config['batch_size_train'], config['batch_size_test']],
-                                             num_workers=[4, 4], is_trains=[True, False],
-                                             collate_fns=[webqa_collate_fn, webqa_collate_fn])
+    train_loader, val_loader, test_loader = create_loader(
+        datasets, samplers,
+        batch_size=[config['batch_size_train'], config['batch_size_test'], config['batch_size_test']],
+        num_workers=[4, 4, 4], is_trains=[True, False, False],
+        collate_fns=[webqa_collate_fn, webqa_collate_fn, webqa_collate_fn]
+    )
 
     #### Model ####
     print("Creating model")
@@ -148,8 +150,16 @@ def main(args, config):
     model = model.to(device)
 
     if args.inference:
-        result = inference(config, model, val_loader, device)
-        result_file = os.path.join(args.output_dir, 'eval_pred.json')
+        # inference split
+        inference_split = args.inference_split
+        if inference_split == 'val':
+            result = inference(config, model, val_loader, device)
+        elif inference_split == 'test':
+            result = inference(config, model, test_loader, device)
+        else:
+            raise RuntimeError(f"Invalid --inference_split: {inference_split}")
+
+        result_file = os.path.join(args.output_dir, f'{args.inference_split}_pred.json')
         with open(result_file, 'w') as f:
             json.dump(result, f)
         print(f'result file saved to {result_file}')
@@ -162,6 +172,7 @@ def load_args_configs():
     parser.add_argument('--config', default='./configs/webqa.yaml')
     parser.add_argument('--output_dir', default='output/WebQA')
     parser.add_argument('--inference', action='store_true')
+    parser.add_argument('--inference_split', type=str, default='val')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
