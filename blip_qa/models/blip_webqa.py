@@ -154,16 +154,21 @@ class BLIP_VQA(nn.Module):
         decoder_config = BertConfig.from_json_file(med_config)
         self.text_decoder = BertLMHeadModel(config=decoder_config)
 
-    def encode_images(self, images: torch.Tensor):
+    def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
         :param images: (batch, n_facts, channel, H, W)
-        :return: (batch, n_facts, embed_size)
+        :param n_facts: Number of image facts in each sample in the batch
+        :return:
+            - image_embeds: (batch, n_facts * seq_len, embed_size)
+            - lengths: Valid lengths (dim 1) of image_embeds
         """
         batch_size, max_n_facts, C, H, W = images.shape
         images = images.view(-1, C, H, W)
-        image_embeds = self.visual_encoder(images)
-        print(image_embeds.shape)
-        return image_embeds
+        image_embeds = self.visual_encoder(images)  # (batch * n_facts, seq_len, embed_size)
+
+        n_facts = [nf * image_embeds.size(1) for nf in n_facts]
+        image_embeds = image_embeds.view(batch_size, max_n_facts * image_embeds.size(1), image_embeds.size(2))
+        return image_embeds, n_facts
 
     def forward(
             self,
@@ -188,16 +193,17 @@ class BLIP_VQA(nn.Module):
         :return:
         """
 
-        image_embeds = self.encode_images(image)
-        image_atts = make_pad_mask(n_facts, image_embeds, 1).to(image.device)
+        image_embeds, lengths = self.encode_images(image, n_facts)
+        image_atts = make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
         question = self.tokenizer(question, padding='longest',  # truncation=True, max_length=35,
                                   return_tensors="pt").to(image.device)
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
 
-        # concatenate captions with '[SEP]' and tokenize them
+        # concatenate captions and tokenize them
+        captions = [' '.join(cap) for cap in captions]
         captions = self.tokenizer(
-            self.tokenizer.sep_token.join(captions), padding='longest', return_tensors="pt"
+            captions, padding='longest', return_tensors="pt"
         ).to(image.device)
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
 

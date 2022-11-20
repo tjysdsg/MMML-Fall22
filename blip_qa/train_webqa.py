@@ -8,9 +8,6 @@ import datetime
 import json
 from pathlib import Path
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from models.blip_webqa import blip_vqa
@@ -21,7 +18,10 @@ from data.webqa_dataset import webqa_collate_fn
 from data.utils import save_result
 
 
-def train(model, data_loader, optimizer, epoch, device):
+# from apex import amp
+
+
+def train(config, model, data_loader, optimizer, epoch, device):
     # train
     model.train()
 
@@ -32,17 +32,28 @@ def train(model, data_loader, optimizer, epoch, device):
     header = f'Train Epoch: [{epoch}]'
     print_freq = 50
 
+    grad_accum = config['grad_accum']
+    assert grad_accum >= 1
+    grad_clip = config['grad_clip']
+    assert grad_clip > 0
+
     for i, (
             images, captions, question, answer, n_facts
     ) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         images = images.to(device, non_blocking=True)
         loss = model(images, captions, question, answer, n_facts, train=True)
 
-        optimizer.zero_grad()
+        # with amp.scale_loss(loss, optimizer) as scaled_loss:
+        #     scaled_loss.backward()
+        loss = loss / grad_accum
         loss.backward()
-        optimizer.step()
 
-        metric_logger.update(loss=loss.item())
+        if (i + 1) % grad_accum == 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            optimizer.step()
+            optimizer.zero_grad()
+
+        metric_logger.update(loss=loss.item() / grad_accum)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
     # gather the stats from all processes
@@ -129,8 +140,7 @@ def main(args, config):
 
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay'])
 
-    best = 0
-    best_epoch = 0
+    # model, optimizer = amp.initialize(model, optimizer, opt_level="O2")
 
     print("Start training")
     start_time = time.time()
@@ -141,7 +151,7 @@ def main(args, config):
 
             cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
-            train_stats = train(model, train_loader, optimizer, epoch, device)
+            train_stats = train(config, model, train_loader, optimizer, epoch, device)
 
         else:
             break
@@ -179,7 +189,7 @@ def load_args_configs():
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
-    parser.add_argument('--distributed', default=True, type=bool)
+    parser.add_argument('--distributed', default=False, type=bool)
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
