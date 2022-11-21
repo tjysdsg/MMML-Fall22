@@ -131,9 +131,9 @@ def main(args, config):
     if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
-        samplers = create_sampler(datasets, [True, False], num_tasks, global_rank)
+        samplers = create_sampler(datasets, [True, False, False], num_tasks, global_rank)
     else:
-        samplers = [None, None]
+        samplers = [None, None, None]
 
     train_loader, val_loader, test_loader = create_loader(
         datasets, samplers,

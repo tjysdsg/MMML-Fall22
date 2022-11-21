@@ -1,7 +1,8 @@
 # data related
 train_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 val_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
-test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
+# TODO: test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
+test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 image_dir: '/ocean/projects/cis210027p/shared/corpora/webqa/images'
 
 image_size: 480
