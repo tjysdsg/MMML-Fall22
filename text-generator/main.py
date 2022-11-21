@@ -265,7 +265,7 @@ def train(args, model, tokenizer):
                     decoder_attention_mask=batch['decoder_attention_mask'],
                     attention_mask=batch['attention_mask'],
                 )
-                loss = outputs.loss
+                loss = outputs.loss / args.gradient_accumulation_steps
                 scaler.scale(loss).backward()
                 step_losses.append(loss.item())
 
