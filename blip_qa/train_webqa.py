@@ -166,8 +166,8 @@ def main(args, config):
     cudnn.benchmark = True
 
     #### Dataset #### 
-    print("Creating webqa datasets")
-    datasets = create_dataset('webqa', config)
+    print("Creating WebQA datasets")
+    datasets = create_dataset(config)
 
     if args.distributed:
         num_tasks = utils.get_world_size()
