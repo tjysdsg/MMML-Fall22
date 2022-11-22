@@ -185,6 +185,7 @@ def train(args, model, tokenizer):
                 target = target.view(-1, args.choice_num, args.label_num)
 
                 loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
+                loss = loss / args.gradient_accumulation_step
                 scaler.scale(loss).backward()
 
             train_losses.append(loss.item())
