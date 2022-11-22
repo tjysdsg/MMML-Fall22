@@ -231,7 +231,7 @@ def train(args):
     # plot some training images
     # import torchvision.utils as vutils
     # from matplotlib import pyplot as plt
-    # batch = next(iter(train_loader))
+    # batch = next(iter(data_loader))
     # plt.figure(figsize=(16, 8))
     # plt.axis("off")
     # plt.title("Training Images")

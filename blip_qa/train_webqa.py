@@ -15,23 +15,21 @@ from data import create_dataset, create_sampler, create_loader
 from data.webqa_dataset import webqa_collate_fn
 
 
-def train(config, args, model, train_loader, device):
+def train(config, args, model, data_loader, optimizer, epoch_start: int, device):
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
 
-    optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay'])
-
     print("Start training")
-    for epoch in range(0, config['max_epoch']):
+    for epoch in range(epoch_start, config['max_epoch']):
         if not args.inference:
             if args.distributed:
-                train_loader.sampler.set_epoch(epoch)
+                data_loader.sampler.set_epoch(epoch)
 
             cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
-            train_stats = train_1epoch(config, model, train_loader, optimizer, epoch, device)
+            train_stats = train_1epoch(config, model, data_loader, optimizer, epoch, device)
         else:
             break
 
@@ -48,13 +46,13 @@ def train(config, args, model, train_loader, device):
                 'config': config,
                 'epoch': epoch,
             }
-            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth' % epoch))
+            torch.save(save_obj, os.path.join(args.output_dir, f'checkpoint_{epoch:02d}.pth'))
 
         if args.distributed:
             dist.barrier()
 
 
-def train_1epoch(config, model, data_loader, optimizer, epoch, device):
+def train_1epoch(config, model, data_loader, optimizer, epoch: int, device):
     # train
     model.train()
 
@@ -142,12 +140,37 @@ def main(args, config):
         collate_fns=[webqa_collate_fn, webqa_collate_fn, webqa_collate_fn]
     )
 
-    #### Model ####
+    #### Model and optimizer ####
+    epoch = 0
+    optimizer_state = None
     print("Creating model")
-    model = blip_vqa(pretrained=config['pretrained'], image_size=config['image_size'],
-                     vit=config['vit'], vit_grad_ckpt=config['vit_grad_ckpt'], vit_ckpt_layer=config['vit_ckpt_layer'])
+    if args.resume:
+        obj = torch.load(args.resume, map_location='cpu')
+        config = obj['config']
+        epoch = obj['epoch'] + 1
 
+        model = blip_vqa(
+            image_size=config['image_size'],
+            vit=config['vit'],
+            vit_grad_ckpt=config['vit_grad_ckpt'],
+            vit_ckpt_layer=config['vit_ckpt_layer'],
+        )
+        model.load_state_dict(obj['model'])
+
+        optimizer_state = obj['optimizer']
+    else:
+        model = blip_vqa(
+            pretrained=config['pretrained'],
+            image_size=config['image_size'],
+            vit=config['vit'],
+            vit_grad_ckpt=config['vit_grad_ckpt'],
+            vit_ckpt_layer=config['vit_ckpt_layer'],
+        )
     model = model.to(device)
+
+    optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay'])
+    if optimizer_state:
+        optimizer.load_state_dict(optimizer_state)
 
     if args.inference:
         # inference split
@@ -164,7 +187,7 @@ def main(args, config):
             json.dump(result, f)
         print(f'result file saved to {result_file}')
     else:
-        train(config, args, model, train_loader, device)
+        train(config, args, model, train_loader, optimizer, epoch, device)
 
 
 def load_args_configs():
@@ -174,6 +197,7 @@ def load_args_configs():
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
     parser.add_argument('--seed', default=42, type=int)
+    parser.add_argument('--resume', type=str, default=None)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=False, type=bool)
