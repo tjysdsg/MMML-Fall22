@@ -13,82 +13,90 @@ import utils
 from utils import cosine_lr_schedule
 from data import create_dataset, create_sampler, create_loader
 from data.webqa_dataset import webqa_collate_fn
+import wandb
+import time
 
 
-def train(config, args, model, data_loader, optimizer, epoch_start: int, device):
+def init_wandb(output_dir: str):
+    # need to change to your own API when using
+    os.environ['EXP_NUM'] = 'WebQA'
+    os.environ['WANDB_NAME'] = time.strftime(
+        '%Y-%m-%d %H:%M:%S',
+        time.localtime(int(round(time.time() * 1000)) / 1000)
+    )
+    os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'
+    os.environ['WANDB_DIR'] = output_dir
+    wandb.init(project="blip_webqa_qa")
+
+
+def train(config, args, model, data_loader, optimizer, epoch_start: int, global_step: int, device):
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         model_without_ddp = model.module
-
-    print("Start training")
-    for epoch in range(epoch_start, config['max_epoch']):
-        if not args.inference:
-            if args.distributed:
-                data_loader.sampler.set_epoch(epoch)
-
-            cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
-
-            train_stats = train_1epoch(config, model, data_loader, optimizer, epoch, device)
-        else:
-            break
-
-        if utils.is_main_process():
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         'epoch': epoch,
-                         }
-            with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
-                f.write(json.dumps(log_stats) + "\n")
-
-            save_obj = {
-                'model': model_without_ddp.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'config': config,
-                'epoch': epoch,
-            }
-            torch.save(save_obj, os.path.join(args.output_dir, f'checkpoint_{epoch:02d}.pth'))
-
-        if args.distributed:
-            dist.barrier()
-
-
-def train_1epoch(config, model, data_loader, optimizer, epoch: int, device):
-    # train
-    model.train()
-
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('loss', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-
-    header = f'Train Epoch: [{epoch}]'
-    print_freq = 50
 
     grad_accum = config['grad_accum']
     assert grad_accum >= 1
     grad_clip = config['grad_clip']
     assert grad_clip > 0
 
-    for i, (
-            images, captions, question, answer, n_facts, _, _,
-    ) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        images = images.to(device, non_blocking=True)
-        loss = model(images, captions, question, answer, n_facts, train=True)
+    print(f"Start training from epoch {epoch_start}")
+    for epoch in range(epoch_start, config['max_epoch']):
+        if args.distributed:
+            data_loader.sampler.set_epoch(epoch)
 
-        loss = loss / grad_accum
-        loss.backward()
+        cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
-        if (i + 1) % grad_accum == 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            optimizer.step()
-            optimizer.zero_grad()
+        model.train()
 
-        metric_logger.update(loss=loss.item())
-        metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+        metric_logger = utils.MetricLogger(delimiter="  ")
+        metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+        metric_logger.add_meter('loss', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
 
-    # gather the stats from all processes
-    metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger.global_avg())
-    return {k: f"{meter.global_avg:.3f}" for k, meter in metric_logger.meters.items()}
+        header = f'Train Epoch: [{epoch}]'
+        print_freq = 50
+
+        for i, (
+                images, captions, question, answer, n_facts, _, _,
+        ) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+            images = images.to(device, non_blocking=True)
+            loss = model(images, captions, question, answer, n_facts, train=True)
+
+            loss = loss / grad_accum
+            loss.backward()
+
+            if (i + 1) % grad_accum == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                optimizer.step()
+                optimizer.zero_grad()
+
+                global_step += 1
+
+                metric_logger.update(loss=loss.item())
+                metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+                wandb.log({f'train_loss': loss.item(), 'step': global_step})
+                # wandb.log({f'train_precision': pr, 'step': step, 'threshold': th})
+                # wandb.log({f'train_recall': re, 'step': step, 'threshold': th})
+                # wandb.log({f'train_F1': f1, 'step': step, 'threshold': th})
+
+        # gather the stats from all processes
+        metric_logger.synchronize_between_processes()
+        print("Averaged stats:", metric_logger.global_avg())
+        # train_stats = {k: f"{meter.global_avg:.3f}" for k, meter in metric_logger.meters.items()}
+
+        if utils.is_main_process():
+            save_obj = {
+                'model': model_without_ddp.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'config': config,
+                'epoch': epoch,
+                'global_step': global_step,
+            }
+            torch.save(save_obj, os.path.join(args.output_dir, f'checkpoint_{epoch:02d}.pth'))
+
+        if args.distributed:
+            dist.barrier()
 
 
 @torch.no_grad()
@@ -142,12 +150,14 @@ def main(args, config):
 
     #### Model and optimizer ####
     epoch = 0
+    global_step = 0
     optimizer_state = None
     print("Creating model")
     if args.resume:
         obj = torch.load(args.resume, map_location='cpu')
         config = obj['config']
         epoch = obj['epoch'] + 1
+        global_step = obj['global_step'] + 1
 
         model = blip_vqa(
             image_size=config['image_size'],
@@ -187,7 +197,12 @@ def main(args, config):
             json.dump(result, f)
         print(f'result file saved to {result_file}')
     else:
-        train(config, args, model, train_loader, optimizer, epoch, device)
+        # init wandb
+        wandb_output_dir = os.path.join(args.output_dir, 'wandb')
+        os.makedirs(wandb_output_dir, exist_ok=True)
+        init_wandb(wandb_output_dir)
+
+        train(config, args, model, train_loader, optimizer, epoch, global_step, device)
 
 
 def load_args_configs():
