@@ -29,7 +29,7 @@ def init_wandb(output_dir: str):
     wandb.init(project="blip_webqa_qa")
 
 
-def train(config, args, model, data_loader, optimizer, epoch_start: int, global_step: int, device):
+def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
@@ -43,14 +43,14 @@ def train(config, args, model, data_loader, optimizer, epoch_start: int, global_
     print(f"Start training from epoch {epoch_start}")
     for epoch in range(epoch_start, config['max_epoch']):
         if args.distributed:
-            data_loader.sampler.set_epoch(epoch)
+            train_loader.sampler.set_epoch(epoch)
 
         cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
         model.train()
         for i, (
                 images, captions, question, answer, n_facts, _, _,
-        ) in enumerate(data_loader):
+        ) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
             loss = model(images, captions, question, answer, n_facts, train=True)
 
@@ -82,6 +82,58 @@ def train(config, args, model, data_loader, optimizer, epoch_start: int, global_
 
         if args.distributed:
             dist.barrier()
+
+        # evaluation
+        if utils.is_main_process():
+            metric = evaluation(model, val_loader, device)
+
+            wandb.log({'eval_acc': metric['acc'], 'step': global_step})
+            wandb.log({'eval_FL': metric['fl'], 'step': global_step})
+            wandb.log({'eval_qa': metric['acc'] * metric['fl'], 'step': global_step})
+
+
+def evaluation(model, data_loader, device):
+    from webqa_eval import webqa_fl, webqa_acc_approx
+    from tqdm import tqdm
+
+    print('Start evaluation')
+    refs = []
+    preds = []
+    qcates = []
+    model.eval()
+    with torch.no_grad():
+        val_iter = tqdm(data_loader, desc="Validation", disable=0)
+        for i, (
+                images, captions, question, answer, n_facts, question_ids, qcate,
+        ) in enumerate(val_iter):
+            images = images.to(device, non_blocking=True)
+            pred = model(images, captions, question, answer, n_facts, train=False)
+
+            preds += pred
+            refs += answer
+            qcates += qcate
+    assert len(preds) == len(refs) == len(qcates), f'{len(preds)} {len(refs)} {len(qcates)}'
+
+    ret = {'color': [], 'shape': [], 'YesNo': [], 'number': [], 'text': [], 'Others': [], 'choose': [],
+           'f1': [], 'recall': [], 'acc': [], 'fl': webqa_fl(preds, refs)['fl']}
+    for pred, ref, qcate in zip(preds, refs, qcates):
+        eval_output = webqa_acc_approx(pred, ref, qcate)['acc_approx']
+        ret[qcate].append(eval_output)
+        if qcate in ['color', 'shape', 'number', 'YesNo']:
+            ret['f1'].append(eval_output)
+        else:
+            ret['recall'].append(eval_output)
+        ret['acc'].append(eval_output)
+
+    for key, value in ret.items():
+        if key == 'fl':
+            continue
+        if len(ret[key]) == 0:
+            ret[key] = 0
+        else:
+            ret[key] = sum(ret[key]) / len(ret[key])
+
+    return ret
 
 
 @torch.no_grad()
@@ -185,7 +237,7 @@ def main(args, config):
         os.makedirs(wandb_output_dir, exist_ok=True)
         init_wandb(wandb_output_dir)
 
-        train(config, args, model, train_loader, optimizer, epoch, global_step, device)
+        train(config, args, model, train_loader, val_loader, optimizer, epoch, global_step, device)
 
 
 def load_args_configs():
