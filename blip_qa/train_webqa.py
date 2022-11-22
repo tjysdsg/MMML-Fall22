@@ -48,17 +48,9 @@ def train(config, args, model, data_loader, optimizer, epoch_start: int, global_
         cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
         model.train()
-
-        metric_logger = utils.MetricLogger(delimiter="  ")
-        metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-        metric_logger.add_meter('loss', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-
-        header = f'Train Epoch: [{epoch}]'
-        print_freq = 50
-
         for i, (
                 images, captions, question, answer, n_facts, _, _,
-        ) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        ) in enumerate(data_loader):
             images = images.to(device, non_blocking=True)
             loss = model(images, captions, question, answer, n_facts, train=True)
 
@@ -72,18 +64,11 @@ def train(config, args, model, data_loader, optimizer, epoch_start: int, global_
 
                 global_step += 1
 
-                metric_logger.update(loss=loss.item())
-                metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-
+                print(f'Epoch[{epoch}] step {global_step}:\ttrain_loss {loss.item()}')
                 wandb.log({f'train_loss': loss.item(), 'step': global_step})
                 # wandb.log({f'train_precision': pr, 'step': step, 'threshold': th})
                 # wandb.log({f'train_recall': re, 'step': step, 'threshold': th})
                 # wandb.log({f'train_F1': f1, 'step': step, 'threshold': th})
-
-        # gather the stats from all processes
-        metric_logger.synchronize_between_processes()
-        print("Averaged stats:", metric_logger.global_avg())
-        # train_stats = {k: f"{meter.global_avg:.3f}" for k, meter in metric_logger.meters.items()}
 
         if utils.is_main_process():
             save_obj = {
@@ -103,13 +88,11 @@ def train(config, args, model, data_loader, optimizer, epoch_start: int, global_
 def inference(config, model, data_loader, device):
     model.eval()
 
-    metric_logger = utils.MetricLogger(delimiter="  ")
-    header = 'Inference:'
-    print_freq = 50
-
+    print("Start inference")
     result = []
-    for i, (images, captions, question, answer, n_facts, question_ids, qcates) in enumerate(
-            metric_logger.log_every(data_loader, print_freq, header)):
+    for i, (
+            images, captions, question, answer, n_facts, question_ids, qcates
+    ) in enumerate(data_loader):
         images = images.to(device, non_blocking=True)
         pred = model(images, captions, question, answer, n_facts, train=False)
 
