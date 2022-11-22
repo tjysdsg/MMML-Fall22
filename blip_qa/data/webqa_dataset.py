@@ -1,18 +1,17 @@
 import os
 from random import shuffle
 import json
-
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
 from typing import List, Literal
-from data.utils import pre_question, pre_caption
+from data.utils import pre_caption
 import torch.nn.functional as F
 
 
 class WebQADataset(Dataset):
     def __init__(
-            self, data_json, transform, image_dir, eos='[SEP]', split="train", max_ques_words=30,
+            self, data_json, transform, image_dir, eos='[SEP]', split="train",
             ignored_questions: List[str] = None, use_num_samples: int = -1,
             qcate: Literal['text', 'YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'all'] = 'all',
     ):
@@ -25,7 +24,6 @@ class WebQADataset(Dataset):
         self.split = split
         self.transform = transform
         self.image_dir = image_dir
-        self.max_ques_words = max_ques_words
         self.eos = eos
 
         self.instance_list = []
@@ -40,8 +38,8 @@ class WebQADataset(Dataset):
                 if data_split == 'test' or datum['Qcate'] in self.qcate:
                     if use_num_samples == -1 or count < use_num_samples:
                         question_id = datum['Guid']
-                        Q = datum['Q'].replace('"', "")
-                        A = datum['A'][0].replace('"', "")
+                        Q = pre_caption(datum['Q'].replace('"', ""), 100)
+                        A = pre_caption(datum['A'][0].replace('"', ""), 100)
 
                         gold_text_facts, gold_img_and_caps = self.extract_facts_for_question(datum)
                         if not self.check_image_feature_path(gold_img_and_caps):
@@ -65,23 +63,24 @@ class WebQADataset(Dataset):
         gold_text_facts = []
         if 'txt_posFacts' in datum:
             for fa in datum['txt_posFacts']:
-                gold_text_facts.append({
-                    'fact': fa['fact'],
-                    'snippet_id': fa['snippet_id']
-                })
+                gold_text_facts.append(
+                    pre_caption(fa['fact'], 100),
+                )
 
         # image facts
         gold_img_and_caps = []
         if 'img_posFacts' in datum:
             for im in datum['img_posFacts']:
-                gold_img_and_caps.append(self.load_image_fact(im))
+                gold_img_and_caps.append(
+                    self.load_image_fact(im)
+                )
 
         return gold_text_facts, gold_img_and_caps
 
     def load_image_fact(self, im: dict):
         image_feature_path = os.path.join(self.image_dir, f"{im['image_id']}.jpg")
         cap = im['caption'].strip()
-        return image_feature_path, cap
+        return image_feature_path, pre_caption(cap, 100)
 
     def check_image_feature_path(self, facts):
         for path, _ in facts:
@@ -101,18 +100,18 @@ class WebQADataset(Dataset):
             questions: a list of strings
             answers: a list of strings
         """
-
         text_facts, img_and_caps, Q, A, question_id, qcate = self.instance_list[index]
 
         # [(channel, width, height), ...]
         images = [self.transform(Image.open(img_path).convert('RGB')) for img_path, _ in img_and_caps]
-        captions = [pre_caption(cap, self.max_ques_words) for _, cap in img_and_caps]
+        captions = [cap for _, cap in img_and_caps]
+        captions += text_facts
 
         return (
             torch.stack(images),
             captions,
-            pre_question(Q, self.max_ques_words),
-            pre_question(A, self.max_ques_words),
+            Q,
+            A,
             question_id,
             qcate,
         )
