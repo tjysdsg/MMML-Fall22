@@ -672,3 +672,7 @@ text-generator/WebQA_tmp/
 text-generator/__pycache__/
 text-generator/checkpoints/
 text-generator/bart_score.pth
+ofa-retriever/OFA/examples/*
+ofa-retriever/OFA/transformers/*
+ofa-retriever/OFA-tiny/*
+!**/dummy_file
