@@ -228,7 +228,7 @@ class BLIP_VQA(nn.Module):
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
-            return loss
+            return loss, answer_output
 
         else:
             question_output = self.text_encoder(question.input_ids,

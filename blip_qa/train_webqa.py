@@ -51,7 +51,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                 images, captions, question, answer, n_facts, _, _,
         ) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
-            loss = model(images, captions, question, answer, n_facts, train=True)
+            loss, _ = model(images, captions, question, answer, n_facts, train=True)
 
             loss = loss / grad_accum
             loss.backward()
