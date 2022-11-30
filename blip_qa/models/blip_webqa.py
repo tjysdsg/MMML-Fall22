@@ -1,9 +1,6 @@
 from typing import List
-from models.med import BertConfig, BertModel, BertLMHeadModel
-from models.blip import create_vit, init_tokenizer, load_checkpoint
 import torch
 from torch import nn
-import torch.nn.functional as F
 import numpy as np
 
 
@@ -141,6 +138,9 @@ class BLIP_VQA(nn.Module):
             image_size (int): input image size
             vit (str): model size of vision transformer
         """
+        from models.med import BertConfig, BertModel, BertLMHeadModel
+        from models.blip import create_vit, init_tokenizer
+
         super().__init__()
 
         self.visual_encoder, vision_width = create_vit(vit, image_size, vit_grad_ckpt, vit_ckpt_layer,
@@ -186,11 +186,10 @@ class BLIP_VQA(nn.Module):
         :param answer: Batch of answers
         :param n_facts: Batch of number of image facts
         :param train: train or inference
-        :return:
         """
 
         image_embeds, lengths = self.encode_images(image, n_facts)
-        image_atts = make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
+        image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
         question = self.tokenizer(question, padding='longest',  # truncation=True, max_length=35,
                                   return_tensors="pt").to(image.device)
@@ -263,6 +262,8 @@ class BLIP_VQA(nn.Module):
 
 
 def blip_vqa(pretrained='', **kwargs):
+    from models.blip import load_checkpoint
+
     model = BLIP_VQA(**kwargs)
     if pretrained:
         model, msg = load_checkpoint(model, pretrained)

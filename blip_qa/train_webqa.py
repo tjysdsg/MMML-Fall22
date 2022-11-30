@@ -6,7 +6,6 @@ import random
 import json
 from pathlib import Path
 import torch
-import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 from models.blip_webqa import blip_vqa
 import utils
@@ -163,7 +162,6 @@ def main(args, config):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    cudnn.benchmark = True
 
     #### Dataset #### 
     print("Creating WebQA datasets")
