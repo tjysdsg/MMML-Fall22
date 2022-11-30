@@ -675,4 +675,6 @@ text-generator/bart_score.pth
 ofa-retriever/OFA/examples/*
 ofa-retriever/OFA/transformers/*
 ofa-retriever/OFA-tiny/*
+ofa-retriever/OFA/cache/*
+ofa-retriever/OFA/data/*
 !**/dummy_file
