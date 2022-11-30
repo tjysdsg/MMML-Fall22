@@ -245,7 +245,7 @@ class BLIP_VQA(nn.Module):
 
             outputs = self.text_decoder.generate(
                 input_ids=bos_ids,
-                max_length=10,
+                max_length=50,
                 min_length=1,
                 num_beams=num_beams,
                 eos_token_id=self.tokenizer.sep_token_id,
