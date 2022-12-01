@@ -138,80 +138,128 @@ class WebQADataset(Dataset):
             else:
                 raise ValueError('no right dataset split')
             
-            print('=====begin tokenize======')
-            dataset = self.recursive_tokenize(dataset)
-            print('=====end   tokenize======')
+            #print('=====begin tokenize======')
+            #dataset = self.recursive_tokenize(dataset)
+            #print('=====end   tokenize======')
             torch.save(dataset, os.path.join(self.args.cache_dir, split))
         return dataset
 
     def collate_fn(self, batch):
-        input_ids = []
-        decoder_input_ids = []
-        attention_mask = []
+        sources = []
+        targets = []
+        prev_outputs = []
+        labels = []
+        constraint_masks = []
         bsz = len(batch)
 
         for instance in batch:
-            batch_decoder_input_ids = []
-            batch_input_ids = []
-            token_facts = []
-            tokens_question = [self.tokenizer.cls_token_id] + instance['Q'] + [self.tokenizer.sep_token_id]
+            batch_prev_outputs = []
+            batch_targets = []
+            batch_sources = []
+            batch_labels = []
+            batch_constraint_mask = []
+            text_inputs = []
+            text_outputs = []
+
+            question = instance['Q']
             for pos_txt_fact in instance['pos_txt_facts']:
-                token_facts.append(pos_txt_fact['fact'])
-                batch_decoder_input_ids.append(self.tokenizer.encode('positive'))
+                text_inputs.append('Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question))
+                text_outputs.append('yes')
+                batch_labels.append(1)
             for pos_img_fact in instance['pos_img_facts']:
-                token_facts.append(pos_img_fact['caption'])
-                batch_decoder_input_ids.append(self.tokenizer.encode('positive'))
+                text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(pos_img_fact['caption'], question))
+                text_outputs.append('yes')
+                batch_labels.append(1)
+
             neg_txt_count = 0
             neg_img_count = 0
-
             random.shuffle(instance['neg_txt_facts'])
             for neg_txt_fact in instance['neg_txt_facts']:
                 if neg_txt_count < 8:
                     neg_txt_count += 1
-                    token_facts.append(neg_txt_fact['fact'])
-                    batch_decoder_input_ids.append(self.tokenizer.encode('negative'))
+                    text_inputs.append('Is text " {} " related to the question of " {} "?'.format(neg_txt_fact['fact'], question))
+                    text_outputs.append('no')
+                    batch_labels.append(0)
+
             random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
                 if neg_img_count < 8:
                     neg_img_count += 1
-                    token_facts.append(neg_img_fact['caption'])
-                    batch_decoder_input_ids.append(self.tokenizer.encode('negative'))
+                    text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question))
+                    text_outputs.append('no')
+                    batch_labels.append(0)
 
-            for token_fact in token_facts:
-                batch_input_id = tokens_question + token_fact
-                batch_input_id = batch_input_id[:self.args.max_length-1]
-                batch_input_id += [self.tokenizer.sep_token_id]
-                batch_input_id = torch.LongTensor(batch_input_id)
-                batch_input_ids.append(batch_input_id)
-            
-            if len(batch_input_ids) > self.args.choice_num:
-                batch_input_ids = batch_input_ids[:self.args.choice_num]
-                batch_decoder_input_ids = batch_decoder_input_ids[:self.args.choice_num]
+            allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
+            for text_input, text_output in zip(text_inputs, text_outputs):
+                source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                prev_output = source[:]
+                target = self.tokenizer.encode(text_output, truncation=True, add_special_tokens=False)
+                assert len(target) == 1
+                target = prev_output[1:] + target
+                constraint_mask = torch.zeros((len(prev_output), self.args.vocab_size)).bool()
+                constraint_mask[-1][allowed_words] = True
+                batch_sources.append(torch.LongTensor(source))
+                batch_targets.append(torch.LongTensor(target))
+                batch_prev_outputs.append(torch.LongTensor(prev_output))
+                batch_constraint_mask.append(constraint_mask)
+
+            if len(batch_sources) > self.args.choice_num:
+                batch_sources = batch_sources[:self.args.choice_num]
+                batch_targets = batch_targets[:self.args.choice_num]
+                batch_prev_outputs = batch_prev_outputs[:self.args.choice_num]
+                batch_constraint_mask = batch_constraint_mask[:self.args.choice_num]
+                batch_labels = batch_labels[:self.args.choice_num]
             else:
-                num_placeholder = self.args.choice_num - len(batch_input_ids)
-                batch_input_ids += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
-                batch_decoder_input_ids += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
+                num_placeholder = self.args.choice_num - len(batch_sources)
+                batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
+                batch_targets += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
+                batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
+                batch_constraint_mask += [torch.zeros((1, self.args.vocab_size)).bool() for _ in range(num_placeholder)]
+                batch_labels += [-100 for _ in range(num_placeholder)]
 
-            input_ids += batch_input_ids # get (bsz x choice_num) x seq_len 
-            decoder_input_ids += batch_decoder_input_ids
+            sources += batch_sources # get (bsz x choice_num) x seq_len 
+            targets += batch_targets
+            prev_outputs += batch_prev_outputs
+            constraint_masks += batch_constraint_mask
+            labels += batch_labels
 
-        input_ids = pad_sequence(
-            input_ids, 
+        sources = pad_sequence(
+            sources, 
             batch_first=True, 
             padding_value=self.tokenizer.pad_token_id
         )
-        decoder_input_ids = pad_sequence(
-            decoder_input_ids,
+        targets = pad_sequence(
+            targets,
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id
         )
-        input_ids = input_ids.view(bsz, -1, input_ids.size(-1))
-        decoder_input_ids = decoder_input_ids(bsz, -1, decoder_input_ids.size(-1))
-        decoder_attention_ask = input_ids.ne(self.tokenizer.pad_token_id)
+        prev_outputs = pad_sequence(
+            prev_outputs,
+            batch_first=True,
+            padding_value=self.tokenizer.pad_token_id
+        )
+        constraint_masks = pad_sequence(
+            constraint_masks,
+            batch_first=True,
+            padding_value=False,
+        )
+
+        sources = sources.view(bsz, -1, sources.size(-1))
+        targets = targets.view(bsz, -1, targets.size(-1))
+        prev_outputs = prev_outputs.view(bsz, -1, prev_outputs.size(-1))
+        decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
+        labels = torch.LongTensor(labels)
+        labels = labels.view(bsz, -1)
+        logit_mask = (labels != -100)
 
         return {
-            'input_ids': input_ids,
-            'decoder_attention_mask': attention_mask,
+            'sources': sources,
+            'prev_outputs': prev_outputs,
+            'targets': targets,
+            'decoder_attention_mask': decoder_attention_mask,
+            'constraint_masks': constraint_masks,
+            'allowed_words': allowed_words,
+            'labels': labels,
             'logit_mask': logit_mask,
         }
 

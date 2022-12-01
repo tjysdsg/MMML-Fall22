@@ -99,29 +99,41 @@ def validate(args, dev_dataloader, model):
         gth_labels = []
         pred_labels = []
         for idx, data in enumerate(tqdm(dev_dataloader)):
-            input_ids = data['input_ids'].to(args.device)
+            sources = data['sources'].to(args.device)
+            targets = data['targets'].to(args.device)
+            prev_outputs = data['prev_outputs'].to(args.device)
+            decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
+            constraint_masks = data['constraint_masks'].to(args.device)
+            allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
-            attention_mask = data['attention_mask'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
 
-            squeezed_input_ids = input_ids.view(-1, input_ids.size(-1))
-            squeezed_labels = labels.view(-1)
-            squeezed_attention_mask = attention_mask.view(-1, attention_mask.size(-1))
+            squeezed_sources = sources.view(-1, sources.size(-1))
+            squeezed_targets = targets.view(-1, targets.size(-1))
+            squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
+            squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
+            squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
 
             outputs = model(
-                input_ids=squeezed_input_ids, 
-                labels=squeezed_labels, 
-                attention_mask=squeezed_attention_mask
+                input_ids=squeezed_sources, 
+                decoder_input_ids=squeezed_prev_outputs,
+                attention_mask=squeezed_decoder_attention_mask,
             )
             logits = outputs['logits']
-            target = torch.nn.functional.one_hot(labels * logit_mask)
+            logits.masked_fill_(~squeezed_constraint_masks, -float('inf'))
+            last_token_ids = squeezed_prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
+            last_token_ids[last_token_ids<0] = 0 # fix the all [PAD] case
+            logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
+            logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
 
-            prediction = logits.view(-1, args.choice_num, args.label_num)
-            target = target.view(-1, args.choice_num, args.label_num)
-            
-            eval_loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
+            preds = logits.view(-1, args.choice_num, args.label_num)
+            refs = torch.nn.functional.one_hot(labels * logit_mask)
+            refs = refs.view(-1, args.choice_num, args.label_num)
+
+            eval_loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
 
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            # TODO (haofeiyu): Inf should not be calculated, Moreover, during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.classifier_threshold).float()
             pred_labels.append(predictions.tolist())
             gth_labels.append(labels.view(-1).tolist())
@@ -165,28 +177,39 @@ def train(args, model, tokenizer):
     train_losses = []
     for epoch in range(args.num_epochs):
         for data in tqdm(train_dataloader):
-            input_ids = data['input_ids'].to(args.device)
+            sources = data['sources'].to(args.device)
+            targets = data['targets'].to(args.device)
+            prev_outputs = data['prev_outputs'].to(args.device)
+            decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
+            constraint_masks = data['constraint_masks'].to(args.device)
+            allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
-            attention_mask = data['attention_mask'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
 
-            squeezed_input_ids = input_ids.view(-1, input_ids.size(-1))
-            squeezed_labels = labels.view(-1)
-            squeezed_attention_mask = attention_mask.view(-1, attention_mask.size(-1))
+            squeezed_sources = sources.view(-1, sources.size(-1))
+            squeezed_targets = targets.view(-1, targets.size(-1))
+            squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
+            squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
+            squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 outputs = model(
-                    input_ids=squeezed_input_ids, 
-                    labels=squeezed_labels, 
-                    attention_mask=squeezed_attention_mask
+                    input_ids=squeezed_sources, 
+                    decoder_input_ids=squeezed_prev_outputs,
+                    attention_mask=squeezed_decoder_attention_mask,
                 )
                 logits = outputs['logits']
-                target = torch.nn.functional.one_hot(labels * logit_mask)
+                logits.masked_fill_(~squeezed_constraint_masks, -float('inf'))
+                last_token_ids = squeezed_prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
+                last_token_ids[last_token_ids<0] = 0 # fix the all [PAD] case
+                logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
+                logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
 
-                prediction = logits.view(-1, args.choice_num, args.label_num)
-                target = target.view(-1, args.choice_num, args.label_num)
+                preds = logits.view(-1, args.choice_num, args.label_num)
+                refs = torch.nn.functional.one_hot(labels * logit_mask)
+                refs = refs.view(-1, args.choice_num, args.label_num)
 
-                loss = cross_entropy_with_logits_loss(prediction, target, logit_mask)
+                loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
                 loss = loss / args.gradient_accumulation_step
                 scaler.scale(loss).backward()
 
@@ -289,7 +312,7 @@ if __name__ == '__main__':
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
-    parser.add_argument('--model_name', type=str, default='roberta-base', help='model name or path')
+    parser.add_argument('--model_name', type=str, default='../OFA-tiny', help='model name or path')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')
     parser.add_argument('--test_file', type=str, default='test.jsonl', help='path to test file')
@@ -338,8 +361,9 @@ if __name__ == '__main__':
         wandb.init(project="WebQA")
 
     tokenizer = OFATokenizer.from_pretrained(args.model_name)
-    config = OFAConfig.from_pretrained(args.model_name, num_labels=args.label_num)
-    model = OFAModel.from_pretrained(args.model_name, config=config, ignore_mismatched_sizes=True)
+    model = OFAModel.from_pretrained(args.model_name)
+    args.vocab_size = model.config.vocab_size
+
     device = torch.device(args.local_rank) if args.local_rank != -1 else torch.device('cuda')
     if args.load_from_checkpoint:
         model_dict = torch.load(args.load_from_checkpoint)

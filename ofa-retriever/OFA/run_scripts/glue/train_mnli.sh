@@ -17,13 +17,13 @@ data=${data_dir}/mnli_train.tsv,${data_dir}/mnli_dev.tsv
 restore_file=../../checkpoints/ofa_large.pt
 selected_cols=0,1,2
 
-arch=ofa_large
+arch=ofa_tiny
 criterion=adjust_label_smoothed_cross_entropy
 label_smoothing=0.0
 lr=3e-5
 max_epoch=5
 warmup_ratio=0.06
-batch_size=8
+batch_size=1
 update_freq=1
 resnet_drop_path_rate=0.0
 encoder_drop_path_rate=0.1

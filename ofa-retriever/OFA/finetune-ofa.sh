@@ -11,7 +11,7 @@ python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29518 ma
 --train_file train.jsonl \
 --val_file val.jsonl \
 --num_epochs 2 \
---evaluation_steps 200 \
+--evaluation_steps 2 \
 --max_length 300 \
---choice_num 16 \
---have_cached_dataset \
+--dev_batch_size 8 \
+--choice_num 16

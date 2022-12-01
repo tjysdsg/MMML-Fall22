@@ -37,7 +37,6 @@ class FileDataset:
         self.cached_index = cached_index
         self._init_seek_index()
         self._reader = self._get_reader()
-        import pdb; pdb.set_trace()
         print("file {} slice_id {} row count {} total row count {}".format(
             self.file_path, self.slice_id, self.row_count, self.total_row_count)
         )
