@@ -193,7 +193,7 @@ class WebQADataset(Dataset):
             for text_input, text_output in zip(text_inputs, text_outputs):
                 source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                 prev_output = source[:]
-                target = self.tokenizer.encode(text_output, truncation=True, add_special_tokens=False)
+                target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
                 assert len(target) == 1
                 target = prev_output[1:] + target
                 constraint_mask = torch.zeros((len(prev_output), self.args.vocab_size)).bool()

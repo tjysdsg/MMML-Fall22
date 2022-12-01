@@ -13,5 +13,5 @@ python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29518 ma
 --num_epochs 2 \
 --evaluation_steps 2 \
 --max_length 300 \
---dev_batch_size 8 \
+--dev_batch_size 2 \
 --choice_num 16

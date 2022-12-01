@@ -679,4 +679,5 @@ ofa-retriever/OFA/cache/*
 ofa-retriever/OFA/data/*
 ofa-retriever/OFA/WebQA_tmp/*
 ofa-retriever/OFA/dataset/*
+ofa-retriever/OFA/checkpoints/*
 !**/dummy_file

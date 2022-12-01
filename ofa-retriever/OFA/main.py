@@ -5,7 +5,7 @@ import time
 import csv
 import json
 import shutil
-#import evaluate
+import evaluate
 import torch.distributed as dist
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
@@ -33,7 +33,7 @@ def load_dataset(args, tokenizer):
             train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, sampler=train_sampler, collate_fn=lambda x: train_dataset.collate_fn(x))
             dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, sampler=dev_sampler, collate_fn=lambda x: dev_dataset.collate_fn(x))
         else:
-            train_dataloader = DataLoader(train_dataset,  batch_size=args.train_batch_size, shuffle=True, collate_fn=lambda x: train_dataset.collate_fn(x))
+            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=lambda x: train_dataset.collate_fn(x))
             dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=lambda x: dev_dataset.collate_fn(x))
         loader_dict['train'] = train_dataloader
         loader_dict['dev'] = dev_dataloader
@@ -99,6 +99,8 @@ def validate(args, dev_dataloader, model):
         gth_labels = []
         pred_labels = []
         for idx, data in enumerate(tqdm(dev_dataloader)):
+            if idx > 20:
+                break
             sources = data['sources'].to(args.device)
             targets = data['targets'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
@@ -133,8 +135,11 @@ def validate(args, dev_dataloader, model):
             eval_loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
 
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
-            # TODO (haofeiyu): Inf should not be calculated, Moreover, during evaluation, the extra negative sampling should not be ignored
+            # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.classifier_threshold).float()
+            print(predictions.tolist())
+            print(labels.view(-1).tolist())
+
             pred_labels.append(predictions.tolist())
             gth_labels.append(labels.view(-1).tolist())
             eval_losses.append(eval_loss.item()) 
@@ -241,6 +246,7 @@ def train(args, model, tokenizer):
                                 best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_f1_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_f1*100,3), args.timestamp)
                             model_to_save = model.module if hasattr(model, 'module') else model
                             output_model_file = best_checkpoint_name
+                            import pdb; pdb.set_trace()
                             torch.save(model_to_save.state_dict(), output_model_file)
                             best_eval_f1 = eval_f1
                     elif args.model_chosen_metric == 'loss':
@@ -312,7 +318,8 @@ if __name__ == '__main__':
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
-    parser.add_argument('--model_name', type=str, default='../OFA-tiny', help='model name or path')
+    parser.add_argument('--model_name', type=str, default='OFA-tiny', help='model name or path')
+    parser.add_argument('--model_dir', type=str, default='../OFA-tiny')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')
     parser.add_argument('--test_file', type=str, default='test.jsonl', help='path to test file')
@@ -360,8 +367,8 @@ if __name__ == '__main__':
         os.environ['WANDB_DIR'] = './WebQA_tmp'
         wandb.init(project="WebQA")
 
-    tokenizer = OFATokenizer.from_pretrained(args.model_name)
-    model = OFAModel.from_pretrained(args.model_name)
+    tokenizer = OFATokenizer.from_pretrained(args.model_dir)
+    model = OFAModel.from_pretrained(args.model_dir)
     args.vocab_size = model.config.vocab_size
 
     device = torch.device(args.local_rank) if args.local_rank != -1 else torch.device('cuda')
