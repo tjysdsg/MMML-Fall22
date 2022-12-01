@@ -99,7 +99,7 @@ def validate(args, dev_dataloader, model):
         gth_labels = []
         pred_labels = []
         for idx, data in enumerate(tqdm(dev_dataloader)):
-            if idx > 20:
+            if idx > 1000:
                 break
             sources = data['sources'].to(args.device)
             targets = data['targets'].to(args.device)
@@ -137,9 +137,10 @@ def validate(args, dev_dataloader, model):
             preds = logits.view(-1, args.choice_num, args.label_num)
             refs = torch.nn.functional.one_hot(labels * logit_mask)
             refs = refs.view(-1, args.choice_num, args.label_num)
-
+            
+            # need to fix the -inf problem since the -inf will not be masked by the logit_mask
+            preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
             eval_loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
-
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
             # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.classifier_threshold).float()
@@ -225,6 +226,8 @@ def train(args, model, tokenizer):
                 refs = torch.nn.functional.one_hot(labels * logit_mask)
                 refs = refs.view(-1, args.choice_num, args.label_num)
 
+                # need to fix the -inf problem since the -inf will not be masked by the logit_mask
+                preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
                 loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
                 loss = loss / args.gradient_accumulation_step
                 scaler.scale(loss).backward()
@@ -239,7 +242,7 @@ def train(args, model, tokenizer):
                 scheduler.step()
 
                 if args.use_wandb:
-                    wandb.log({'train loss': loss.item(), 'step': global_step})
+                    wandb.log({'train loss': loss.item() * args.gradient_accumulation_step, 'step': global_step})
                     wandb.log({'learning rate': scheduler.get_last_lr()[0], 'step': global_step})
 
                 global_step += 1
@@ -257,7 +260,6 @@ def train(args, model, tokenizer):
                                 best_checkpoint_name = args.checkpoint_save_dir + 'best_{}4{}_f1_{}_{}.ckpt'.format(args.model_name, args.task, round(eval_f1*100,3), args.timestamp)
                             model_to_save = model.module if hasattr(model, 'module') else model
                             output_model_file = best_checkpoint_name
-                            import pdb; pdb.set_trace()
                             torch.save(model_to_save.state_dict(), output_model_file)
                             best_eval_f1 = eval_f1
                     elif args.model_chosen_metric == 'loss':
