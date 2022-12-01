@@ -87,7 +87,8 @@ class WebQATestDataset(Dataset):
         input_ids = pad_sequence(
             input_ids, 
             batch_first=True, 
-            padding_value=self.tokenizer.pad_token_id)
+            padding_value=self.tokenizer.pad_token_id
+        )
         attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
 
 
@@ -145,21 +146,21 @@ class WebQADataset(Dataset):
 
     def collate_fn(self, batch):
         input_ids = []
-        labels = []
+        decoder_input_ids = []
         attention_mask = []
         bsz = len(batch)
 
         for instance in batch:
-            batch_labels = []
+            batch_decoder_input_ids = []
             batch_input_ids = []
             token_facts = []
             tokens_question = [self.tokenizer.cls_token_id] + instance['Q'] + [self.tokenizer.sep_token_id]
             for pos_txt_fact in instance['pos_txt_facts']:
                 token_facts.append(pos_txt_fact['fact'])
-                batch_labels.append(1)
+                batch_decoder_input_ids.append(self.tokenizer.encode('positive'))
             for pos_img_fact in instance['pos_img_facts']:
                 token_facts.append(pos_img_fact['caption'])
-                batch_labels.append(1)
+                batch_decoder_input_ids.append(self.tokenizer.encode('positive'))
             neg_txt_count = 0
             neg_img_count = 0
 
@@ -168,13 +169,13 @@ class WebQADataset(Dataset):
                 if neg_txt_count < 8:
                     neg_txt_count += 1
                     token_facts.append(neg_txt_fact['fact'])
-                    batch_labels.append(0)
+                    batch_decoder_input_ids.append(self.tokenizer.encode('negative'))
             random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
                 if neg_img_count < 8:
                     neg_img_count += 1
                     token_facts.append(neg_img_fact['caption'])
-                    batch_labels.append(0)
+                    batch_decoder_input_ids.append(self.tokenizer.encode('negative'))
 
             for token_fact in token_facts:
                 batch_input_id = tokens_question + token_fact
@@ -185,30 +186,32 @@ class WebQADataset(Dataset):
             
             if len(batch_input_ids) > self.args.choice_num:
                 batch_input_ids = batch_input_ids[:self.args.choice_num]
-                batch_labels = batch_labels[:self.args.choice_num]
+                batch_decoder_input_ids = batch_decoder_input_ids[:self.args.choice_num]
             else:
                 num_placeholder = self.args.choice_num - len(batch_input_ids)
                 batch_input_ids += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
-                batch_labels += [-100 for _ in range(num_placeholder)]
+                batch_decoder_input_ids += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
 
             input_ids += batch_input_ids # get (bsz x choice_num) x seq_len 
-            labels += batch_labels
+            decoder_input_ids += batch_decoder_input_ids
 
         input_ids = pad_sequence(
             input_ids, 
             batch_first=True, 
             padding_value=self.tokenizer.pad_token_id
         )
-        labels = torch.LongTensor(labels)
+        decoder_input_ids = pad_sequence(
+            decoder_input_ids,
+            batch_first=True,
+            padding_value=self.tokenizer.pad_token_id
+        )
         input_ids = input_ids.view(bsz, -1, input_ids.size(-1))
-        labels = labels.view(bsz, -1)
-        attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
-        logit_mask = (labels != -100)
+        decoder_input_ids = decoder_input_ids(bsz, -1, decoder_input_ids.size(-1))
+        decoder_attention_ask = input_ids.ne(self.tokenizer.pad_token_id)
 
         return {
             'input_ids': input_ids,
-            'labels': labels,
-            'attention_mask': attention_mask,
+            'decoder_attention_mask': attention_mask,
             'logit_mask': logit_mask,
         }
 

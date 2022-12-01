@@ -677,4 +677,6 @@ ofa-retriever/OFA/transformers/*
 ofa-retriever/OFA-tiny/*
 ofa-retriever/OFA/cache/*
 ofa-retriever/OFA/data/*
+ofa-retriever/OFA/WebQA_tmp/*
+ofa-retriever/OFA/dataset/*
 !**/dummy_file

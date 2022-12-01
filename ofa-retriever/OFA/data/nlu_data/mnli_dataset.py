@@ -88,6 +88,7 @@ class MNLIDataset(OFADataset):
 
     def __getitem__(self, index):
         sentence1, sentence2, label = self.dataset[index]
+        import pdb; pdb.set_trace()
         if label == '0':
             label = 'maybe'
         elif label == '1':

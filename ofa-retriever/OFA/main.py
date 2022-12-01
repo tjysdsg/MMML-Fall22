@@ -275,7 +275,6 @@ def test(args, model, tokenizer):
     return
 
 
-
 def distributed_setup(args, model):
     '''
     setup distributed training
