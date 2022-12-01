@@ -17,7 +17,7 @@ class WebQADataset(Dataset):
     ):
         if ignored_questions is None:
             ignored_questions = []
-        self.qcate = ['text']
+        self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'text']
         if 'all' not in qcate:
             self.qcate = list(set(qcate).intersection(set(self.qcate)))
 
