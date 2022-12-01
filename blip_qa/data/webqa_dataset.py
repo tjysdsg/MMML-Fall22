@@ -17,7 +17,7 @@ class WebQADataset(Dataset):
     ):
         if ignored_questions is None:
             ignored_questions = []
-        self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape']
+        self.qcate = ['text']
         if 'all' not in qcate:
             self.qcate = list(set(qcate).intersection(set(self.qcate)))
 
@@ -41,9 +41,14 @@ class WebQADataset(Dataset):
                         Q = pre_caption(datum['Q'].replace('"', ""), 100)
                         A = pre_caption(datum['A'][0].replace('"', ""), 100)
 
-                        gold_text_facts, gold_img_and_caps = self.extract_facts_for_question(datum)
+                        gold_text_facts, gold_img_and_caps = [], []
+                        if 'txt_posFacts' in datum:
+                            gold_text_facts = self.extract_text_facts_for_question(datum)
+                        if 'img_posFacts' in datum:
+                            gold_img_and_caps = self.extract_img_facts_for_question(datum)
+
                         if not self.check_image_feature_path(gold_img_and_caps):
-                            print(f"Question {i} skipped")
+                            print(f"Question {i} skipped because image is not found")
                             continue
 
                         assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
@@ -58,31 +63,35 @@ class WebQADataset(Dataset):
 
         print(f"Load {len(self.instance_list)} instances from {count} samples")
 
-    def extract_facts_for_question(self, datum: dict):
-        # text facts
+    @staticmethod
+    def extract_text_facts_for_question(datum: dict):
         gold_text_facts = []
-        if 'txt_posFacts' in datum:
-            for fa in datum['txt_posFacts']:
-                gold_text_facts.append(
-                    pre_caption(fa['fact'], 100),
-                )
+        assert 'txt_posFacts' in datum
 
-        # image facts
+        for fa in datum['txt_posFacts']:
+            gold_text_facts.append(
+                pre_caption(fa['fact'], 100),
+            )
+        return gold_text_facts
+
+    def extract_img_facts_for_question(self, datum: dict):
         gold_img_and_caps = []
-        if 'img_posFacts' in datum:
-            for im in datum['img_posFacts']:
-                gold_img_and_caps.append(
-                    self.load_image_fact(im)
-                )
+        assert 'img_posFacts' in datum
 
-        return gold_text_facts, gold_img_and_caps
+        for im in datum['img_posFacts']:
+            gold_img_and_caps.append(
+                self.load_image_fact(im)
+            )
+
+        return gold_img_and_caps
 
     def load_image_fact(self, im: dict):
         image_feature_path = os.path.join(self.image_dir, f"{im['image_id']}.jpg")
         cap = im['caption'].strip()
         return image_feature_path, pre_caption(cap, 100)
 
-    def check_image_feature_path(self, facts):
+    @staticmethod
+    def check_image_feature_path(facts):
         for path, _ in facts:
             if not os.path.exists(path):
                 print(f'Cannot find image at {path}')
@@ -107,8 +116,9 @@ class WebQADataset(Dataset):
         captions = [cap for _, cap in img_and_caps]
         captions += text_facts
 
+        images = torch.stack(images) if len(images) > 0 else None
         return (
-            torch.stack(images),
+            images,
             captions,
             Q,
             A,
@@ -126,13 +136,18 @@ def webqa_collate_fn(batch):
         - answers: a batch of answers
         - n_facts: a list of integers
     """
-    max_n_facts = 0
+    pad_max_len = 0
     image_lists, caption_lists, questions, answers, n_facts, question_ids, qcates = [], [], [], [], [], [], []
     for image, caption, question, answer, qid, qcate in batch:
-        image_lists.append(image)
-        max_n_facts = max(max_n_facts, image.size(0))
+        if image is None:  # placeholder for samples without image facts
+            image_lists.append(torch.zeros(1, 3, 480, 480))  # FIXME: load H and W from configs
+            n_facts.append(0)
+            pad_max_len = max(pad_max_len, 1)
+        else:
+            image_lists.append(image)
+            n_facts.append(image.size(0))
+            pad_max_len = max(pad_max_len, image.size(0))
 
-        n_facts.append(image.size(0))
         caption_lists.append(caption)
         questions.append(question)
         answers.append(answer)
@@ -141,7 +156,7 @@ def webqa_collate_fn(batch):
         qcates.append(qcate)
 
     image_pad = [
-        F.pad(img, (0, 0, 0, 0, 0, 0, 0, max_n_facts - img.size(0)))
+        F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
         for img in image_lists
     ]
     image_pad = torch.stack(image_pad)

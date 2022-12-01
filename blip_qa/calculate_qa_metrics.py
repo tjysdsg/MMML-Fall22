@@ -15,6 +15,10 @@ def main():
         refs.append(d['answer'])
         qcates.append(d['qcate'])
 
+    metrics = calc_qa_metrics(preds, refs, qcates)
+    metrics['qa'] = metrics['fl'] * metrics['acc']
+    print(metrics)
+
 
 def calc_qa_metrics(preds: List[str], refs: List[str], qcates: List[str]):
     assert len(preds) == len(refs) == len(qcates), f'{len(preds)} {len(refs)} {len(qcates)}'
@@ -29,9 +33,6 @@ def calc_qa_metrics(preds: List[str], refs: List[str], qcates: List[str]):
         else:
             ret['recall'].append(eval_output)
         ret['acc'].append(eval_output)
-
-    with open('tmp.json', 'w') as f:
-        json.dump(ret, f)
 
     for key, value in ret.items():
         if key == 'fl':
