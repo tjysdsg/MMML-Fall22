@@ -41,6 +41,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
     print(f"Start training from epoch {epoch_start}")
     for epoch in range(epoch_start, config['max_epoch']):
+        # """
         if args.distributed:
             train_loader.sampler.set_epoch(epoch)
 
@@ -81,6 +82,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
         if args.distributed:
             dist.barrier()
+        # """
 
         # evaluation
         if utils.is_main_process():
@@ -92,8 +94,8 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
 
 def evaluation(model, data_loader, device):
-    from webqa_eval import webqa_fl, webqa_acc_approx
     from tqdm import tqdm
+    from calculate_qa_metrics import calc_qa_metrics
 
     print('Start evaluation')
     refs = []
@@ -111,28 +113,8 @@ def evaluation(model, data_loader, device):
             preds += pred
             refs += answer
             qcates += qcate
-    assert len(preds) == len(refs) == len(qcates), f'{len(preds)} {len(refs)} {len(qcates)}'
 
-    ret = {'color': [], 'shape': [], 'YesNo': [], 'number': [], 'text': [], 'Others': [], 'choose': [],
-           'f1': [], 'recall': [], 'acc': [], 'fl': webqa_fl(preds, refs)['fl']}
-    for pred, ref, qcate in zip(preds, refs, qcates):
-        eval_output = webqa_acc_approx(pred, ref, qcate)['acc_approx']
-        ret[qcate].append(eval_output)
-        if qcate in ['color', 'shape', 'number', 'YesNo']:
-            ret['f1'].append(eval_output)
-        else:
-            ret['recall'].append(eval_output)
-        ret['acc'].append(eval_output)
-
-    for key, value in ret.items():
-        if key == 'fl':
-            continue
-        if len(ret[key]) == 0:
-            ret[key] = 0
-        else:
-            ret[key] = sum(ret[key]) / len(ret[key])
-
-    return ret
+    return calc_qa_metrics(preds, refs, qcates)
 
 
 @torch.no_grad()
