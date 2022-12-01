@@ -109,16 +109,22 @@ def validate(args, dev_dataloader, model):
             allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
+            patch_images = data['patch_images'].to(args.device)
+            patch_masks = data['patch_masks'].to(args.device)
 
             squeezed_sources = sources.view(-1, sources.size(-1))
             squeezed_targets = targets.view(-1, targets.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
             squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
+            squeezed_patch_masks = patch_masks.view(-1)
+            squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
 
             outputs = model(
                 input_ids=squeezed_sources, 
                 decoder_input_ids=squeezed_prev_outputs,
+                patch_masks=squeezed_patch_masks,
+                patch_images=squeezed_patch_images,
                 attention_mask=squeezed_decoder_attention_mask,
             )
             logits = outputs['logits']
@@ -137,8 +143,6 @@ def validate(args, dev_dataloader, model):
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
             # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.classifier_threshold).float()
-            print(predictions.tolist())
-            print(labels.view(-1).tolist())
 
             pred_labels.append(predictions.tolist())
             gth_labels.append(labels.view(-1).tolist())
@@ -190,18 +194,24 @@ def train(args, model, tokenizer):
             allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
+            patch_masks = data['patch_masks'].to(args.device)
+            patch_images = data['patch_images'].to(args.device)
 
             squeezed_sources = sources.view(-1, sources.size(-1))
             squeezed_targets = targets.view(-1, targets.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
             squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
+            squeezed_patch_masks = patch_masks.view(-1)
+            squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
                 outputs = model(
                     input_ids=squeezed_sources, 
                     decoder_input_ids=squeezed_prev_outputs,
+                    patch_images=squeezed_patch_images,
+                    patch_masks=squeezed_patch_masks,
                     attention_mask=squeezed_decoder_attention_mask,
                 )
                 logits = outputs['logits']
@@ -321,6 +331,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_dir', type=str, default='./data/')
     parser.add_argument('--model_name', type=str, default='OFA-tiny', help='model name or path')
     parser.add_argument('--model_dir', type=str, default='./OFA-tiny')
+    parser.add_argument('--image_dir', type=str, default='../../utils/webqa_data/images')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')
     parser.add_argument('--test_file', type=str, default='test.jsonl', help='path to test file')

@@ -2,9 +2,17 @@ import os
 import jsonlines
 import argparse
 import torch
+import torchvision
+from torchvision import transforms
+from PIL import Image, ImageFile
 import random
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
+
+
+IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
+
 
 class WebQATestDataset(Dataset):
     def __init__(self, args, tokenizer):
@@ -103,10 +111,32 @@ class WebQATestDataset(Dataset):
 
 
 class WebQADataset(Dataset):
-    def __init__(self, args, tokenizer, split):
+    def __init__(
+        self, 
+        args, 
+        tokenizer, 
+        split, 
+        imagenet_default_mean_and_std=False,
+        patch_image_size=224,
+    ):
         self.args = args
         self.tokenizer = tokenizer
         self.data = self.build_dataset(split=split)
+        self.patch_image_size = patch_image_size
+
+        if imagenet_default_mean_and_std:
+            mean = IMAGENET_DEFAULT_MEAN
+            std = IMAGENET_DEFAULT_STD
+        else:
+            mean = [0.5, 0.5, 0.5]
+            std = [0.5, 0.5, 0.5]
+
+        self.patch_resize_transform = transforms.Compose([
+            lambda image: image.convert('RGB'),
+            transforms.Resize((patch_image_size, patch_image_size), interpolation=Image.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std),
+        ])
     
     def __len__(self):
         return len(self.data)
@@ -150,6 +180,8 @@ class WebQADataset(Dataset):
         prev_outputs = []
         labels = []
         constraint_masks = []
+        patch_images = []
+        patch_masks = []
         bsz = len(batch)
 
         for instance in batch:
@@ -158,6 +190,8 @@ class WebQADataset(Dataset):
             batch_sources = []
             batch_labels = []
             batch_constraint_mask = []
+            batch_patch_images = []
+            batch_patch_masks = []
             text_inputs = []
             text_outputs = []
 
@@ -165,10 +199,17 @@ class WebQADataset(Dataset):
             for pos_txt_fact in instance['pos_txt_facts']:
                 text_inputs.append('Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question))
                 text_outputs.append('yes')
+                image = Image.open(os.path.join(self.args.image_dir, 'fake.jpg'))
+                batch_patch_images.append(self.patch_resize_transform(image))
+                batch_patch_masks.append(False)
                 batch_labels.append(1)
             for pos_img_fact in instance['pos_img_facts']:
                 text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(pos_img_fact['caption'], question))
                 text_outputs.append('yes')
+                image_id = pos_img_fact['image_id']
+                image = Image.open(os.path.join(self.args.image_dir, str(image_id) + '.jpg'))
+                batch_patch_images.append(self.patch_resize_transform(image))
+                batch_patch_masks.append(True)
                 batch_labels.append(1)
 
             neg_txt_count = 0
@@ -179,6 +220,8 @@ class WebQADataset(Dataset):
                     neg_txt_count += 1
                     text_inputs.append('Is text " {} " related to the question of " {} "?'.format(neg_txt_fact['fact'], question))
                     text_outputs.append('no')
+                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                    batch_patch_masks.append(False)
                     batch_labels.append(0)
 
             random.shuffle(instance['neg_img_facts'])
@@ -187,6 +230,9 @@ class WebQADataset(Dataset):
                     neg_img_count += 1
                     text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question))
                     text_outputs.append('no')
+                    image_id = neg_img_fact['image_id']
+                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                    batch_patch_masks.append(True)
                     batch_labels.append(0)
 
             allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
@@ -209,6 +255,8 @@ class WebQADataset(Dataset):
                 batch_prev_outputs = batch_prev_outputs[:self.args.choice_num]
                 batch_constraint_mask = batch_constraint_mask[:self.args.choice_num]
                 batch_labels = batch_labels[:self.args.choice_num]
+                batch_patch_images = batch_patch_images[:self.args.choice_num]
+                batch_patch_masks = batch_patch_masks[:self.args.choice_num] 
             else:
                 num_placeholder = self.args.choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
@@ -216,12 +264,16 @@ class WebQADataset(Dataset):
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_constraint_mask += [torch.zeros((1, self.args.vocab_size)).bool() for _ in range(num_placeholder)]
                 batch_labels += [-100 for _ in range(num_placeholder)]
+                batch_patch_images += [torch.zeros((3, self.patch_image_size, self.patch_image_size)) for _ in range(num_placeholder)]
+                batch_patch_masks += [False for _ in range(num_placeholder)]
 
             sources += batch_sources # get (bsz x choice_num) x seq_len 
             targets += batch_targets
             prev_outputs += batch_prev_outputs
             constraint_masks += batch_constraint_mask
             labels += batch_labels
+            patch_images += batch_patch_images
+            patch_masks += batch_patch_masks
 
         sources = pad_sequence(
             sources, 
@@ -243,6 +295,10 @@ class WebQADataset(Dataset):
             batch_first=True,
             padding_value=False,
         )
+        patch_images = torch.stack(patch_images, dim=0)
+        patch_images = patch_images.view(bsz, -1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+        patch_masks = torch.BoolTensor(patch_masks)
+        patch_masks = patch_masks.view(bsz, -1)
 
         sources = sources.view(bsz, -1, sources.size(-1))
         targets = targets.view(bsz, -1, targets.size(-1))
@@ -261,6 +317,8 @@ class WebQADataset(Dataset):
             'allowed_words': allowed_words,
             'labels': labels,
             'logit_mask': logit_mask,
+            'patch_masks': patch_masks,
+            'patch_images': patch_images,
         }
 
 
