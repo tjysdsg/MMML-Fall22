@@ -92,7 +92,6 @@ class MNLITask(OFATask):
             last_token_ids = sample["net_input"]["prev_output_tokens"].ne(self.src_dict.pad()).sum(1, keepdim=True) - 1
             logits = net_output[0].gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, net_output[0].size(2)))
             logits = logits.squeeze(1)
-            import pdb; pdb.set_trace()
             predicts = logits.argmax(1).tolist()
             hyps = [self.bpe.decode(self.src_dict[predict]).strip() for predict in predicts]
             scores = [ref_dict.get(hyp, 0) for ref_dict, hyp in zip(sample['ref_dict'], hyps)]

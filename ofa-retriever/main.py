@@ -320,7 +320,7 @@ if __name__ == '__main__':
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
     parser.add_argument('--model_name', type=str, default='OFA-tiny', help='model name or path')
-    parser.add_argument('--model_dir', type=str, default='../OFA-tiny')
+    parser.add_argument('--model_dir', type=str, default='./OFA-tiny')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')
     parser.add_argument('--test_file', type=str, default='test.jsonl', help='path to test file')

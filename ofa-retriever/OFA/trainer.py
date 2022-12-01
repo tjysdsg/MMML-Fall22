@@ -1105,8 +1105,7 @@ class Trainer(object):
         return self.lr_step_update()
 
     def lr_reinit(self, total_updates, num_updates):
-        #self.lr_scheduler.reinit(total_updates, num_updates)
-        return
+        self.lr_scheduler.reinit(total_updates, num_updates)
 
     def lr_step(self, epoch, val_loss=None):
         """Adjust the learning rate at the end of the epoch."""

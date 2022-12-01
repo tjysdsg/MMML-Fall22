@@ -87,10 +87,7 @@ class MNLIDataset(OFADataset):
         self.prompt_type = prompt_type
 
     def __getitem__(self, index):
-        #sentence1, sentence2, label = self.dataset[index]
-        sentence1 = 'hello, world'
-        sentence2 = 'this is a bad world'
-        label = '0'
+        sentence1, sentence2, label = self.dataset[index]
         if label == '0':
             label = 'maybe'
         elif label == '1':
@@ -129,7 +126,6 @@ class MNLIDataset(OFADataset):
             "prev_output_tokens": prev_output_item,
             "ref_dict": ref_dict,
         }
-        import pdb; pdb.set_trace()
         if self.constraint_trie is not None:
             constraint_mask = torch.zeros((len(prev_output_item), len(self.tgt_dict))).bool()
             constraint_nodes = self.constraint_trie.get_next_layer(self.bos_item.tolist())
