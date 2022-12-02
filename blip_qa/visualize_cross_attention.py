@@ -15,14 +15,29 @@ from matplotlib import pyplot as plt
 def viz_att(config, args, model, train_loader, device):
     model.eval()
     for i, (images, captions, question, answer, n_facts, _, _,) in enumerate(train_loader):
+        if n_facts[0] <= 1:
+            continue
+
         images = images.to(device, non_blocking=True)
+
+        # atts = (batch, num_heads, question_len, img_embed_len)
         loss, atts = model(images, captions, question, answer, n_facts, output_attentions=True)
-        # cross_attentions[0] (batch, num_heads, question_len, img_embed_len)
-        # print(outputs.cross_attentions[0].shape)
-        print('n_facts:', n_facts[0])
-        atts = torch.mean(atts[0], dim=0)
-        plt.figure(figsize=(16, 9))
-        plt.imshow(atts.detach().cpu().numpy())
+
+        atts = torch.mean(atts[0], dim=0)  # (question_len, img_embed_len)
+
+        # num_patches = model.visual_encoder.patch_embed.num_patches + 1
+        atts = atts.view(atts.shape[0], n_facts[0], -1)  # (question_len, n_facts, num_patches)
+
+        att_mean = torch.mean(atts, dim=-1)  # (question_len, n_facts)
+        att_std = torch.std(atts, dim=-1)  # (question_len, n_facts)
+
+        fig, axes = plt.subplots(1, 2, figsize=(16, 9))
+        ax = axes.flat
+        im = ax[0].imshow(att_mean.detach().cpu().numpy())
+        ax[0].set_title('Mean attention scores')
+        im = ax[1].imshow(att_std.detach().cpu().numpy())
+        ax[1].set_title('Std. attention scores')
+        fig.colorbar(im, ax=axes.ravel().tolist())
         plt.savefig('shit.jpg')
         plt.close('all')
 
