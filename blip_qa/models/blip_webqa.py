@@ -205,8 +205,9 @@ class BLIP_VQA(nn.Module):
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
 
         # image-grounded text encoder
-        question_output = self.text_encoder(question.input_ids,
-                                            attention_mask=question.attention_mask,
+        attention_mask = torch.cat([question.attention_mask, captions.attention_mask], dim=-1)
+        question_output = self.text_encoder(torch.cat([question.input_ids, captions.input_ids], dim=-1),
+                                            attention_mask=attention_mask,
                                             encoder_hidden_states=image_embeds,
                                             encoder_attention_mask=image_atts,
                                             output_attentions=output_attentions,
@@ -230,7 +231,7 @@ class BLIP_VQA(nn.Module):
             answer_output = self.text_decoder(answer.input_ids,
                                               attention_mask=answer.attention_mask,
                                               encoder_hidden_states=question_output.last_hidden_state,
-                                              encoder_attention_mask=question.attention_mask,
+                                              encoder_attention_mask=attention_mask,
                                               labels=answer_targets,
                                               output_attentions=output_attentions,
                                               return_dict=True,
