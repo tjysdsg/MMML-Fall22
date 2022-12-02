@@ -213,7 +213,10 @@ class BLIP_VQA(nn.Module):
                                             return_dict=True)
 
         # (batch, num_heads, question_len, image_embeds_len)
-        multimodal_cross_atts = question_output.cross_attentions[0]
+        if output_attentions:
+            multimodal_cross_atts = question_output.cross_attentions[0]
+        else:
+            multimodal_cross_atts = None
 
         if train:
             '''
