@@ -15,33 +15,37 @@ IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
 
 
 class WebQATestDataset(Dataset):
-    def __init__(self, args, tokenizer):
+    def __init__(
+        self, 
+        args, 
+        tokenizer,
+        imagenet_default_mean_and_std=False,
+        patch_image_size=224,
+    ):
         self.args = args
         self.tokenizer = tokenizer
         self.data = self.build_dataset()
+        self.patch_image_size = patch_image_size
+
+        if imagenet_default_mean_and_std:
+            mean = IMAGENET_DEFAULT_MEAN
+            std = IMAGENET_DEFAULT_STD
+        else:
+            mean = [0.5, 0.5, 0.5]
+            std = [0.5, 0.5, 0.5]
+
+        self.patch_resize_transform = transforms.Compose([
+            lambda image: image.convert('RGB'),
+            transforms.Resize((patch_image_size, patch_image_size), interpolation=Image.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std),
+        ])
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
-        return self.data[index]
-
-    def recursive_tokenize(self, data):
-        if isinstance(data, int):
-            return data
-        elif isinstance(data, str):
-            return self.tokenizer(data.strip(), truncation=True, add_special_tokens=False)['input_ids']
-        elif isinstance(data, dict):
-            for key, value in data.items():
-                if key == 'image_id' or key == 'snippet_id' or key == 'Q_id':
-                    data[key] = value
-                else:
-                    data[key] = self.recursive_tokenize(value)
-
-            return data
-        
-        lists = list(self.recursive_tokenize(subdata) for subdata in data)
-        return lists    
+        return self.data[index] 
 
     def build_dataset(self):
         if self.args.have_cached_dataset:
@@ -49,63 +53,81 @@ class WebQATestDataset(Dataset):
         else:
             with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.test_file), 'r') as jsonl_f:
                 dataset = [obj for obj in jsonl_f]
-            
-            print('=====begin tokenize======')
-            dataset = self.recursive_tokenize(dataset)
-            print('=====end   tokenize======')
             torch.save(dataset, os.path.join(self.args.cache_dir, 'WebQA_test_dataset'))
         return dataset
 
     def collate_fn(self, batch, max_length=None):
-        input_ids = []
-        labels = []
-        attention_mask = []
-        source_types = []
+        sources = []
+        prev_outputs = []
+        patch_images = []
+        patch_masks = []
         q_ids = []
+        source_types = []
         source_ids = []
+        sources = []
+        constraint_masks = []
 
+        bsz = len(batch)
+
+        allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
         for instance in batch:
-            instance_token_ids = [self.tokenizer.cls_token_id]
-            # QA part
-            instance_token_ids += instance['Q']
-            #instance_token_ids += instance['A'] # answer is all empty in test cases
-            # add one [SEP] after QA part
-            instance_token_ids += [self.tokenizer.sep_token_id]
-            # fact part (both for text and image)
+            q_ids.append(instance['Q_id'])
+            question = instance['Q']
             if 'txt_fact' in instance.keys():
-                instance_token_ids += instance['txt_fact']['fact']
+                text_input = 'Is text " {} " related to the question of " {} "?'.format(instance['txt_fact']['fact'], question)
+                source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                 source_types.append('txt')
                 source_ids.append(instance['txt_fact']['snippet_id'])
+                sources.append(torch.LongTensor(source))
+                prev_outputs.append(torch.LongTensor(source))
+                patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                patch_masks.append(False)
             elif 'img_fact' in instance.keys():
-                instance_token_ids += instance['img_fact']['caption']
+                text_input = 'Is image caption " {} " related to the question of " {} "?'.format(instance['img_fact']['caption'], question)
+                source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                 source_types.append('img')
                 source_ids.append(instance['img_fact']['image_id'])
-            else:
-                raise ValueError('instance should either be image-based or text-based')
+                sources.append(torch.LongTensor(source))
+                prev_outputs.append(torch.LongTensor(source))
+                image = Image.open(os.path.join(self.args.image_dir, str(instance['img_fact']['image_id']) + '.jpg'))
+                patch_images.append(self.patch_resize_transform(image))
+                patch_masks.append(True)
 
-            instance_token_ids = instance_token_ids[:self.args.max_length-1] # since there is one last [SEP]
-            # add [SEP] after truncation
-            instance_token_ids += [self.tokenizer.sep_token_id]
-            instance_token_ids = torch.LongTensor(instance_token_ids)
+            constraint_mask = torch.zeros((len(source), self.args.vocab_size)).bool()
+            constraint_mask[-1][allowed_words] = True
+            constraint_masks.append(constraint_mask)
 
-            input_ids.append(instance_token_ids)
-            q_ids.append(instance['Q_id'])
-
-
-        input_ids = pad_sequence(
-            input_ids, 
+        sources = pad_sequence(
+            sources, 
             batch_first=True, 
             padding_value=self.tokenizer.pad_token_id
         )
-        attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
+        prev_outputs = pad_sequence(
+            prev_outputs, 
+            batch_first=True, 
+            padding_value=self.tokenizer.pad_token_id
+        )
+        constraint_masks = pad_sequence(
+            constraint_masks,
+            batch_first=True,
+            padding_value=False,
+        )
 
+        patch_images = torch.stack(patch_images, dim=0)
+        patch_masks = torch.BoolTensor(patch_masks)
 
+        decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
         return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
+            'sources': sources,
+            'prev_outputs': prev_outputs,
+            'patch_masks': patch_masks,
+            'patch_images': patch_images,
+            'decoder_attention_mask': decoder_attention_mask,
             'source_ids': source_ids,
             'source_types': source_types,
             'q_ids': q_ids,
+            'allowed_words': allowed_words,
+            'constraint_masks': constraint_masks,
         }
 
 
@@ -144,17 +166,6 @@ class WebQADataset(Dataset):
     def __getitem__(self, index):
         return self.data[index]
 
-    def recursive_tokenize(self, data):
-        if isinstance(data, int):
-            return data
-        elif isinstance(data, str):
-            return self.tokenizer(data.strip(), truncation=True, add_special_tokens=False)['input_ids']
-        elif isinstance(data, dict):
-            return dict((key, self.recursive_tokenize(value)) for key, value in data.items())
-        
-        lists = list(self.recursive_tokenize(subdata) for subdata in data)
-        return lists    
-
     def build_dataset(self, split):
         if self.args.have_cached_dataset:
             dataset = torch.load(os.path.join(self.args.cache_dir, split))
@@ -168,9 +179,6 @@ class WebQADataset(Dataset):
             else:
                 raise ValueError('no right dataset split')
             
-            #print('=====begin tokenize======')
-            #dataset = self.recursive_tokenize(dataset)
-            #print('=====end   tokenize======')
             torch.save(dataset, os.path.join(self.args.cache_dir, split))
         return dataset
 

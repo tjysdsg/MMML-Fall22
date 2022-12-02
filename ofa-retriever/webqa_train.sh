@@ -7,11 +7,11 @@ python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29518 ma
 --use_wandb \
 --cache_dir ./cache/WebQA_full_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
---gradient_accumulation_step 32 \
+--gradient_accumulation_step 64 \
 --train_file train.jsonl \
 --val_file val.jsonl \
---num_epochs 2 \
---evaluation_steps 2 \
+--num_epochs 4 \
+--evaluation_steps 200 \
 --max_length 300 \
 --dev_batch_size 2 \
 --train_batch_size 1 \

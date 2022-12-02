@@ -291,16 +291,35 @@ def test(args, model, tokenizer):
         model.load_state_dict(torch.load(args.checkpoint_save_dir + 'best_{}4{}.ckpt'.format(args.model_name, args.task)))
         loaders = load_dataset(args, tokenizer)
         for idx, data in enumerate(tqdm(loaders['test'])):
-            input_ids = data['input_ids'].to(args.device)
-            attention_mask = data['attention_mask'].to(args.device)
+            sources = data['sources'].to(args.device)
+            prev_outputs = data['prev_outputs'].to(args.device)
+            decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
+            constraint_masks = data['constraint_masks'].to(args.device)
+            allowed_words = data['allowed_words'].to(args.device)
+            patch_images = data['patch_images'].to(args.device)
+            patch_masks = data['patch_masks'].to(args.device)
             source_ids = data['source_ids']
             source_types = data['source_types']
             q_ids = data['q_ids']
-            outputs = model(input_ids, attention_mask=attention_mask)
+
+            outputs = model(
+                input_ids=sources, 
+                decoder_input_ids=prev_outputs,
+                patch_images=patch_images,
+                patch_masks=patch_masks,
+                attention_mask=decoder_attention_mask,
+            ) 
             logits = outputs['logits']
+            logits.masked_fill_(~constraint_masks, -float('inf'))
+            last_token_ids = prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
+            logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
+            logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
+
+            # need to fix the -inf problem since the -inf will not be masked by the logit_mask
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.classifier_threshold).float()
-            
+
             assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
             for idx in range(len(predictions)):
                 prediction = predictions[idx]
