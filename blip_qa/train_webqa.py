@@ -93,6 +93,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
             wandb.log({'eval_qa': metric['acc'] * metric['fl'], 'step': global_step})
 
 
+@torch.no_grad()
 def evaluation(model, data_loader, device):
     from tqdm import tqdm
     from calculate_qa_metrics import calc_qa_metrics
@@ -102,30 +103,32 @@ def evaluation(model, data_loader, device):
     preds = []
     qcates = []
     model.eval()
-    with torch.no_grad():
-        val_iter = tqdm(data_loader, desc="Validation", disable=0)
-        for i, (
-                images, captions, question, answer, n_facts, question_ids, qcate,
-        ) in enumerate(val_iter):
-            images = images.to(device, non_blocking=True)
-            pred = model(images, captions, question, answer, n_facts, train=False)
+    val_iter = tqdm(data_loader, desc="Validation", disable=0)
+    for i, (
+            images, captions, question, answer, n_facts, question_ids, qcate,
+    ) in enumerate(val_iter):
+        images = images.to(device, non_blocking=True)
+        pred = model(images, captions, question, answer, n_facts, train=False)
 
-            preds += pred
-            refs += answer
-            qcates += qcate
+        preds += pred
+        refs += answer
+        qcates += qcate
 
     return calc_qa_metrics(preds, refs, qcates)
 
 
 @torch.no_grad()
 def inference(config, model, data_loader, device):
+    from tqdm import tqdm
+
     model.eval()
 
     print("Start inference")
     result = []
+    data_iter = tqdm(data_loader, desc="Validation", disable=0)
     for i, (
             images, captions, question, answer, n_facts, question_ids, qcates
-    ) in enumerate(data_loader):
+    ) in enumerate(data_iter):
         images = images.to(device, non_blocking=True)
         pred = model(images, captions, question, answer, n_facts, train=False)
 
