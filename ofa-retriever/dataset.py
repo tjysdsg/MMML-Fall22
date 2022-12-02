@@ -2,10 +2,12 @@ import os
 import jsonlines
 import argparse
 import torch
+import time
 import torchvision
 from torchvision import transforms
 from PIL import Image, ImageFile
 import random
+from tqdm import tqdm
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
@@ -24,7 +26,6 @@ class WebQATestDataset(Dataset):
     ):
         self.args = args
         self.tokenizer = tokenizer
-        self.data = self.build_dataset()
         self.patch_image_size = patch_image_size
 
         if imagenet_default_mean_and_std:
@@ -40,6 +41,7 @@ class WebQATestDataset(Dataset):
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
         ])
+        self.data = self.build_dataset()
 
     def __len__(self):
         return len(self.data)
@@ -53,7 +55,21 @@ class WebQATestDataset(Dataset):
         else:
             with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.test_file), 'r') as jsonl_f:
                 dataset = [obj for obj in jsonl_f]
+            for data in tqdm(dataset):
+                question = data['Q']
+                if 'txt_fact' in data.keys():
+                    text_input = 'Is text " {} " related to the question of " {} "?'.format(data['txt_fact']['fact'], question)
+                    source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                    data['source'] = torch.LongTensor(source)
+                    data['prev_output'] = torch.LongTensor(source)
+                elif 'img_fact' in data.keys():
+                    text_input = 'Is image caption " {} " related to the question of " {} "?'.format(data['img_fact']['caption'], question)
+                    source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                    data['source'] = torch.LongTensor(source)
+                    data['prev_output'] = torch.LongTensor(source)
+            print('=' * 20 + 'Saving dataset' + '=' * 20)
             torch.save(dataset, os.path.join(self.args.cache_dir, 'WebQA_test_dataset'))
+            print('=' * 20 + 'Saving dataset done' + '=' * 20)
         return dataset
 
     def collate_fn(self, batch, max_length=None):
@@ -72,28 +88,28 @@ class WebQATestDataset(Dataset):
         allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
         for instance in batch:
             q_ids.append(instance['Q_id'])
-            question = instance['Q']
             if 'txt_fact' in instance.keys():
-                text_input = 'Is text " {} " related to the question of " {} "?'.format(instance['txt_fact']['fact'], question)
-                source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                 source_types.append('txt')
                 source_ids.append(instance['txt_fact']['snippet_id'])
-                sources.append(torch.LongTensor(source))
-                prev_outputs.append(torch.LongTensor(source))
-                patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                patch_masks.append(False)
+                patch_image = torch.zeros((3, self.patch_image_size, self.patch_image_size))
+                patch_mask = False
             elif 'img_fact' in instance.keys():
-                text_input = 'Is image caption " {} " related to the question of " {} "?'.format(instance['img_fact']['caption'], question)
-                source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                 source_types.append('img')
                 source_ids.append(instance['img_fact']['image_id'])
-                sources.append(torch.LongTensor(source))
-                prev_outputs.append(torch.LongTensor(source))
-                image = Image.open(os.path.join(self.args.image_dir, str(instance['img_fact']['image_id']) + '.jpg'))
-                patch_images.append(self.patch_resize_transform(image))
-                patch_masks.append(True)
+                try:
+                    image = Image.open(os.path.join(self.args.image_dir, str(instance['img_fact']['image_id']) + '.jpg'))
+                    patch_image = self.patch_resize_transform(image)
+                    patch_mask = True
+                except:
+                    patch_image = torch.zeros((3, self.patch_image_size, self.patch_image_size))
+                    patch_mask = False
+                    print('missing picture: {}, we need to ignore this.'.format(instance['img_fact']['image_id']))
+            sources.append(instance['source'])
+            prev_outputs.append(instance['prev_output'])
+            patch_images.append(patch_image)
+            patch_masks.append(patch_mask)
 
-            constraint_mask = torch.zeros((len(source), self.args.vocab_size)).bool()
+            constraint_mask = torch.zeros((len(instance['source']), self.args.vocab_size)).bool()
             constraint_mask[-1][allowed_words] = True
             constraint_masks.append(constraint_mask)
 
@@ -207,8 +223,7 @@ class WebQADataset(Dataset):
             for pos_txt_fact in instance['pos_txt_facts']:
                 text_inputs.append('Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question))
                 text_outputs.append('yes')
-                image = Image.open(os.path.join(self.args.image_dir, 'fake.jpg'))
-                batch_patch_images.append(self.patch_resize_transform(image))
+                batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                 batch_patch_masks.append(False)
                 batch_labels.append(1)
             for pos_img_fact in instance['pos_img_facts']:
@@ -239,7 +254,8 @@ class WebQADataset(Dataset):
                     text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question))
                     text_outputs.append('no')
                     image_id = neg_img_fact['image_id']
-                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                    image = Image.open(os.path.join(self.args.image_dir, str(image_id) + '.jpg'))
+                    batch_patch_images.append(image)
                     batch_patch_masks.append(True)
                     batch_labels.append(0)
 
