@@ -25,7 +25,7 @@ def init_wandb(output_dir: str):
     )
     os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'
     os.environ['WANDB_DIR'] = output_dir
-    wandb.init(project="blip_webqa_qa")
+    wandb.init(project="blip_webqa_qa_img_only")
 
 
 def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
