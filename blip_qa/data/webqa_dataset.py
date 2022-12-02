@@ -141,7 +141,7 @@ def webqa_collate_fn(batch):
     for image, caption, question, answer, qid, qcate in batch:
         if image is None:  # placeholder for samples without image facts
             image_lists.append(torch.zeros(1, 3, 480, 480))  # FIXME: load H and W from configs
-            n_facts.append(1)  # set to 1 so we don't mask this image, let the model figure out black image = nothing
+            n_facts.append(0)  # set to 0 so the placeholder is masked
             pad_max_len = max(pad_max_len, 1)
         else:
             image_lists.append(image)
