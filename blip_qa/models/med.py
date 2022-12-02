@@ -137,8 +137,8 @@ class BertSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        x = x.view(*new_x_shape)  # (batch, seq_len, num_heads, head_size)
+        return x.permute(0, 2, 1, 3)  # (batch, num_heads, seq_len, head_size)
 
     def forward(
             self,
@@ -459,6 +459,7 @@ class BertEncoder(nn.Module):
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

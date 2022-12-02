@@ -8,6 +8,7 @@ from models.blip_webqa import blip_vqa
 import utils
 from data import create_dataset, create_loader
 from data.webqa_dataset import webqa_collate_fn
+from matplotlib import pyplot as plt
 
 
 @torch.no_grad()
@@ -15,13 +16,16 @@ def viz_att(config, args, model, train_loader, device):
     model.eval()
     for i, (images, captions, question, answer, n_facts, _, _,) in enumerate(train_loader):
         images = images.to(device, non_blocking=True)
-        loss, outputs = model(images, captions, question, answer, n_facts, train=True)
+        loss, atts = model(images, captions, question, answer, n_facts, output_attentions=True)
+        # cross_attentions[0] (batch, num_heads, question_len, img_embed_len)
+        # print(outputs.cross_attentions[0].shape)
+        print('n_facts:', n_facts[0])
+        atts = torch.mean(atts[0], dim=0)
+        plt.figure(figsize=(16, 9))
+        plt.imshow(atts.detach().cpu().numpy())
+        plt.savefig('shit.jpg')
+        plt.close('all')
 
-        if outputs.cross_att is None:
-            print("[ERROR] Please add '\"output_attentions\": true' to the end of configs/med_config.json")
-            exit(1)
-
-        print(outputs.cross_att.shape)
         exit(0)
 
 
@@ -38,7 +42,7 @@ def main(args, config):
     datasets = create_dataset(config)
     train_loader, val_loader, test_loader = create_loader(
         datasets, [None, None, None],
-        batch_size=[config['batch_size_train'], config['batch_size_test'], config['batch_size_test']],
+        batch_size=[1, 1, 1],
         num_workers=[1, 1, 1], is_trains=[True, False, False],
         collate_fns=[webqa_collate_fn, webqa_collate_fn, webqa_collate_fn]
     )
@@ -65,7 +69,7 @@ def main(args, config):
         )
     model = model.to(device)
 
-    viz_att(config, args, model, train_loader, device)
+    viz_att(config, args, model, val_loader, device)
 
 
 def load_args_configs():

@@ -177,6 +177,7 @@ class BLIP_VQA(nn.Module):
             question: List[str],
             answer: List[str],
             n_facts: List[int],
+            output_attentions=False,
             train=True,
     ):
         """
@@ -185,6 +186,7 @@ class BLIP_VQA(nn.Module):
         :param question: Batch of questions
         :param answer: Batch of answers
         :param n_facts: Batch of number of image facts
+        :param output_attentions: Output attentions
         :param train: train or inference
         """
 
@@ -202,6 +204,17 @@ class BLIP_VQA(nn.Module):
         ).to(image.device)
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
 
+        # image-grounded text encoder
+        question_output = self.text_encoder(question.input_ids,
+                                            attention_mask=question.attention_mask,
+                                            encoder_hidden_states=image_embeds,
+                                            encoder_attention_mask=image_atts,
+                                            output_attentions=output_attentions,
+                                            return_dict=True)
+
+        # (batch, num_heads, question_len, image_embeds_len)
+        multimodal_cross_atts = question_output.cross_attentions[0]
+
         if train:
             '''
             n: number of answers for each question
@@ -211,32 +224,20 @@ class BLIP_VQA(nn.Module):
             answer.input_ids[:, 0] = self.tokenizer.bos_token_id
             answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100)
 
-            question_output = self.text_encoder(question.input_ids,
-                                                attention_mask=question.attention_mask,
-                                                encoder_hidden_states=image_embeds,
-                                                encoder_attention_mask=image_atts,
-                                                return_dict=True)
-
             answer_output = self.text_decoder(answer.input_ids,
                                               attention_mask=answer.attention_mask,
                                               encoder_hidden_states=question_output.last_hidden_state,
                                               encoder_attention_mask=question.attention_mask,
                                               labels=answer_targets,
+                                              output_attentions=output_attentions,
                                               return_dict=True,
                                               reduction='none',
                                               )
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
-            return loss, answer_output
-
+            return loss, multimodal_cross_atts
         else:
-            question_output = self.text_encoder(question.input_ids,
-                                                attention_mask=question.attention_mask,
-                                                encoder_hidden_states=image_embeds,
-                                                encoder_attention_mask=image_atts,
-                                                return_dict=True)
-
             num_beams = 3
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
             question_atts = torch.ones(question_states.size()[:-1], dtype=torch.long).to(question_states.device)
@@ -252,6 +253,7 @@ class BLIP_VQA(nn.Module):
                 pad_token_id=self.tokenizer.pad_token_id,
                 encoder_hidden_states=question_states,
                 encoder_attention_mask=question_atts,
+                output_attentions=output_attentions,
             )
 
             answers = []
