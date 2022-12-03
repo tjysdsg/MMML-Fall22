@@ -8,10 +8,11 @@ import evaluate
 import torch.distributed as dist
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
-from transformers.models.ofa import OFATokenizer, OFAModel, OFAConfig
+from transformers.models.ofa import OFATokenizer, OFAConfig
 from transformers.models.ofa.generate import sequence_generator
 from transformers import pipeline
 from transformers import get_cosine_schedule_with_warmup
+from modeling_ofa import OFAModel
 from dataset import WebQADataset, WebQATestDataset
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -119,7 +120,7 @@ def validate(args, dev_dataloader, model):
                 input_ids=squeezed_sources, 
                 decoder_input_ids=squeezed_prev_outputs,
                 patch_masks=squeezed_patch_masks,
-                patch_images_2=squeezed_patch_images,
+                patch_images=squeezed_patch_images,
                 attention_mask=squeezed_decoder_attention_mask,
             )
             logits = outputs['logits']
@@ -205,7 +206,7 @@ def train(args, model, tokenizer):
                 outputs = model(
                     input_ids=squeezed_sources, 
                     decoder_input_ids=squeezed_prev_outputs,
-                    patch_images_2=squeezed_patch_images,
+                    patch_images=squeezed_patch_images,
                     patch_masks=squeezed_patch_masks,
                     attention_mask=squeezed_decoder_attention_mask,
                 )
@@ -299,7 +300,7 @@ def test(args, model, tokenizer):
             outputs = model(
                 input_ids=sources, 
                 decoder_input_ids=prev_outputs,
-                patch_images_2=patch_images,
+                patch_images=patch_images,
                 patch_masks=patch_masks,
                 attention_mask=decoder_attention_mask,
             ) 
