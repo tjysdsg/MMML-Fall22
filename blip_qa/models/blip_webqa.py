@@ -179,7 +179,6 @@ class BLIP_VQA(nn.Module):
             n_facts: List[int],
             output_attentions=False,
             train=True,
-            retrieval_labels: torch.Tensor = None,
     ):
         """
         :param image: (batch, n_facts, channel, H, W)
@@ -189,15 +188,6 @@ class BLIP_VQA(nn.Module):
         :param n_facts: Batch of number of image facts
         :param output_attentions: Output attentions
         :param train: train or inference
-        :param retrieval_labels: (batch, n_img_facts, n_text_facts)
-
-        NOTE:
-        captions[i] = ''.join(img_captions + text_facts)
-        image[i] and captions[i] is the image and caption of the i-th image fact
-
-        img_cross_atts = cross attention scores between ViT outputs and question tokens (text_encoder)
-        txt_cross_atts = cross attention scores between captions and answer tokens (text_decoder)
-        For the i-th img facts, the retrieval output is mean(img_cross_atts[:, i])
         """
 
         image_embeds, lengths = self.encode_images(image, n_facts)
