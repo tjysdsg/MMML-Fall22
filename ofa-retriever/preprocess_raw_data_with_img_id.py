@@ -71,6 +71,7 @@ def generate_test_dataset_from_raw_WebQA(file_name):
                 fact['caption'] = img_fact['caption']
                 fact['image_id'] = img_fact['image_id']
                 dataset.append({'Q_id': Q_id, 'Q': Q, 'A': A, 'img_fact': fact})
+    import pdb; pdb.set_trace()
     return dataset
 
 
@@ -100,3 +101,4 @@ if __name__ == '__main__':
     file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_test.json'
     test_dataset = generate_test_dataset_from_raw_WebQA(file_name)
     write_dataset(test_dataset, './data/WebQA_test_data/test.jsonl')
+    import pdb; pdb.set_trace()

@@ -37,7 +37,7 @@ class WebQATestDataset(Dataset):
 
         self.patch_resize_transform = transforms.Compose([
             lambda image: image.convert('RGB'),
-            transforms.Resize((patch_image_size, patch_image_size), interpolation=Image.BICUBIC),
+            transforms.Resize((patch_image_size, patch_image_size), interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
         ])
@@ -57,6 +57,7 @@ class WebQATestDataset(Dataset):
                 dataset = [obj for obj in jsonl_f]
             for data in tqdm(dataset):
                 question = data['Q']
+
                 if 'txt_fact' in data.keys():
                     text_input = 'Is text " {} " related to the question of " {} "?'.format(data['txt_fact']['fact'], question)
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
@@ -67,12 +68,13 @@ class WebQATestDataset(Dataset):
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     data['source'] = torch.LongTensor(source)
                     data['prev_output'] = torch.LongTensor(source)
+
             print('=' * 20 + 'Saving dataset' + '=' * 20)
             torch.save(dataset, os.path.join(self.args.cache_dir, 'WebQA_test_dataset'))
             print('=' * 20 + 'Saving dataset done' + '=' * 20)
         return dataset
 
-    def collate_fn(self, batch, max_length=None):
+    def collate_fn(self, batch):
         sources = []
         prev_outputs = []
         patch_images = []
@@ -82,8 +84,6 @@ class WebQATestDataset(Dataset):
         source_ids = []
         sources = []
         constraint_masks = []
-
-        bsz = len(batch)
 
         allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
         for instance in batch:
@@ -171,7 +171,7 @@ class WebQADataset(Dataset):
 
         self.patch_resize_transform = transforms.Compose([
             lambda image: image.convert('RGB'),
-            transforms.Resize((patch_image_size, patch_image_size), interpolation=Image.BICUBIC),
+            transforms.Resize((patch_image_size, patch_image_size), interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
         ])
@@ -194,13 +194,68 @@ class WebQADataset(Dataset):
                     dataset = [obj for obj in jsonl_f]
             else:
                 raise ValueError('no right dataset split')
-            
+
+            if 'toy' in self.args.cache_dir:
+                dataset = dataset[:100]
+
+            for data in tqdm(dataset):
+                question = data['Q']
+
+                for pos_txt_fact in data['pos_txt_facts']:
+                    text_input = 'Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question)
+                    text_output = 'yes'
+                    source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                    target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
+                    assert len(target) == 1
+                    prev_output = source[:]
+                    target = prev_output[1:] + target
+                    pos_txt_fact['source'] = source
+                    pos_txt_fact['target'] = target
+                    pos_txt_fact['prev_output'] = prev_output
+
+                for neg_txt_fact in data['neg_txt_facts']:
+                    text_input = 'Is text " {} " related to the question of " {} "?'.format(neg_txt_fact['fact'], question)
+                    text_output = 'no'
+                    source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                    target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
+                    assert len(target) == 1
+                    prev_output = source[:]
+                    target = prev_output[1:] + target
+                    neg_txt_fact['source'] = source
+                    neg_txt_fact['target'] = target
+                    neg_txt_fact['prev_output'] = prev_output
+
+                for pos_img_fact in data['pos_img_facts']:
+                    text_input = 'Is image caption " {} " related to the question of " {} "?'.format(pos_img_fact['caption'], question)
+                    text_output = 'yes'
+                    source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                    target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
+                    assert len(target) == 1
+                    prev_output = source[:]
+                    target = prev_output[1:] + target
+                    pos_img_fact['source'] = source
+                    pos_img_fact['target'] = target
+                    pos_img_fact['prev_output'] = prev_output
+
+                for neg_img_fact in data['neg_img_facts']:
+                    text_input = 'Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question)
+                    text_output = 'no'
+                    source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
+                    target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
+                    assert len(target) == 1
+                    prev_output = source[:]
+                    target = prev_output[1:] + target
+                    neg_img_fact['source'] = source
+                    neg_img_fact['target'] = target
+                    neg_img_fact['prev_output'] = prev_output
+
+            print('=' * 20 + 'Saving dataset' + '=' * 20)
             torch.save(dataset, os.path.join(self.args.cache_dir, split))
+            print('=' * 20 + 'Saving dataset done' + '=' * 20)
         return dataset
 
     def collate_fn(self, batch):
         sources = []
-        targets = []
         prev_outputs = []
         labels = []
         constraint_masks = []
@@ -210,72 +265,72 @@ class WebQADataset(Dataset):
 
         for instance in batch:
             batch_prev_outputs = []
-            batch_targets = []
             batch_sources = []
             batch_labels = []
             batch_constraint_mask = []
             batch_patch_images = []
             batch_patch_masks = []
-            text_inputs = []
-            text_outputs = []
 
-            question = instance['Q']
+            # positive text fact
             for pos_txt_fact in instance['pos_txt_facts']:
-                text_inputs.append('Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question))
-                text_outputs.append('yes')
+                batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
+                batch_prev_outputs.append(torch.LongTensor(pos_txt_fact['prev_output']))
                 batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                 batch_patch_masks.append(False)
                 batch_labels.append(1)
+            
+            # positive image fact
             for pos_img_fact in instance['pos_img_facts']:
-                text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(pos_img_fact['caption'], question))
-                text_outputs.append('yes')
-                image_id = pos_img_fact['image_id']
-                image = Image.open(os.path.join(self.args.image_dir, str(image_id) + '.jpg'))
-                batch_patch_images.append(self.patch_resize_transform(image))
-                batch_patch_masks.append(True)
+                batch_sources.append(torch.LongTensor(pos_img_fact['source']))
+                batch_prev_outputs.append(torch.LongTensor(pos_img_fact['prev_output']))
                 batch_labels.append(1)
+                try:
+                    image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
+                    batch_patch_images.append(self.patch_resize_transform(image))
+                    batch_patch_masks.append(True)
+                except:
+                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                    batch_patch_masks.append(False)
 
+            # negative text fact
             neg_txt_count = 0
-            neg_img_count = 0
             random.shuffle(instance['neg_txt_facts'])
             for neg_txt_fact in instance['neg_txt_facts']:
                 if neg_txt_count < 8:
                     neg_txt_count += 1
-                    text_inputs.append('Is text " {} " related to the question of " {} "?'.format(neg_txt_fact['fact'], question))
-                    text_outputs.append('no')
+                    batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
+                    batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
+                    batch_labels.append(0)
                     batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                     batch_patch_masks.append(False)
-                    batch_labels.append(0)
 
+            # negative image fact
+            neg_img_count = 0
             random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
                 if neg_img_count < 8:
                     neg_img_count += 1
-                    text_inputs.append('Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question))
-                    text_outputs.append('no')
-                    image_id = neg_img_fact['image_id']
-                    image = Image.open(os.path.join(self.args.image_dir, str(image_id) + '.jpg'))
-                    batch_patch_images.append(image)
-                    batch_patch_masks.append(True)
+                    batch_sources.append(torch.LongTensor(neg_img_fact['source']))
+                    batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
                     batch_labels.append(0)
+                    try:
+                        image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
+                        batch_patch_images.append(self.patch_resize_transform(image))
+                        batch_patch_masks.append(True)
+                    except:
+                        batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                        batch_patch_masks.append(False)
 
+            # construct constraint mask
             allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
-            for text_input, text_output in zip(text_inputs, text_outputs):
-                source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
-                prev_output = source[:]
-                target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
-                assert len(target) == 1
-                target = prev_output[1:] + target
-                constraint_mask = torch.zeros((len(prev_output), self.args.vocab_size)).bool()
+            for prev_output in batch_prev_outputs:
+                constraint_mask = torch.zeros((prev_output.shape[0], self.args.vocab_size)).bool()
                 constraint_mask[-1][allowed_words] = True
-                batch_sources.append(torch.LongTensor(source))
-                batch_targets.append(torch.LongTensor(target))
-                batch_prev_outputs.append(torch.LongTensor(prev_output))
                 batch_constraint_mask.append(constraint_mask)
 
+            # pad to be the same length
             if len(batch_sources) > self.args.choice_num:
                 batch_sources = batch_sources[:self.args.choice_num]
-                batch_targets = batch_targets[:self.args.choice_num]
                 batch_prev_outputs = batch_prev_outputs[:self.args.choice_num]
                 batch_constraint_mask = batch_constraint_mask[:self.args.choice_num]
                 batch_labels = batch_labels[:self.args.choice_num]
@@ -284,15 +339,14 @@ class WebQADataset(Dataset):
             else:
                 num_placeholder = self.args.choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
-                batch_targets += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_constraint_mask += [torch.zeros((1, self.args.vocab_size)).bool() for _ in range(num_placeholder)]
                 batch_labels += [-100 for _ in range(num_placeholder)]
                 batch_patch_images += [torch.zeros((3, self.patch_image_size, self.patch_image_size)) for _ in range(num_placeholder)]
                 batch_patch_masks += [False for _ in range(num_placeholder)]
 
+            # add one batch data
             sources += batch_sources # get (bsz x choice_num) x seq_len 
-            targets += batch_targets
             prev_outputs += batch_prev_outputs
             constraint_masks += batch_constraint_mask
             labels += batch_labels
@@ -304,45 +358,44 @@ class WebQADataset(Dataset):
             batch_first=True, 
             padding_value=self.tokenizer.pad_token_id
         )
-        targets = pad_sequence(
-            targets,
-            batch_first=True,
-            padding_value=self.tokenizer.pad_token_id
-        )
+        sources = sources.view(bsz, -1, sources.size(-1))
+
         prev_outputs = pad_sequence(
             prev_outputs,
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id
         )
+        prev_outputs = prev_outputs.view(bsz, -1, prev_outputs.size(-1))
+
         constraint_masks = pad_sequence(
             constraint_masks,
             batch_first=True,
             padding_value=False,
         )
+        constraint_masks = constraint_masks.view(bsz, -1, constraint_masks.size(-2), constraint_masks.size(-1))
+
+        labels = torch.LongTensor(labels)
+        labels = labels.view(bsz, -1)
+
         patch_images = torch.stack(patch_images, dim=0)
         patch_images = patch_images.view(bsz, -1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+        
         patch_masks = torch.BoolTensor(patch_masks)
         patch_masks = patch_masks.view(bsz, -1)
 
-        sources = sources.view(bsz, -1, sources.size(-1))
-        targets = targets.view(bsz, -1, targets.size(-1))
-        prev_outputs = prev_outputs.view(bsz, -1, prev_outputs.size(-1))
         decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
-        labels = torch.LongTensor(labels)
-        labels = labels.view(bsz, -1)
         logit_mask = (labels != -100)
 
         return {
             'sources': sources,
             'prev_outputs': prev_outputs,
-            'targets': targets,
-            'decoder_attention_mask': decoder_attention_mask,
             'constraint_masks': constraint_masks,
-            'allowed_words': allowed_words,
             'labels': labels,
-            'logit_mask': logit_mask,
             'patch_masks': patch_masks,
             'patch_images': patch_images,
+            'allowed_words': allowed_words,
+            'decoder_attention_mask': decoder_attention_mask,
+            'logit_mask': logit_mask,
         }
 
 

@@ -2,7 +2,6 @@ import os
 import torch
 import argparse
 import time
-import csv
 import json
 import shutil
 import evaluate
@@ -27,20 +26,20 @@ def load_dataset(args, tokenizer):
     if args.train:
         train_dataset = WebQADataset(args, tokenizer, split='train')
         dev_dataset = WebQADataset(args, tokenizer, split='val')
-        if torch.cuda.device_count() > 1:
+        if torch.cuda.device_count() > 1 and args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
             dev_sampler = torch.utils.data.distributed.DistributedSampler(dev_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
-            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, sampler=train_sampler, collate_fn=train_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
-            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, sampler=dev_sampler, collate_fn=dev_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
+            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, sampler=train_sampler, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
+            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, sampler=dev_sampler, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
         else:
-            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
-            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
+            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
+            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
         loader_dict['train'] = train_dataloader
         loader_dict['dev'] = dev_dataloader
 
     if args.test:
         test_dataset = WebQATestDataset(args, tokenizer)
-        test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, collate_fn=test_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
+        test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, collate_fn=test_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
         loader_dict['test'] = test_dataloader
     
     return loader_dict
@@ -93,8 +92,6 @@ def cross_entropy_with_logits_loss(prediction, target, logit_mask):
 def validate(args, dev_dataloader, model):
     model.eval()
     with torch.no_grad():
-        correct_ones = 0
-        all_ones = 0
         eval_losses = []
         gth_labels = []
         pred_labels = []
@@ -102,7 +99,6 @@ def validate(args, dev_dataloader, model):
             if idx > 1000:
                 break
             sources = data['sources'].to(args.device)
-            targets = data['targets'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
             constraint_masks = data['constraint_masks'].to(args.device)
@@ -113,7 +109,6 @@ def validate(args, dev_dataloader, model):
             patch_masks = data['patch_masks'].to(args.device)
 
             squeezed_sources = sources.view(-1, sources.size(-1))
-            squeezed_targets = targets.view(-1, targets.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
             squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
@@ -124,7 +119,7 @@ def validate(args, dev_dataloader, model):
                 input_ids=squeezed_sources, 
                 decoder_input_ids=squeezed_prev_outputs,
                 patch_masks=squeezed_patch_masks,
-                patch_images=squeezed_patch_images,
+                patch_images_2=squeezed_patch_images,
                 attention_mask=squeezed_decoder_attention_mask,
             )
             logits = outputs['logits']
@@ -188,7 +183,6 @@ def train(args, model, tokenizer):
     for epoch in range(args.num_epochs):
         for data in tqdm(train_dataloader):
             sources = data['sources'].to(args.device)
-            targets = data['targets'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
             constraint_masks = data['constraint_masks'].to(args.device)
@@ -199,7 +193,6 @@ def train(args, model, tokenizer):
             patch_images = data['patch_images'].to(args.device)
 
             squeezed_sources = sources.view(-1, sources.size(-1))
-            squeezed_targets = targets.view(-1, targets.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
             squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
@@ -208,10 +201,11 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
+                #import pdb; pdb.set_trace()
                 outputs = model(
                     input_ids=squeezed_sources, 
                     decoder_input_ids=squeezed_prev_outputs,
-                    patch_images=squeezed_patch_images,
+                    patch_images_2=squeezed_patch_images,
                     patch_masks=squeezed_patch_masks,
                     attention_mask=squeezed_decoder_attention_mask,
                 )
@@ -305,7 +299,7 @@ def test(args, model, tokenizer):
             outputs = model(
                 input_ids=sources, 
                 decoder_input_ids=prev_outputs,
-                patch_images=patch_images,
+                patch_images_2=patch_images,
                 patch_masks=patch_masks,
                 attention_mask=decoder_attention_mask,
             ) 
@@ -347,6 +341,7 @@ def distributed_setup(args, model):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--distributed', action='store_true')
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
@@ -382,10 +377,11 @@ if __name__ == '__main__':
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
     parser.add_argument('--choice_num', type=int, default=16)
     parser.add_argument('--use_fp16', action='store_true')
-
+    parser.add_argument('--num_workers', type=int, default=2)
+    parser.add_argument('--prefetch_factor', type=int, default=8)
     args = parser.parse_args()
 
-    args.local_rank = int(os.environ['LOCAL_RANK'])
+    args.local_rank = int(os.environ['LOCAL_RANK']) if 'LOCAL_RANK' in os.environ else -1
     args.timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(round(time.time()*1000))/1000))
 
     if args.use_wandb:
@@ -413,7 +409,7 @@ if __name__ == '__main__':
     
     model.to(device)
     
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and args.distributed:
         distributed_setup(args, model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
 
