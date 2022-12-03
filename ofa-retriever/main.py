@@ -309,7 +309,7 @@ def test(args, model, tokenizer):
             # need to fix the -inf problem since the -inf will not be masked by the logit_mask
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
             # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
-            predictions = (softmax_logits > args.classifier_threshold).float()
+            predictions = (softmax_logits > args.test_classifier_threshold).float()
 
             assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
             for idx in range(len(predictions)):
@@ -372,6 +372,7 @@ if __name__ == '__main__':
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
+    parser.add_argument('--test_classifier_threshold', type=float, default=0.2)
     parser.add_argument('--choice_num', type=int, default=16)
     parser.add_argument('--use_fp16', action='store_true')
     parser.add_argument('--num_workers', type=int, default=2)
