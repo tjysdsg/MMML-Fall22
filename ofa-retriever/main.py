@@ -27,20 +27,20 @@ def load_dataset(args, tokenizer):
     if args.train:
         train_dataset = WebQADataset(args, tokenizer, split='train')
         dev_dataset = WebQADataset(args, tokenizer, split='val')
-        if torch.cuda.device_count() > 1:
+        if torch.cuda.device_count() > 1 and args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
             dev_sampler = torch.utils.data.distributed.DistributedSampler(dev_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
-            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, sampler=train_sampler, collate_fn=train_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
-            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, sampler=dev_sampler, collate_fn=dev_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
+            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, sampler=train_sampler, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=8, pin_memory=True)
+            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, sampler=dev_sampler, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=8, pin_memory=True)
         else:
-            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
-            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
+            train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=8, pin_memory=True)
+            dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=8, pin_memory=True)
         loader_dict['train'] = train_dataloader
         loader_dict['dev'] = dev_dataloader
 
     if args.test:
         test_dataset = WebQATestDataset(args, tokenizer)
-        test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, collate_fn=test_dataset.collate_fn, num_workers=8, prefetch_factor=8, pin_memory=True)
+        test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, collate_fn=test_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=8, pin_memory=True)
         loader_dict['test'] = test_dataloader
     
     return loader_dict
@@ -347,6 +347,7 @@ def distributed_setup(args, model):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--distributed', action='store_true')
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
@@ -382,10 +383,11 @@ if __name__ == '__main__':
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
     parser.add_argument('--choice_num', type=int, default=16)
     parser.add_argument('--use_fp16', action='store_true')
+    parser.add_argument('--num_workers', type=int, default=2)
 
     args = parser.parse_args()
 
-    args.local_rank = int(os.environ['LOCAL_RANK'])
+    args.local_rank = int(os.environ['LOCAL_RANK']) if 'LOCAL_RANK' in os.environ else -1
     args.timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(round(time.time()*1000))/1000))
 
     if args.use_wandb:
@@ -413,7 +415,7 @@ if __name__ == '__main__':
     
     model.to(device)
     
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 and args.distributed:
         distributed_setup(args, model)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank], output_device=args.local_rank)
 

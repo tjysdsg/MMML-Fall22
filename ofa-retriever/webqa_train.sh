@@ -1,6 +1,4 @@
-export CUDA_VISIBLE_DEVICES=2
-export NGPU=1
-python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29518 main.py \
+CUDA_VISIBLE_DEVICES=1 python main.py \
 --train \
 --use_fp16 \
 --task webqa-finetune-full-data \
@@ -15,4 +13,5 @@ python -m torch.distributed.launch --nproc_per_node=$NGPU --master_port 29518 ma
 --max_length 300 \
 --dev_batch_size 2 \
 --train_batch_size 1 \
---choice_num 16
+--choice_num 16 \
+--have_cached_dataset
