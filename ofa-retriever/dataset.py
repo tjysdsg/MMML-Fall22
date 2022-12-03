@@ -195,6 +195,8 @@ class WebQADataset(Dataset):
             else:
                 raise ValueError('no right dataset split')
 
+            if 'toy' in self.args.cache_dir:
+                dataset = dataset[:100]
 
             for data in tqdm(dataset):
                 question = data['Q']

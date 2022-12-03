@@ -2,7 +2,6 @@ import os
 import torch
 import argparse
 import time
-import csv
 import json
 import shutil
 import evaluate
@@ -202,6 +201,7 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
+                import pdb; pdb.set_trace()
                 outputs = model(
                     input_ids=squeezed_sources, 
                     decoder_input_ids=squeezed_prev_outputs,

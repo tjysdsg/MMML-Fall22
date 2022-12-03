@@ -4,3 +4,4 @@ python main.py --test \
 --test_file test.jsonl \
 --test_batch_size 30 \
 --have_cached_dataset \
+--num_workers 4
