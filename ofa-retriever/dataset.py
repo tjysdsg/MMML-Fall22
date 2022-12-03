@@ -37,7 +37,7 @@ class WebQATestDataset(Dataset):
 
         self.patch_resize_transform = transforms.Compose([
             lambda image: image.convert('RGB'),
-            transforms.Resize((patch_image_size, patch_image_size), interpolation=Image.BICUBIC),
+            transforms.Resize((patch_image_size, patch_image_size), interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
         ])
@@ -171,7 +171,7 @@ class WebQADataset(Dataset):
 
         self.patch_resize_transform = transforms.Compose([
             lambda image: image.convert('RGB'),
-            transforms.Resize((patch_image_size, patch_image_size), interpolation=Image.BICUBIC),
+            transforms.Resize((patch_image_size, patch_image_size), interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std),
         ])
@@ -254,7 +254,6 @@ class WebQADataset(Dataset):
 
     def collate_fn(self, batch):
         sources = []
-        targets = []
         prev_outputs = []
         labels = []
         constraint_masks = []
@@ -264,7 +263,6 @@ class WebQADataset(Dataset):
 
         for instance in batch:
             batch_prev_outputs = []
-            batch_targets = []
             batch_sources = []
             batch_labels = []
             batch_constraint_mask = []
@@ -274,7 +272,6 @@ class WebQADataset(Dataset):
             # positive text fact
             for pos_txt_fact in instance['pos_txt_facts']:
                 batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
-                batch_targets.append(torch.LongTensor(pos_txt_fact['target']))
                 batch_prev_outputs.append(torch.LongTensor(pos_txt_fact['prev_output']))
                 batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                 batch_patch_masks.append(False)
@@ -283,7 +280,6 @@ class WebQADataset(Dataset):
             # positive image fact
             for pos_img_fact in instance['pos_img_facts']:
                 batch_sources.append(torch.LongTensor(pos_img_fact['source']))
-                batch_targets.append(torch.LongTensor(pos_img_fact['target']))
                 batch_prev_outputs.append(torch.LongTensor(pos_img_fact['prev_output']))
                 batch_labels.append(1)
                 try:
@@ -301,11 +297,10 @@ class WebQADataset(Dataset):
                 if neg_txt_count < 8:
                     neg_txt_count += 1
                     batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
-                    batch_targets.append(torch.LongTensor(neg_txt_fact['target']))
                     batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
+                    batch_labels.append(0)
                     batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                     batch_patch_masks.append(False)
-                    batch_labels.append(0)
 
             # negative image fact
             neg_img_count = 0
@@ -314,8 +309,8 @@ class WebQADataset(Dataset):
                 if neg_img_count < 8:
                     neg_img_count += 1
                     batch_sources.append(torch.LongTensor(neg_img_fact['source']))
-                    batch_targets.append(torch.LongTensor(neg_img_fact['target']))
                     batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
+                    batch_labels.append(0)
                     try:
                         image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
                         batch_patch_images.append(self.patch_resize_transform(image))
@@ -334,7 +329,6 @@ class WebQADataset(Dataset):
             # pad to be the same length
             if len(batch_sources) > self.args.choice_num:
                 batch_sources = batch_sources[:self.args.choice_num]
-                batch_targets = batch_targets[:self.args.choice_num]
                 batch_prev_outputs = batch_prev_outputs[:self.args.choice_num]
                 batch_constraint_mask = batch_constraint_mask[:self.args.choice_num]
                 batch_labels = batch_labels[:self.args.choice_num]
@@ -343,7 +337,6 @@ class WebQADataset(Dataset):
             else:
                 num_placeholder = self.args.choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
-                batch_targets += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_constraint_mask += [torch.zeros((1, self.args.vocab_size)).bool() for _ in range(num_placeholder)]
                 batch_labels += [-100 for _ in range(num_placeholder)]
@@ -352,7 +345,6 @@ class WebQADataset(Dataset):
 
             # add one batch data
             sources += batch_sources # get (bsz x choice_num) x seq_len 
-            targets += batch_targets
             prev_outputs += batch_prev_outputs
             constraint_masks += batch_constraint_mask
             labels += batch_labels
@@ -366,13 +358,6 @@ class WebQADataset(Dataset):
         )
         sources = sources.view(bsz, -1, sources.size(-1))
 
-        targets = pad_sequence(
-            targets,
-            batch_first=True,
-            padding_value=self.tokenizer.pad_token_id
-        )
-        targets = targets.view(bsz, -1, targets.size(-1))
-
         prev_outputs = pad_sequence(
             prev_outputs,
             batch_first=True,
@@ -385,7 +370,7 @@ class WebQADataset(Dataset):
             batch_first=True,
             padding_value=False,
         )
-        constraint_masks = constraint_masks.view(bsz, -1, constraint_masks.size(-1))
+        constraint_masks = constraint_masks.view(bsz, -1, constraint_masks.size(-2), constraint_masks.size(-1))
 
         labels = torch.LongTensor(labels)
         labels = labels.view(bsz, -1)
@@ -402,7 +387,6 @@ class WebQADataset(Dataset):
         return {
             'sources': sources,
             'prev_outputs': prev_outputs,
-            'targets': targets,
             'constraint_masks': constraint_masks,
             'labels': labels,
             'patch_masks': patch_masks,

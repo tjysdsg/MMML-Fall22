@@ -5,7 +5,7 @@ CUDA_VISIBLE_DEVICES=1 python main.py \
 --use_wandb \
 --cache_dir ./cache/WebQA_full_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
---gradient_accumulation_step 64 \
+--gradient_accumulation_step 16 \
 --train_file train.jsonl \
 --val_file val.jsonl \
 --num_epochs 4 \
