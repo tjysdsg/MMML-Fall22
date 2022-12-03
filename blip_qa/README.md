@@ -2,12 +2,15 @@ Adapted from https://github.com/salesforce/BLIP
 
 # Prerequisites
 
-- Download BartScore pretrained model to `bart_score.pth`
+- Download BartScore pretrained model
+  to `bart_score.pth`: https://drive.google.com/file/d/1_7JfF7KOInb7ZrxKHIigTMR4ChVET01m/view?usp=sharing
+  (Source: https://github.com/neulab/BARTScore)
 - Modify paths in `configs/webqa.yaml`
+    - Reduce batch size if needed, batch of 4 takes about 22GB of VRAM
 
 # Train
 
-**Modify wandb API Key**
+**Modify wandb API Key in `train_webqa.py`**
 
 ```python
 def init_wandb(output_dir: str):
@@ -21,11 +24,6 @@ def init_wandb(output_dir: str):
     os.environ['WANDB_DIR'] = output_dir
     wandb.init(project="blip_webqa_qa_img_only")
 ```
-
-**Download pretrained BartScore
-model**: https://drive.google.com/file/d/1_7JfF7KOInb7ZrxKHIigTMR4ChVET01m/view?usp=sharing
-
-(Source: https://github.com/neulab/BARTScore)
 
 **Train**
 
