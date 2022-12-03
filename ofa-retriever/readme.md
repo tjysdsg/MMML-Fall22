@@ -20,7 +20,7 @@ Input: IMAGE_PATCHES + Is text " [TEXT FACT] " related to the question of " [QUE
 Output: Is text " [TEXT FACT] " related to the question of " [QUESTION] "? Yes (No)
 ```
 
-In the text-based questions, the IMAGE_PATCHES are fully masked since we have no related pictures.
+In the text-based questions, the IMAGE_PATCHES is initially set as total ZERO are fully masked since we have no related pictures and we need to wrap text-based examples and image-based examples into a batch, so we need to do this alignment design.
 
 
 
