@@ -244,7 +244,7 @@ class BLIP_VQA(nn.Module):
         else:
             num_beams = 3
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
-            question_atts = torch.ones(question_states.size()[:-1], dtype=torch.long).to(question_states.device)
+            question_atts = attention_mask.repeat_interleave(num_beams, dim=0).to(question_states.device)
 
             bos_ids = torch.full((image.size(0), 1), fill_value=self.tokenizer.bos_token_id, device=image.device)
 
