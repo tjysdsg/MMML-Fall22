@@ -7,15 +7,11 @@ import shutil
 import evaluate
 import torch.distributed as dist
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
-from transformers.models.ofa import OFATokenizer, OFAConfig
-from transformers.models.ofa.generate import sequence_generator
-from transformers import pipeline
-from transformers import get_cosine_schedule_with_warmup
 from modeling_ofa import OFAModel
-from dataset import WebQADataset, WebQATestDataset
 from torch.utils.data import DataLoader
-from torch.nn.parallel import DistributedDataParallel as DDP
+from transformers.models.ofa import OFATokenizer
+from transformers import get_cosine_schedule_with_warmup
+from dataset import WebQADataset, WebQATestDataset
 
 
 def load_dataset(args, tokenizer):
