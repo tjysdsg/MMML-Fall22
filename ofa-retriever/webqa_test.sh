@@ -1,4 +1,4 @@
-python main.py --test \
+CUDA_VISIBLE_DEVICES=1 python main.py --test \
 --cache_dir ./cache/WebQA_test_data_cache/ \
 --dataset_dir ./data/WebQA_test_data/ \
 --test_file test.jsonl \
