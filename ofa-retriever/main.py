@@ -119,7 +119,7 @@ def validate(args, dev_dataloader, model):
                 input_ids=squeezed_sources, 
                 decoder_input_ids=squeezed_prev_outputs,
                 patch_masks=squeezed_patch_masks,
-                patch_images=squeezed_patch_images,
+                patch_images_2=squeezed_patch_images,
                 attention_mask=squeezed_decoder_attention_mask,
             )
             logits = outputs['logits']
@@ -201,11 +201,11 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
-                import pdb; pdb.set_trace()
+                #import pdb; pdb.set_trace()
                 outputs = model(
                     input_ids=squeezed_sources, 
                     decoder_input_ids=squeezed_prev_outputs,
-                    patch_images=squeezed_patch_images,
+                    patch_images_2=squeezed_patch_images,
                     patch_masks=squeezed_patch_masks,
                     attention_mask=squeezed_decoder_attention_mask,
                 )
@@ -299,7 +299,7 @@ def test(args, model, tokenizer):
             outputs = model(
                 input_ids=sources, 
                 decoder_input_ids=prev_outputs,
-                patch_images=patch_images,
+                patch_images_2=patch_images,
                 patch_masks=patch_masks,
                 attention_mask=decoder_attention_mask,
             ) 
