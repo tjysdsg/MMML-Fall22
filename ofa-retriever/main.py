@@ -372,7 +372,7 @@ if __name__ == '__main__':
     parser.add_argument('--evaluation_steps', type=int, default=50)
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
-    parser.add_argument('--test_classifier_threshold', type=float, default=0.2)
+    parser.add_argument('--test_classifier_threshold', type=float, default=0.3)
     parser.add_argument('--choice_num', type=int, default=16)
     parser.add_argument('--use_fp16', action='store_true')
     parser.add_argument('--num_workers', type=int, default=2)
