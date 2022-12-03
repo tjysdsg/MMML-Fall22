@@ -253,6 +253,9 @@ class BLIP_VQA(nn.Module):
             return loss, multimodal_cross_atts
         else:
             num_beams = 3
+            question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
+            question_atts = torch.ones(question_states.size()[:-1], dtype=torch.long).to(question_states.device)
+
             bos_ids = torch.full((image.size(0), 1), fill_value=self.tokenizer.bos_token_id, device=image.device)
 
             outputs = self.text_decoder.generate(
@@ -262,8 +265,8 @@ class BLIP_VQA(nn.Module):
                 num_beams=num_beams,
                 eos_token_id=self.tokenizer.sep_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
-                encoder_hidden_states=question_output.last_hidden_state,
-                encoder_attention_mask=attention_mask,
+                encoder_hidden_states=question_states,
+                encoder_attention_mask=question_atts,
                 output_attentions=output_attentions,
             )
 
