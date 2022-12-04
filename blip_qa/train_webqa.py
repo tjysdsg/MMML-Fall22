@@ -6,6 +6,7 @@ import random
 import json
 from pathlib import Path
 import torch
+import torch.nn.functional as F
 import torch.distributed as dist
 from models.blip_webqa import blip_vqa
 import utils
@@ -25,7 +26,7 @@ def init_wandb(output_dir: str):
     )
     os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'
     os.environ['WANDB_DIR'] = output_dir
-    wandb.init(project="blip_webqa_qa_img_only")
+    wandb.init(project="blip_webqa_qa_mt_img_only")
 
 
 def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
@@ -49,12 +50,17 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
         model.train()
         for i, (
-                images, captions, question, answer, n_facts, _, _,
+                images, captions, question, answer, n_img_facts, _, _, retr_labels,
         ) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
-            loss, _ = model(images, captions, question, answer, n_facts, train=True)
+            retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
+            qa_loss, retr_preds, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
-            loss = loss / grad_accum
+            # Retrieval loss
+            retr_loss = F.binary_cross_entropy_with_logits(retr_preds.ravel(), retr_labels)
+
+            # grad accum
+            loss = (qa_loss + retr_loss) / grad_accum
             loss.backward()
 
             if (i + 1) % grad_accum == 0:
@@ -65,10 +71,10 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                 global_step += 1
 
                 print(f'Epoch[{epoch}] step {global_step}:\ttrain_loss {loss.item()}')
-                wandb.log({f'train_loss': loss.item(), 'step': global_step})
-                # wandb.log({f'train_precision': pr, 'step': step, 'threshold': th})
-                # wandb.log({f'train_recall': re, 'step': step, 'threshold': th})
-                # wandb.log({f'train_F1': f1, 'step': step, 'threshold': th})
+                wandb.log({
+                    f'loss': loss.item(), 'qa_loss': qa_loss.item(), 'retr_loss': retr_loss.item(),
+                    'step': global_step
+                })
 
         if utils.is_main_process():
             save_obj = {
@@ -105,10 +111,10 @@ def evaluation(model, data_loader, device):
     model.eval()
     val_iter = tqdm(data_loader, desc="Validation", disable=0)
     for i, (
-            images, captions, question, answer, n_facts, question_ids, qcate,
+            images, captions, question, answer, n_img_facts, question_ids, qcate, _,
     ) in enumerate(val_iter):
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_facts, train=False)
+        pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         preds += pred
         refs += answer
@@ -127,10 +133,10 @@ def inference(config, model, data_loader, device):
     result = []
     data_iter = tqdm(data_loader, desc="Validation", disable=0)
     for i, (
-            images, captions, question, answer, n_facts, question_ids, qcates
+            images, captions, question, answer, n_img_facts, question_ids, qcates, _,
     ) in enumerate(data_iter):
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_facts, train=False)
+        pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
             result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
