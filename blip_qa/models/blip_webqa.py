@@ -249,7 +249,7 @@ class BLIP_VQA(nn.Module):
             loss = loss.sum() / image.size(0)
             return loss, retr, multimodal_cross_atts
         else:
-            num_beams = 3
+            num_beams = 10
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
             question_atts = attention_mask.repeat_interleave(num_beams, dim=0).to(question_states.device)
 
