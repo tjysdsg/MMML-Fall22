@@ -105,7 +105,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                 avg_retr_loss /= grad_accum * batch_size
                 avg_loss /= grad_accum * batch_size
                 print(f'Epoch[{epoch}] step {global_step}:'
-                      f'\tloss {avg_loss:.4f}\tqa_loss {avg_qa_loss:.4f}\tretr_loss{avg_retr_loss:.4f}')
+                      f'\tloss {avg_loss:.4f}\tqa_loss {avg_qa_loss:.4f}\tretr_loss {avg_retr_loss:.4f}')
                 wandb.log({
                     f'loss': avg_loss, 'qa_loss': avg_qa_loss, 'retr_loss': avg_retr_loss, 'step': global_step,
                 })

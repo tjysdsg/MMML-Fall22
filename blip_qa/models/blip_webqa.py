@@ -157,7 +157,7 @@ class BLIP_VQA(nn.Module):
 
         self.num_heads = encoder_config.num_attention_heads
         self.num_patches = self.visual_encoder.patch_embed.num_patches + 1
-        self.retr_ffn = nn.Linear(self.num_heads * self.num_patches, 1)
+        self.retr_ffn = nn.Linear(self.num_patches, 1)
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
@@ -220,10 +220,10 @@ class BLIP_VQA(nn.Module):
         if train:
             if multitask:  # Retrieval
                 atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
-                atts = atts.permute(0, 2, 1)  # (batch, image_embeds_len, num_heads)
+                atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
 
-                # (batch, n_facts, num_heads * num_patches)
-                atts = atts.reshape(atts.shape[0], -1, self.num_heads * self.num_patches)
+                # (batch, n_facts, num_patches)
+                atts = atts.view(atts.shape[0], -1, self.num_patches)
                 retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
             else:
                 retr = None
