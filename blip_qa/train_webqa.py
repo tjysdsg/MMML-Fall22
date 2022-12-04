@@ -177,7 +177,7 @@ def inference(config, model, data_loader, device):
     ) in enumerate(data_iter):
         images = images.to(device, non_blocking=True)
         with amp.autocast():
-            pred = model(images, captions, question, answer, n_img_facts, train=False, multitask=False)
+            pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
             result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
@@ -208,7 +208,7 @@ def main(args, config):
 
     train_loader, val_loader, test_loader = create_loader(
         datasets, samplers,
-        batch_size=[config['batch_size_train'], config['batch_size_test'], config['batch_size_test']],
+        batch_size=[config['batch_size_train'], config['batch_size_val'], config['batch_size_test']],
         num_workers=[4, 4, 4], is_trains=[True, False, False],
         collate_fns=[webqa_collate_fn, webqa_collate_fn, webqa_collate_fn]
     )
@@ -229,7 +229,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask=args.multitask,
+            multitask=not args.no_multitask,
         )
         model.load_state_dict(obj['model'])
 
@@ -241,7 +241,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask=args.multitask,
+            multitask=not args.no_multitask,
         )
     model = model.to(device)
 
@@ -275,7 +275,7 @@ def main(args, config):
 def load_args_configs():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='./configs/webqa.yaml')
-    parser.add_argument('--multitask', type=bool, default=True)
+    parser.add_argument('--no-multitask', action='store_true', default=False)
     parser.add_argument('--output_dir', default='output/multitask')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')

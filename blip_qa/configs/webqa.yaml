@@ -1,8 +1,8 @@
 # data related
 train_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 val_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
-# TODO: test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
-test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
+# test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
+test_file: 'test.json'
 image_dir: '/ocean/projects/cis210027p/shared/corpora/webqa/images'
 
 image_size: 480
@@ -13,7 +13,8 @@ pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/mo
 # size of vit model; base or large
 vit: 'base'
 batch_size_train: 2
-batch_size_test: 16
+batch_size_val: 16
+batch_size_test: 1
 vit_grad_ckpt: False
 vit_ckpt_layer: 0
 init_lr: 1e-4

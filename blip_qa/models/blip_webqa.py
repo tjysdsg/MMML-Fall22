@@ -194,7 +194,6 @@ class BLIP_VQA(nn.Module):
         :param answer: Batch of answers
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
-        :param multitask: Train retrieval and QA task simultaneously
         """
 
         image_embeds, lengths = self.encode_images(image, n_img_facts)
