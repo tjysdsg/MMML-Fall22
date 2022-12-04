@@ -38,3 +38,26 @@ python train_webqa.py --resume output/WebQA/checkpoint09.pth
 python train_webqa.py --inference --resume output/WebQA/checkpoint09.pth
 # output/WebQA/*_pred.json
 ```
+
+# Results
+
+## Image-based questions
+
+Beam size = 10
+
+```json
+{
+  "color": 0.5415536046820965,
+  "shape": 0.26126126126126126,
+  "YesNo": 0.46215780998389694,
+  "number": 0.3894649751792609,
+  "text": 0,
+  "Others": 0.7206404752328825,
+  "choose": 0.7317241835044884,
+  "f1": 0.44761904761904775,
+  "recall": 0.7253919880871498,
+  "acc": 0.5771579218875255,
+  "fl": 0.39096362071974833,
+  "qa": 0.22564775086823263
+}
+```
