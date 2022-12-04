@@ -40,6 +40,8 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
     assert grad_accum >= 1
     grad_clip = config['grad_clip']
     assert grad_clip > 0
+    alpha = config['alpha']
+    assert 0 <= alpha <= 1
 
     scaler = amp.GradScaler()
 
@@ -74,7 +76,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                 ) / images.size(0)
 
                 # overall loss
-                loss = qa_loss + retr_loss
+                loss = (1 - alpha) * qa_loss + alpha * retr_loss
 
                 # update avg losses
                 avg_loss += loss.item() * batch_size
