@@ -85,6 +85,21 @@ def test():
     print(captions)
     print(retrieval_labels)
 
+    from webqa_dataset import webqa_collate_fn
+    loader = DataLoader(
+        dataset,
+        batch_size=4,
+        num_workers=1,
+        shuffle=True,
+        collate_fn=webqa_collate_fn,
+    )
+    for (
+            images, captions, question, answer, n_facts, question_ids, qcates, retr_labels,
+    ) in loader:
+        print(captions)
+        print(retr_labels)
+        break
+
 
 if __name__ == '__main__':
     test()

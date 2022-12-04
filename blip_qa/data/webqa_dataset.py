@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 from typing import List, Literal
 from data.utils import pre_caption
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 
 
 class WebQADataset(Dataset):
@@ -124,8 +125,12 @@ class WebQADataset(Dataset):
 
         all_text = text + neg_text
         all_img_caps = img_caps + neg_img_caps
-        text_retr_tgts = torch.cat([torch.ones(len(text)), torch.zeros(len(neg_text))])
-        img_retr_tgts = torch.cat([torch.ones(len(img_caps)), torch.zeros(len(neg_img_caps))])
+        text_retr_tgts = torch.cat(
+            [torch.ones(len(text), dtype=torch.long), torch.zeros(len(neg_text), dtype=torch.long)]
+        )
+        img_retr_tgts = torch.cat(
+            [torch.ones(len(img_caps), dtype=torch.long), torch.zeros(len(neg_img_caps), dtype=torch.long)]
+        )
 
         # shuffle facts
         text_shuff_idx = list(range(len(all_text)))
@@ -195,5 +200,4 @@ def webqa_collate_fn(batch):
     ]
     image_pad = torch.stack(image_pad)
 
-    retr_labels = torch.vstack(retr_labels)
     return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels
