@@ -132,7 +132,8 @@ def evaluation(model, data_loader, device):
             images, captions, question, answer, n_img_facts, question_ids, qcate, _,
     ) in enumerate(val_iter):
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_img_facts, train=False)
+        with amp.autocast():
+            pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         preds += pred
         refs += answer
@@ -154,7 +155,8 @@ def inference(config, model, data_loader, device):
             images, captions, question, answer, n_img_facts, question_ids, qcates, _,
     ) in enumerate(data_iter):
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_img_facts, train=False)
+        with amp.autocast():
+            pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
             result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
