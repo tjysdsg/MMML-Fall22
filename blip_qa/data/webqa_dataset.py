@@ -1,5 +1,5 @@
 import os
-from random import shuffle
+import random
 import json
 import torch
 from PIL import Image
@@ -14,6 +14,7 @@ class WebQADataset(Dataset):
             self, data_json, transform, image_dir, eos='[SEP]', split="train",
             ignored_questions: List[str] = None, use_num_samples: int = -1,
             qcate: Literal['text', 'YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'all'] = 'all',
+            max_n_neg_facts=4,
     ):
         if ignored_questions is None:
             ignored_questions = []
@@ -25,6 +26,7 @@ class WebQADataset(Dataset):
         self.transform = transform
         self.image_dir = image_dir
         self.eos = eos
+        self.max_n_neg_facts = max_n_neg_facts
 
         self.instance_list = []
         count = 0
@@ -41,23 +43,24 @@ class WebQADataset(Dataset):
                         Q = pre_caption(datum['Q'].replace('"', ""), 100)
                         A = pre_caption(datum['A'][0].replace('"', ""), 100)
 
-                        gold_text_facts, gold_img_and_caps = [], []
+                        gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps = [], [], [], []
                         if 'txt_posFacts' in datum:
-                            gold_text_facts = self.extract_text_facts_for_question(datum)
+                            gold_text_facts, neg_text_facts = self.extract_text_facts_for_question(datum)
                         if 'img_posFacts' in datum:
-                            gold_img_and_caps = self.extract_img_facts_for_question(datum)
+                            gold_img_and_caps, neg_img_and_caps = self.extract_img_facts_for_question(datum)
 
                         if not self.check_image_feature_path(gold_img_and_caps):
                             print(f"Question {i} skipped because image is not found")
                             continue
 
                         assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
-                        shuffle(gold_text_facts)
-                        shuffle(gold_img_and_caps)
 
                         # ========================
                         self.instance_list.append(
-                            (gold_text_facts, gold_img_and_caps, Q, A, question_id, datum['Qcate'])
+                            (
+                                gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps,
+                                Q, A, question_id, datum['Qcate']
+                            )
                         )
                         count += 1
 
@@ -66,24 +69,27 @@ class WebQADataset(Dataset):
     @staticmethod
     def extract_text_facts_for_question(datum: dict):
         gold_text_facts = []
-        assert 'txt_posFacts' in datum
-
-        for fa in datum['txt_posFacts']:
-            gold_text_facts.append(
-                pre_caption(fa['fact'], 100),
-            )
-        return gold_text_facts
+        neg_text_facts = []
+        if 'txt_posFacts' in datum:
+            for fa in datum['txt_posFacts']:
+                gold_text_facts.append(pre_caption(fa['fact'], 100))
+        if 'txt_negFacts' in datum:
+            for fa in datum['txt_negFacts']:
+                neg_text_facts.append(pre_caption(fa['fact'], 100))
+        return gold_text_facts, neg_text_facts
 
     def extract_img_facts_for_question(self, datum: dict):
         gold_img_and_caps = []
-        assert 'img_posFacts' in datum
+        neg_img_and_caps = []
 
-        for im in datum['img_posFacts']:
-            gold_img_and_caps.append(
-                self.load_image_fact(im)
-            )
+        if 'img_posFacts' in datum:
+            for im in datum['img_posFacts']:
+                gold_img_and_caps.append(self.load_image_fact(im))
+        if 'img_negFacts' in datum:
+            for im in datum['img_negFacts']:
+                neg_img_and_caps.append(self.load_image_fact(im))
 
-        return gold_img_and_caps
+        return gold_img_and_caps, neg_img_and_caps
 
     def load_image_fact(self, im: dict):
         image_feature_path = os.path.join(self.image_dir, f"{im['image_id']}.jpg")
@@ -108,15 +114,38 @@ class WebQADataset(Dataset):
             captions: a list of strings
             questions: a list of strings
             answers: a list of strings
+            retrieval_labels: list of 1 or 0s, 1 means gold facts, 0 means negative/distractor facts
         """
-        text_facts, img_and_caps, Q, A, question_id, qcate = self.instance_list[index]
+        text, neg_text, img_caps, neg_img_caps, Q, A, question_id, qcate = self.instance_list[index]
+
+        n_neg_facts = random.randint(0, self.max_n_neg_facts)
+        neg_text = random.sample(neg_text, n_neg_facts)
+        neg_img_caps = random.sample(neg_img_caps, n_neg_facts)
+
+        all_text = text + neg_text
+        all_img_caps = img_caps + neg_img_caps
+        text_retr_tgts = torch.cat([torch.ones(len(text)), torch.zeros(len(neg_text))])
+        img_retr_tgts = torch.cat([torch.ones(len(img_caps)), torch.zeros(len(neg_img_caps))])
+
+        # shuffle facts
+        text_shuff_idx = list(range(len(all_text)))
+        img_shuff_idx = list(range(len(all_img_caps)))
+        random.shuffle(text_shuff_idx)
+        random.shuffle(img_shuff_idx)
+        all_text = [all_text[i] for i in text_shuff_idx]
+        text_retr_tgts = text_retr_tgts[text_shuff_idx]
+        all_img_caps = [all_img_caps[i] for i in img_shuff_idx]
+        img_retr_tgts = img_retr_tgts[img_shuff_idx]
+
+        # pos/neg captions + pos/neg text facts
+        captions = [cap for _, cap in all_img_caps]
+        captions += all_text
+        retrieval_labels = torch.cat([img_retr_tgts, text_retr_tgts])
 
         # [(channel, width, height), ...]
-        images = [self.transform(Image.open(img_path).convert('RGB')) for img_path, _ in img_and_caps]
-        captions = [cap for _, cap in img_and_caps]
-        captions += text_facts
-
+        images = [self.transform(Image.open(img_path).convert('RGB')) for img_path, _ in all_img_caps]
         images = torch.stack(images) if len(images) > 0 else None
+
         return (
             images,
             captions,
@@ -124,6 +153,7 @@ class WebQADataset(Dataset):
             A,
             question_id,
             qcate,
+            retrieval_labels,
         )
 
 
@@ -137,8 +167,10 @@ def webqa_collate_fn(batch):
         - n_facts: a list of integers
     """
     pad_max_len = 0
-    image_lists, caption_lists, questions, answers, n_facts, question_ids, qcates = [], [], [], [], [], [], []
-    for image, caption, question, answer, qid, qcate in batch:
+    (
+        image_lists, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels
+    ) = [], [], [], [], [], [], [], []
+    for image, caption, question, answer, qid, qcate, retr in batch:
         if image is None:  # placeholder for samples without image facts
             image_lists.append(torch.zeros(1, 3, 480, 480))  # FIXME: load H and W from configs
             n_facts.append(0)  # set to 0 so the placeholder is masked
@@ -155,9 +187,13 @@ def webqa_collate_fn(batch):
         question_ids.append(qid)
         qcates.append(qcate)
 
+        retr_labels.append(retr)
+
     image_pad = [
         F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
         for img in image_lists
     ]
     image_pad = torch.stack(image_pad)
-    return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates
+
+    retr_labels = torch.vstack(retr_labels)
+    return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels

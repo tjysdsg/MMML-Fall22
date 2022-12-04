@@ -6,7 +6,7 @@ from data.webqa_dataset import WebQADataset
 from transform.randaugment import RandomAugment
 
 
-def create_dataset(config, min_scale=0.5):
+def create_dataset(config, min_scale=0.5) -> (WebQADataset, WebQADataset, WebQADataset):
     normalize = transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
 
     transform_train = transforms.Compose([
@@ -61,3 +61,30 @@ def create_loader(datasets, samplers, batch_size, num_workers, is_trains, collat
         )
         loaders.append(loader)
     return loaders
+
+
+def test():
+    dataset, _, _ = create_dataset(
+        dict(
+            image_size=480,
+            train_file=r'E:\webqa\data\WebQA_train_val.json',
+            val_file=r'E:\webqa\data\WebQA_train_val.json',
+            test_file=r'E:\webqa\data\WebQA_train_val.json',
+            image_dir=r'E:\webqa\data\images',
+        )
+    )
+    (
+        images,
+        captions,
+        Q,
+        A,
+        question_id,
+        qcate,
+        retrieval_labels,
+    ) = dataset[50]
+    print(captions)
+    print(retrieval_labels)
+
+
+if __name__ == '__main__':
+    test()
