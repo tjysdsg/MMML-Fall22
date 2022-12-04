@@ -183,6 +183,7 @@ class BLIP_VQA(nn.Module):
             answer: List[str],
             n_img_facts: List[int],
             train=True,
+            multitask=True,
     ):
         """
         :param image: (batch, n_img_facts, channel, H, W)
@@ -191,6 +192,7 @@ class BLIP_VQA(nn.Module):
         :param answer: Batch of answers
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
+        :param multitask: Train retrieval and QA task simultaneously
         """
 
         image_embeds, lengths = self.encode_images(image, n_img_facts)
@@ -216,14 +218,15 @@ class BLIP_VQA(nn.Module):
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
         if train:
+            if multitask:  # Retrieval
+                atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
+                atts = atts.permute(0, 2, 1)  # (batch, image_embeds_len, num_heads)
 
-            # Retrieval
-            atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
-            atts = atts.permute(0, 2, 1)  # (batch, image_embeds_len, num_heads)
-
-            # (batch, n_facts, num_heads * num_patches)
-            atts = atts.reshape(atts.shape[0], -1, self.num_heads * self.num_patches)
-            retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
+                # (batch, n_facts, num_heads * num_patches)
+                atts = atts.reshape(atts.shape[0], -1, self.num_heads * self.num_patches)
+                retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
+            else:
+                retr = None
 
             '''
             n: number of answers for each question
