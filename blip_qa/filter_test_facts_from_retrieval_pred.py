@@ -50,7 +50,10 @@ def main():
         else:
             q_data['txt_Facts'] = []
 
-        if len(q_data['img_Facts']) + len(q_data['txt_Facts']) == 0:
+        q_data['img_Facts'] = q_data['img_Facts'][:5]
+        q_data['txt_Facts'] = q_data['txt_Facts'][:5]
+        n_facts = len(q_data['img_Facts']) + len(q_data['txt_Facts'])
+        if n_facts == 0:
             continue
 
         res[q] = q_data
