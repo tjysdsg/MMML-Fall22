@@ -177,7 +177,7 @@ def inference(config, model, data_loader, device):
     ) in enumerate(data_iter):
         images = images.to(device, non_blocking=True)
         with amp.autocast():
-            pred = model(images, captions, question, answer, n_img_facts, train=False)
+            pred = model(images, captions, question, answer, n_img_facts, train=False, multitask=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
             result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
@@ -229,6 +229,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
+            multitask=args.multitask,
         )
         model.load_state_dict(obj['model'])
 
@@ -240,6 +241,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
+            multitask=args.multitask,
         )
     model = model.to(device)
 
@@ -273,6 +275,7 @@ def main(args, config):
 def load_args_configs():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='./configs/webqa.yaml')
+    parser.add_argument('--multitask', type=bool, default=True)
     parser.add_argument('--output_dir', default='output/multitask')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
