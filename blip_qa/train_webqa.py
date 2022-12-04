@@ -15,6 +15,7 @@ from data import create_dataset, create_sampler, create_loader
 from data.webqa_dataset import webqa_collate_fn
 import wandb
 import time
+from torch.cuda import amp
 
 
 def init_wandb(output_dir: str):
@@ -40,6 +41,8 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
     grad_clip = config['grad_clip']
     assert grad_clip > 0
 
+    scaler = amp.GradScaler()
+
     print(f"Start training from epoch {epoch_start}")
     for epoch in range(epoch_start, config['max_epoch']):
         # """
@@ -54,18 +57,28 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
         ) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
             retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
-            qa_loss, retr_preds, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
-            # Retrieval loss
-            retr_loss = F.binary_cross_entropy_with_logits(retr_preds.ravel(), retr_labels)
+            with amp.autocast():
+                qa_loss, retr_preds, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
-            # grad accum
-            loss = (qa_loss + retr_loss) / grad_accum
-            loss.backward()
+                # Retrieval loss
+                retr_loss = F.binary_cross_entropy_with_logits(retr_preds.ravel(), retr_labels)
+
+                # grad accum
+                qa_loss = qa_loss / grad_accum
+                retr_loss = retr_loss / grad_accum
+                loss = qa_loss + retr_loss
+
+            scaler.scale(loss).backward()
 
             if (i + 1) % grad_accum == 0:
+                # gradient clip
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-                optimizer.step()
+
+                # optimize
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
 
                 global_step += 1
