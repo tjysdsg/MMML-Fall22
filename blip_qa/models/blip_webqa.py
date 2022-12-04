@@ -244,11 +244,7 @@ class BLIP_VQA(nn.Module):
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
-
-            retr_preds = []
-            for i, nf in enumerate(n_img_facts):
-                retr_preds.append(retr[i, :nf])
-            return loss, retr_preds, multimodal_cross_atts
+            return loss, retr, multimodal_cross_atts
         else:
             num_beams = 3
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)

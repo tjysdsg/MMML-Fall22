@@ -59,10 +59,14 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
             retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
 
             with amp.autocast():
-                qa_loss, retr_preds, _ = model(images, captions, question, answer, n_img_facts, train=True)
+                qa_loss, retr, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
                 # Retrieval loss
-                retr_loss = F.binary_cross_entropy_with_logits(torch.cat(retr_preds), retr_labels)
+                retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
+                retr_preds = torch.cat(retr_preds)
+                retr_loss = F.binary_cross_entropy_with_logits(
+                    retr_preds, retr_labels, reduction='sum'
+                ) / images.size(0)
 
                 # grad accum
                 qa_loss = qa_loss / grad_accum
