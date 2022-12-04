@@ -2,6 +2,7 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
+import torch.nn.functional as F
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -154,6 +155,10 @@ class BLIP_VQA(nn.Module):
         decoder_config = BertConfig.from_json_file(med_config)
         self.text_decoder = BertLMHeadModel(config=decoder_config)
 
+        self.num_heads = encoder_config.num_attention_heads
+        self.num_patches = self.visual_encoder.patch_embed.num_patches + 1
+        self.retr_ffn = nn.Linear(self.num_heads * self.num_patches, 1)
+
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
         :param images: (batch, n_facts, channel, H, W)
@@ -176,32 +181,27 @@ class BLIP_VQA(nn.Module):
             captions: List[List[str]],
             question: List[str],
             answer: List[str],
-            n_facts: List[int],
-            output_attentions=False,
+            n_img_facts: List[int],
             train=True,
     ):
         """
-        :param image: (batch, n_facts, channel, H, W)
+        :param image: (batch, n_img_facts, channel, H, W)
         :param captions: Batch of list of captions
         :param question: Batch of questions
         :param answer: Batch of answers
-        :param n_facts: Batch of number of image facts
-        :param output_attentions: Output attentions
+        :param n_img_facts: Batch of number of image facts
         :param train: train or inference
         """
 
-        image_embeds, lengths = self.encode_images(image, n_facts)
+        image_embeds, lengths = self.encode_images(image, n_img_facts)
         image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
-        question = self.tokenizer(question, padding='longest',  # truncation=True, max_length=35,
-                                  return_tensors="pt").to(image.device)
+        question = self.tokenizer(question, padding='longest', return_tensors="pt").to(image.device)
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
 
         # concatenate captions and tokenize them
         captions = [' '.join(cap) for cap in captions]
-        captions = self.tokenizer(
-            captions, padding='longest', return_tensors="pt"
-        ).to(image.device)
+        captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
 
         # image-grounded text encoder
@@ -210,16 +210,21 @@ class BLIP_VQA(nn.Module):
                                             attention_mask=attention_mask,
                                             encoder_hidden_states=image_embeds,
                                             encoder_attention_mask=image_atts,
-                                            output_attentions=output_attentions,
+                                            output_attentions=True,
                                             return_dict=True)
 
         # (batch, num_heads, question_len, image_embeds_len)
-        if output_attentions:
-            multimodal_cross_atts = question_output.cross_attentions[0]
-        else:
-            multimodal_cross_atts = None
-
+        multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
         if train:
+
+            # Retrieval
+            atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
+            atts = atts.permute(0, 2, 1)  # (batch, image_embeds_len, num_heads)
+
+            # (batch, n_facts, num_heads * num_patches)
+            atts = atts.reshape(atts.shape[0], -1, self.num_heads * self.num_patches)
+            retr = self.retr_ffn(atts).squeeze()  # (batch, n_facts)
+
             '''
             n: number of answers for each question
             weights: weight for each answer
@@ -233,14 +238,13 @@ class BLIP_VQA(nn.Module):
                                               encoder_hidden_states=question_output.last_hidden_state,
                                               encoder_attention_mask=attention_mask,
                                               labels=answer_targets,
-                                              output_attentions=output_attentions,
                                               return_dict=True,
                                               reduction='none',
                                               )
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
-            return loss, multimodal_cross_atts
+            return loss, retr, multimodal_cross_atts
         else:
             num_beams = 3
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
@@ -257,7 +261,6 @@ class BLIP_VQA(nn.Module):
                 pad_token_id=self.tokenizer.pad_token_id,
                 encoder_hidden_states=question_states,
                 encoder_attention_mask=question_atts,
-                output_attentions=output_attentions,
             )
 
             answers = []

@@ -7,7 +7,6 @@ from torch.utils.data import Dataset
 from typing import List, Literal
 from data.utils import pre_caption
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
 
 
 class WebQADataset(Dataset):
@@ -120,32 +119,28 @@ class WebQADataset(Dataset):
         text, neg_text, img_caps, neg_img_caps, Q, A, question_id, qcate = self.instance_list[index]
 
         n_neg_facts = random.randint(0, self.max_n_neg_facts)
-        neg_text = random.sample(neg_text, n_neg_facts)
         neg_img_caps = random.sample(neg_img_caps, n_neg_facts)
 
-        all_text = text + neg_text
+        # TODO: neg_text = random.sample(neg_text, n_neg_facts)
+        #   all_text = text + neg_text
+        all_text = text
         all_img_caps = img_caps + neg_img_caps
-        text_retr_tgts = torch.cat(
-            [torch.ones(len(text), dtype=torch.long), torch.zeros(len(neg_text), dtype=torch.long)]
-        )
         img_retr_tgts = torch.cat(
             [torch.ones(len(img_caps), dtype=torch.long), torch.zeros(len(neg_img_caps), dtype=torch.long)]
         )
 
         # shuffle facts
-        text_shuff_idx = list(range(len(all_text)))
-        img_shuff_idx = list(range(len(all_img_caps)))
-        random.shuffle(text_shuff_idx)
-        random.shuffle(img_shuff_idx)
-        all_text = [all_text[i] for i in text_shuff_idx]
-        text_retr_tgts = text_retr_tgts[text_shuff_idx]
-        all_img_caps = [all_img_caps[i] for i in img_shuff_idx]
-        img_retr_tgts = img_retr_tgts[img_shuff_idx]
+        # TODO: text_retr_tgts = torch.cat(
+        #       [torch.ones(len(text), dtype=torch.long), torch.zeros(len(neg_text), dtype=torch.long)]
+        #   )
+        #   all_text, text_retr_tgts  = self.shuffle_facts_and_retr_labels(all_text, text_retr_tgts)
+        all_img_caps, img_retr_tgts = self.shuffle_facts_and_retr_labels(all_img_caps, img_retr_tgts)
 
         # pos/neg captions + pos/neg text facts
         captions = [cap for _, cap in all_img_caps]
         captions += all_text
-        retrieval_labels = torch.cat([img_retr_tgts, text_retr_tgts])
+        # TODO: retrieval_labels = torch.cat([img_retr_tgts, text_retr_tgts])
+        retrieval_labels = img_retr_tgts
 
         # [(channel, width, height), ...]
         images = [self.transform(Image.open(img_path).convert('RGB')) for img_path, _ in all_img_caps]
@@ -160,6 +155,14 @@ class WebQADataset(Dataset):
             qcate,
             retrieval_labels,
         )
+
+    @staticmethod
+    def shuffle_facts_and_retr_labels(facts: list, retr_labels: torch.Tensor):
+        shuff_idx = list(range(len(facts)))
+        random.shuffle(shuff_idx)
+        facts = [facts[i] for i in shuff_idx]
+        retr_labels = retr_labels[shuff_idx]
+        return facts, retr_labels
 
 
 def webqa_collate_fn(batch):

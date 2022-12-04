@@ -6,7 +6,7 @@ from data.webqa_dataset import WebQADataset
 from transform.randaugment import RandomAugment
 
 
-def create_dataset(config, min_scale=0.5) -> (WebQADataset, WebQADataset, WebQADataset):
+def create_dataset(config, min_scale=0.5, **kwargs) -> (WebQADataset, WebQADataset, WebQADataset):
     normalize = transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
 
     transform_train = transforms.Compose([
@@ -24,9 +24,9 @@ def create_dataset(config, min_scale=0.5) -> (WebQADataset, WebQADataset, WebQAD
         normalize,
     ])
 
-    train_dataset = WebQADataset(config['train_file'], transform_train, config['image_dir'], split='train')
-    val_dataset = WebQADataset(config['val_file'], transform_test, config['image_dir'], split='val')
-    test_dataset = WebQADataset(config['test_file'], transform_test, config['image_dir'], split='test')
+    train_dataset = WebQADataset(config['train_file'], transform_train, config['image_dir'], split='train', **kwargs)
+    val_dataset = WebQADataset(config['val_file'], transform_test, config['image_dir'], split='val', **kwargs)
+    test_dataset = WebQADataset(config['test_file'], transform_test, config['image_dir'], split='test', **kwargs)
     return train_dataset, val_dataset, test_dataset
 
 

@@ -13,18 +13,27 @@ from matplotlib import pyplot as plt
 @torch.no_grad()
 def main(args, config):
     # dataset
-    datasets = create_dataset(config)
-    train_loader, val_loader, test_loader = create_loader(
-        datasets, [None, None, None],
-        batch_size=[config['batch_size_train'], config['batch_size_test'], config['batch_size_test']],
-        num_workers=[1, 1, 1], is_trains=[True, False, False],
-        collate_fns=[webqa_collate_fn, webqa_collate_fn, webqa_collate_fn]
+    dataset, _, _ = create_dataset(
+        dict(
+            image_size=480,
+            train_file=r'E:\webqa\data\WebQA_train_val.json',
+            val_file=r'E:\webqa\data\WebQA_train_val.json',
+            test_file=r'E:\webqa\data\WebQA_train_val.json',
+            image_dir=r'E:\webqa\data\images',
+        ),
+        use_num_samples=100,
     )
+    train_loader = create_loader(
+        [dataset], [None],
+        batch_size=[2],
+        num_workers=[1], is_trains=[True],
+        collate_fns=[webqa_collate_fn]
+    )[0]
 
     # model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = blip_vqa(
-        pretrained=config['pretrained'],
+        pretrained=r'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_14M.pth',
         image_size=config['image_size'],
         vit=config['vit'],
         vit_grad_ckpt=config['vit_grad_ckpt'],
@@ -32,32 +41,34 @@ def main(args, config):
     )
     model = model.to(device)
 
-    for i, (
-            images, captions, question, answer, n_facts, question_ids, qcates
-    ) in enumerate(train_loader):
+    for images, captions, question, answer, n_img_facts, question_ids, qcates, retr_labels in train_loader:
         # visualize images
-        batch_size, nf, channel, H, W = images.shape
-        print(f'(batch_size, n_facts, channel, H, W):', images.shape)
-        for b in range(batch_size):
-            for fi in range(nf):
-                im = images[b, fi].detach().cpu().numpy()
-                im = np.transpose(im, (1, 2, 0))
+        # batch_size, nf, channel, H, W = images.shape
 
-                plt.imshow(im)
-                plt.savefig(
-                    os.path.join(
-                        args.output_dir,
-                        f'{question_ids[b]}_{fi}.jpg',
-                    )
-                )
-                plt.close('all')
+        # # print(f'(batch_size, n_img_facts, channel, H, W):', images.shape)
+        # for b in range(batch_size):
+        #     for fi in range(nf):
+        #         im = images[b, fi].detach().cpu().numpy()
+        #         im = np.transpose(im, (1, 2, 0))
+
+        #         plt.imshow(im)
+        #         plt.savefig(
+        #             os.path.join(
+        #                 args.output_dir,
+        #                 f'{question_ids[b]}_{fi}.jpg',
+        #             )
+        #         )
+        #         plt.close('all')
 
         # run model
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_facts, train=False)
+        (
+            loss, retr, multimodal_cross_atts
+        ) = model(images, captions, question, answer, n_img_facts, train=True)
+        print(retr)
 
-        for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
-            print({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
+        # for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
+        #     print({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
 
 
 def load_args_configs():
