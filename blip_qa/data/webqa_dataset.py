@@ -43,11 +43,8 @@ class WebQADataset(Dataset):
                         Q = pre_caption(datum['Q'].replace('"', ""), 100)
                         A = pre_caption(datum['A'][0].replace('"', ""), 100)
 
-                        gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps = [], [], [], []
-                        if 'txt_posFacts' in datum:
-                            gold_text_facts, neg_text_facts = self.extract_text_facts_for_question(datum)
-                        if 'img_posFacts' in datum:
-                            gold_img_and_caps, neg_img_and_caps = self.extract_img_facts_for_question(datum)
+                        gold_text_facts, neg_text_facts = self.extract_text_facts_for_question(datum)
+                        gold_img_and_caps, neg_img_and_caps = self.extract_img_facts_for_question(datum)
 
                         if not self.check_image_feature_path(gold_img_and_caps):
                             print(f"Question {i} skipped because image is not found")
@@ -59,35 +56,43 @@ class WebQADataset(Dataset):
                         self.instance_list.append(
                             (
                                 gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps,
-                                Q, A, question_id, datum['Qcate']
+                                Q, A, question_id, datum['Qcate'] if self.split != 'test' else '',
                             )
                         )
                         count += 1
 
         print(f"Load {len(self.instance_list)} instances from {count} samples")
 
-    @staticmethod
-    def extract_text_facts_for_question(datum: dict):
+    def extract_text_facts_for_question(self, datum: dict):
         gold_text_facts = []
         neg_text_facts = []
-        if 'txt_posFacts' in datum:
-            for fa in datum['txt_posFacts']:
+
+        if self.split == 'test':
+            for fa in datum['txt_Facts']:
                 gold_text_facts.append(pre_caption(fa['fact'], 100))
-        if 'txt_negFacts' in datum:
-            for fa in datum['txt_negFacts']:
-                neg_text_facts.append(pre_caption(fa['fact'], 100))
+        else:
+            if 'txt_posFacts' in datum:
+                for fa in datum['txt_posFacts']:
+                    gold_text_facts.append(pre_caption(fa['fact'], 100))
+            if 'txt_negFacts' in datum:
+                for fa in datum['txt_negFacts']:
+                    neg_text_facts.append(pre_caption(fa['fact'], 100))
         return gold_text_facts, neg_text_facts
 
     def extract_img_facts_for_question(self, datum: dict):
         gold_img_and_caps = []
         neg_img_and_caps = []
 
-        if 'img_posFacts' in datum:
-            for im in datum['img_posFacts']:
+        if self.split == 'test':
+            for im in datum['img_Facts']:
                 gold_img_and_caps.append(self.load_image_fact(im))
-        if 'img_negFacts' in datum:
-            for im in datum['img_negFacts']:
-                neg_img_and_caps.append(self.load_image_fact(im))
+        else:
+            if 'img_posFacts' in datum:
+                for im in datum['img_posFacts']:
+                    gold_img_and_caps.append(self.load_image_fact(im))
+            if 'img_negFacts' in datum:
+                for im in datum['img_negFacts']:
+                    neg_img_and_caps.append(self.load_image_fact(im))
 
         return gold_img_and_caps, neg_img_and_caps
 
@@ -119,7 +124,10 @@ class WebQADataset(Dataset):
         text, neg_text, img_caps, neg_img_caps, Q, A, question_id, qcate = self.instance_list[index]
 
         n_neg_facts = random.randint(0, self.max_n_neg_facts)
-        neg_img_caps = random.sample(neg_img_caps, n_neg_facts)
+        if self.split != 'test':
+            neg_img_caps = random.sample(neg_img_caps, n_neg_facts)
+        else:
+            neg_img_caps = []
 
         # TODO: neg_text = random.sample(neg_text, n_neg_facts)
         #   all_text = text + neg_text

@@ -64,41 +64,47 @@ def create_loader(datasets, samplers, batch_size, num_workers, is_trains, collat
 
 
 def test():
-    dataset, _, _ = create_dataset(
+    datasets = create_dataset(
         dict(
             image_size=480,
             train_file=r'E:\webqa\data\WebQA_train_val.json',
             val_file=r'E:\webqa\data\WebQA_train_val.json',
-            test_file=r'E:\webqa\data\WebQA_train_val.json',
+            test_file=r'E:\webqa\data\WebQA_test.json',
             image_dir=r'E:\webqa\data\images',
-        )
+        ),
+        use_num_samples=100,
     )
-    (
-        images,
-        captions,
-        Q,
-        A,
-        question_id,
-        qcate,
-        retrieval_labels,
-    ) = dataset[50]
-    print(captions)
-    print(retrieval_labels)
 
-    from webqa_dataset import webqa_collate_fn
-    loader = DataLoader(
-        dataset,
-        batch_size=4,
-        num_workers=1,
-        shuffle=True,
-        collate_fn=webqa_collate_fn,
-    )
-    for (
-            images, captions, question, answer, n_facts, question_ids, qcates, retr_labels,
-    ) in loader:
-        print(captions)
-        print(retr_labels)
-        break
+    for data in datasets:
+        print('=' * 80)
+        print(data.split)
+        print('=' * 80)
+        (
+            images,
+            captions,
+            Q,
+            A,
+            question_id,
+            qcate,
+            retrieval_labels,
+        ) = data[50]
+        print('captions:', captions)
+        print('retr_labels:', retrieval_labels)
+
+        from webqa_dataset import webqa_collate_fn
+        loader = DataLoader(
+            data,
+            batch_size=4,
+            num_workers=1,
+            shuffle=True,
+            collate_fn=webqa_collate_fn,
+        )
+        for (
+                images, captions, question, answer, n_facts, question_ids, qcates, retr_labels,
+        ) in loader:
+            print('batch captions:', captions)
+            print('batch retr_labels', retr_labels)
+            break
 
 
 if __name__ == '__main__':
