@@ -6,7 +6,7 @@ from data.webqa_dataset import WebQADataset
 from transform.randaugment import RandomAugment
 
 
-def create_dataset(config, min_scale=0.5):
+def create_dataset(config, min_scale=0.5, **kwargs) -> (WebQADataset, WebQADataset, WebQADataset):
     normalize = transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
 
     transform_train = transforms.Compose([
@@ -24,9 +24,9 @@ def create_dataset(config, min_scale=0.5):
         normalize,
     ])
 
-    train_dataset = WebQADataset(config['train_file'], transform_train, config['image_dir'], split='train')
-    val_dataset = WebQADataset(config['val_file'], transform_test, config['image_dir'], split='val')
-    test_dataset = WebQADataset(config['test_file'], transform_test, config['image_dir'], split='test')
+    train_dataset = WebQADataset(config['train_file'], transform_train, config['image_dir'], split='train', **kwargs)
+    val_dataset = WebQADataset(config['val_file'], transform_test, config['image_dir'], split='val', **kwargs)
+    test_dataset = WebQADataset(config['test_file'], transform_test, config['image_dir'], split='test', **kwargs)
     return train_dataset, val_dataset, test_dataset
 
 
@@ -61,3 +61,45 @@ def create_loader(datasets, samplers, batch_size, num_workers, is_trains, collat
         )
         loaders.append(loader)
     return loaders
+
+
+def test():
+    dataset, _, _ = create_dataset(
+        dict(
+            image_size=480,
+            train_file=r'E:\webqa\data\WebQA_train_val.json',
+            val_file=r'E:\webqa\data\WebQA_train_val.json',
+            test_file=r'E:\webqa\data\WebQA_train_val.json',
+            image_dir=r'E:\webqa\data\images',
+        )
+    )
+    (
+        images,
+        captions,
+        Q,
+        A,
+        question_id,
+        qcate,
+        retrieval_labels,
+    ) = dataset[50]
+    print(captions)
+    print(retrieval_labels)
+
+    from webqa_dataset import webqa_collate_fn
+    loader = DataLoader(
+        dataset,
+        batch_size=4,
+        num_workers=1,
+        shuffle=True,
+        collate_fn=webqa_collate_fn,
+    )
+    for (
+            images, captions, question, answer, n_facts, question_ids, qcates, retr_labels,
+    ) in loader:
+        print(captions)
+        print(retr_labels)
+        break
+
+
+if __name__ == '__main__':
+    test()

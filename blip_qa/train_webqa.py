@@ -6,6 +6,7 @@ import random
 import json
 from pathlib import Path
 import torch
+import torch.nn.functional as F
 import torch.distributed as dist
 from models.blip_webqa import blip_vqa
 import utils
@@ -14,6 +15,7 @@ from data import create_dataset, create_sampler, create_loader
 from data.webqa_dataset import webqa_collate_fn
 import wandb
 import time
+from torch.cuda import amp
 
 
 def init_wandb(output_dir: str):
@@ -25,7 +27,7 @@ def init_wandb(output_dir: str):
     )
     os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'
     os.environ['WANDB_DIR'] = output_dir
-    wandb.init(project="blip_webqa_qa_img_only")
+    wandb.init(project="blip_webqa_qa_mt_img_only")
 
 
 def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
@@ -38,6 +40,10 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
     assert grad_accum >= 1
     grad_clip = config['grad_clip']
     assert grad_clip > 0
+    alpha = config['alpha']
+    assert 0 <= alpha <= 1
+
+    scaler = amp.GradScaler()
 
     print(f"Start training from epoch {epoch_start}")
     for epoch in range(epoch_start, config['max_epoch']):
@@ -47,28 +53,67 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
         cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
+        batch_size = config['batch_size_train']
+        avg_loss = 0.0
+        avg_qa_loss = 0.0
+        avg_retr_loss = 0.0
+
         model.train()
         for i, (
-                images, captions, question, answer, n_facts, _, _,
+                images, captions, question, answer, n_img_facts, _, _, retr_labels,
         ) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
-            loss, _ = model(images, captions, question, answer, n_facts, train=True)
+            retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
 
-            loss = loss / grad_accum
-            loss.backward()
+            with amp.autocast():
+                qa_loss, retr, _ = model(images, captions, question, answer, n_img_facts, train=True)
+
+                # Retrieval loss
+                retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
+                retr_preds = torch.cat(retr_preds)
+                retr_loss = F.binary_cross_entropy_with_logits(
+                    retr_preds, retr_labels, reduction='sum'
+                ) / images.size(0)
+
+                # overall loss
+                loss = (1 - alpha) * qa_loss + alpha * retr_loss
+
+                # update avg losses
+                avg_loss += loss.item() * batch_size
+                avg_qa_loss += qa_loss.item() * batch_size
+                avg_retr_loss += retr_loss.item() * batch_size
+
+                # grad accum
+                loss = loss / grad_accum
+
+            scaler.scale(loss).backward()
 
             if (i + 1) % grad_accum == 0:
+                # gradient clip
+                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-                optimizer.step()
+
+                # optimize
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
 
                 global_step += 1
 
-                print(f'Epoch[{epoch}] step {global_step}:\ttrain_loss {loss.item()}')
-                wandb.log({f'train_loss': loss.item(), 'step': global_step})
-                # wandb.log({f'train_precision': pr, 'step': step, 'threshold': th})
-                # wandb.log({f'train_recall': re, 'step': step, 'threshold': th})
-                # wandb.log({f'train_F1': f1, 'step': step, 'threshold': th})
+                # log avg losses
+                avg_qa_loss /= grad_accum * batch_size
+                avg_retr_loss /= grad_accum * batch_size
+                avg_loss /= grad_accum * batch_size
+                print(f'Epoch[{epoch}] step {global_step}:'
+                      f'\tloss {avg_loss:.4f}\tqa_loss {avg_qa_loss:.4f}\tretr_loss {avg_retr_loss:.4f}')
+                wandb.log({
+                    f'loss': avg_loss, 'qa_loss': avg_qa_loss, 'retr_loss': avg_retr_loss, 'step': global_step,
+                })
+
+                # reset
+                avg_qa_loss = 0.0
+                avg_retr_loss = 0.0
+                avg_loss = 0.0
 
         if utils.is_main_process():
             save_obj = {
@@ -105,10 +150,11 @@ def evaluation(model, data_loader, device):
     model.eval()
     val_iter = tqdm(data_loader, desc="Validation", disable=0)
     for i, (
-            images, captions, question, answer, n_facts, question_ids, qcate,
+            images, captions, question, answer, n_img_facts, question_ids, qcate, _,
     ) in enumerate(val_iter):
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_facts, train=False)
+        with amp.autocast():
+            pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         preds += pred
         refs += answer
@@ -127,10 +173,11 @@ def inference(config, model, data_loader, device):
     result = []
     data_iter = tqdm(data_loader, desc="Validation", disable=0)
     for i, (
-            images, captions, question, answer, n_facts, question_ids, qcates
+            images, captions, question, answer, n_img_facts, question_ids, qcates, _,
     ) in enumerate(data_iter):
         images = images.to(device, non_blocking=True)
-        pred = model(images, captions, question, answer, n_facts, train=False)
+        with amp.autocast():
+            pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
             result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
@@ -226,7 +273,7 @@ def main(args, config):
 def load_args_configs():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='./configs/webqa.yaml')
-    parser.add_argument('--output_dir', default='output/WebQA')
+    parser.add_argument('--output_dir', default='output/multitask')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
     parser.add_argument('--seed', default=42, type=int)
@@ -238,11 +285,7 @@ def load_args_configs():
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
 
-    args.result_dir = os.path.join(args.output_dir, 'result')
-
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    Path(args.result_dir).mkdir(parents=True, exist_ok=True)
-
     yaml.dump(config, open(os.path.join(args.output_dir, 'config.yaml'), 'w'))
     return args, config
 
