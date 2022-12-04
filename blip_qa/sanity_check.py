@@ -7,6 +7,7 @@ import torch
 from data import create_dataset, create_loader
 from data.webqa_dataset import webqa_collate_fn
 from models.blip_webqa import blip_vqa
+import torch.nn.functional as F
 from matplotlib import pyplot as plt
 
 
@@ -65,7 +66,17 @@ def main(args, config):
         (
             loss, retr, multimodal_cross_atts
         ) = model(images, captions, question, answer, n_img_facts, train=True)
-        print(retr)
+
+        retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
+        retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
+        retr_preds = torch.cat(retr_preds)
+        retr_loss = F.binary_cross_entropy_with_logits(
+            retr_preds, retr_labels, reduction='sum'
+        ) / images.size(0)
+
+        print('retr predictions', F.sigmoid(retr_preds))
+        print('retr labels', retr_labels)
+        print('retr loss', retr_loss)
 
         # for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
         #     print({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})

@@ -51,6 +51,11 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
         cosine_lr_schedule(optimizer, epoch, config['max_epoch'], config['init_lr'], config['min_lr'])
 
+        batch_size = config['batch_size_train']
+        avg_loss = 0.0
+        avg_qa_loss = 0.0
+        avg_retr_loss = 0.0
+
         model.train()
         for i, (
                 images, captions, question, answer, n_img_facts, _, _, retr_labels,
@@ -68,10 +73,16 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                     retr_preds, retr_labels, reduction='sum'
                 ) / images.size(0)
 
-                # grad accum
-                qa_loss = qa_loss / grad_accum
-                retr_loss = retr_loss / grad_accum
+                # overall loss
                 loss = qa_loss + retr_loss
+
+                # update avg losses
+                avg_loss += loss.item() * batch_size
+                avg_qa_loss += qa_loss.item() * batch_size
+                avg_retr_loss += retr_loss.item() * batch_size
+
+                # grad accum
+                loss = loss / grad_accum
 
             scaler.scale(loss).backward()
 
@@ -87,12 +98,20 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
                 global_step += 1
 
+                # log avg losses
+                avg_qa_loss /= grad_accum * batch_size
+                avg_retr_loss /= grad_accum * batch_size
+                avg_loss /= grad_accum * batch_size
                 print(f'Epoch[{epoch}] step {global_step}:'
-                      f'\tloss {loss.item()}\tqa_loss {qa_loss.item()}\tretr_loss{retr_loss.item()}')
+                      f'\tloss {avg_loss:.4f}\tqa_loss {avg_qa_loss:.4f}\tretr_loss{avg_retr_loss:.4f}')
                 wandb.log({
-                    f'loss': loss.item(), 'qa_loss': qa_loss.item(), 'retr_loss': retr_loss.item(),
-                    'step': global_step
+                    f'loss': avg_loss, 'qa_loss': avg_qa_loss, 'retr_loss': avg_retr_loss, 'step': global_step,
                 })
+
+                # reset
+                avg_qa_loss = 0.0
+                avg_retr_loss = 0.0
+                avg_loss = 0.0
 
         if utils.is_main_process():
             save_obj = {
