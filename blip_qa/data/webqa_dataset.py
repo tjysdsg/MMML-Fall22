@@ -126,12 +126,12 @@ class WebQADataset(Dataset):
         all_text = text
         all_img_caps = img_caps + neg_img_caps
         img_retr_tgts = torch.cat(
-            [torch.ones(len(img_caps), dtype=torch.long), torch.zeros(len(neg_img_caps), dtype=torch.long)]
+            [torch.ones(len(img_caps)), torch.zeros(len(neg_img_caps))]
         )
 
         # shuffle facts
         # TODO: text_retr_tgts = torch.cat(
-        #       [torch.ones(len(text), dtype=torch.long), torch.zeros(len(neg_text), dtype=torch.long)]
+        #       [torch.ones(len(text)), torch.zeros(len(neg_text))]
         #   )
         #   all_text, text_retr_tgts  = self.shuffle_facts_and_retr_labels(all_text, text_retr_tgts)
         all_img_caps, img_retr_tgts = self.shuffle_facts_and_retr_labels(all_img_caps, img_retr_tgts)

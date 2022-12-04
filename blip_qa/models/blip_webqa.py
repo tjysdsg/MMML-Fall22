@@ -223,7 +223,7 @@ class BLIP_VQA(nn.Module):
 
             # (batch, n_facts, num_heads * num_patches)
             atts = atts.reshape(atts.shape[0], -1, self.num_heads * self.num_patches)
-            retr = self.retr_ffn(atts).squeeze()  # (batch, n_facts)
+            retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
 
             '''
             n: number of answers for each question
@@ -244,7 +244,11 @@ class BLIP_VQA(nn.Module):
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
-            return loss, retr, multimodal_cross_atts
+
+            retr_preds = []
+            for i, nf in enumerate(n_img_facts):
+                retr_preds.append(retr[i, :nf])
+            return loss, retr_preds, multimodal_cross_atts
         else:
             num_beams = 3
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)

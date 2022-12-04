@@ -62,7 +62,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                 qa_loss, retr_preds, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
                 # Retrieval loss
-                retr_loss = F.binary_cross_entropy_with_logits(retr_preds.ravel(), retr_labels)
+                retr_loss = F.binary_cross_entropy_with_logits(torch.cat(retr_preds), retr_labels)
 
                 # grad accum
                 qa_loss = qa_loss / grad_accum
@@ -83,7 +83,8 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
                 global_step += 1
 
-                print(f'Epoch[{epoch}] step {global_step}:\ttrain_loss {loss.item()}')
+                print(f'Epoch[{epoch}] step {global_step}:'
+                      f'\tloss {loss.item()}\tqa_loss {qa_loss.item()}\tretr_loss{retr_loss.item()}')
                 wandb.log({
                     f'loss': loss.item(), 'qa_loss': qa_loss.item(), 'retr_loss': retr_loss.item(),
                     'step': global_step
@@ -245,7 +246,7 @@ def main(args, config):
 def load_args_configs():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default='./configs/webqa.yaml')
-    parser.add_argument('--output_dir', default='output/WebQA')
+    parser.add_argument('--output_dir', default='output/multitask')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
     parser.add_argument('--seed', default=42, type=int)
@@ -257,11 +258,7 @@ def load_args_configs():
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
 
-    args.result_dir = os.path.join(args.output_dir, 'result')
-
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    Path(args.result_dir).mkdir(parents=True, exist_ok=True)
-
     yaml.dump(config, open(os.path.join(args.output_dir, 'config.yaml'), 'w'))
     return args, config
 
