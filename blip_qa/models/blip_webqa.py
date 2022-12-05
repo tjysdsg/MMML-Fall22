@@ -206,13 +206,12 @@ class BLIP_VQA(nn.Module):
         captions = [' '.join(cap) for cap in captions]
         captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
-        input_ids = torch.cat([question.input_ids, captions.input_ids], dim=-1)
 
         # image-grounded text encoder
+        input_ids = torch.cat([question.input_ids, captions.input_ids], dim=-1)
         attention_mask = torch.cat([question.attention_mask, captions.attention_mask], dim=-1)
-
-        n_img_facts[1] = 0
-        n_img_facts[3] = 0
+        input_ids = input_ids[:, :512]
+        attention_mask = attention_mask[:, :512]
 
         cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float)
         cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0
