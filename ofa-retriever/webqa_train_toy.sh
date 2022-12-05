@@ -10,7 +10,7 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --val_file val.jsonl \
 --num_epochs 4 \
 --evaluation_steps 5 \
---max_length 200 \
+--max_length 00 \
 --dev_batch_size 1 \
 --train_batch_size 1 \
 --real_batch_size 1 \

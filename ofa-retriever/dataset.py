@@ -331,13 +331,13 @@ class WebQADataset(Dataset):
                         patch_mask = None
                     else:
                         try:
-                            image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
+                            image = Image.open(os.path.join(self.args.image_dir, str(neg_img_fact['image_id']) + '.jpg'))
                             batch_patch_images.append(self.patch_resize_transform(image))
                             batch_patch_masks.append(True)
                         except:
                             batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                             batch_patch_masks.append(False)
-                            print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
+                            print('missing picture: {}, we need to ignore this.'.format(neg_img_fact['image_id']))
 
             # construct constraint mask
             allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
