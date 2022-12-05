@@ -7,7 +7,7 @@ import json
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--retrieval-results', type=str, default='test.json')
+    parser.add_argument('--retrieval-results', type=str, default='../roberta_best_submission.json')
     parser.add_argument('--generator-results', type=str, default='test_pred.json')
     parser.add_argument('--output', type=str, default='submission.json')
     return parser.parse_args()
