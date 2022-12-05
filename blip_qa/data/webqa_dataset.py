@@ -184,7 +184,7 @@ def webqa_collate_fn(batch):
     ) = [], [], [], [], [], [], [], []
     for image, caption, question, answer, qid, qcate, retr in batch:
         if image is None:  # placeholder for samples without image facts
-            image_lists.append(None)
+            image_lists.append(torch.zeros(1, 3, 480, 480))
             n_facts.append(0)  # set to 0 so the placeholder is masked
             pad_max_len = max(pad_max_len, 1)
         else:
@@ -201,13 +201,10 @@ def webqa_collate_fn(batch):
 
         retr_labels.append(retr)
 
-    if image_lists[0] is not None:
-        image_pad = [
-            F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
-            for img in image_lists
-        ]
-        image_pad = torch.stack(image_pad)
-    else:
-        image_pad = torch.zeros(1)
+    image_pad = [
+        F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
+        for img in image_lists
+    ]
+    image_pad = torch.stack(image_pad)
 
     return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels

@@ -196,11 +196,8 @@ class BLIP_VQA(nn.Module):
         :param train: train or inference
         """
 
-        is_text_question = n_img_facts[0] == 0
-
-        if not is_text_question:
-            image_embeds, lengths = self.encode_images(image, n_img_facts)
-            image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
+        image_embeds, lengths = self.encode_images(image, n_img_facts)
+        image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
         question = self.tokenizer(question, padding='longest', return_tensors="pt").to(image.device)
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
@@ -209,25 +206,25 @@ class BLIP_VQA(nn.Module):
         captions = [' '.join(cap) for cap in captions]
         captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
+        input_ids = torch.cat([question.input_ids, captions.input_ids], dim=-1)
 
         # image-grounded text encoder
         attention_mask = torch.cat([question.attention_mask, captions.attention_mask], dim=-1)
 
-        if not is_text_question:
-            question_output = self.text_encoder(
-                torch.cat([question.input_ids, captions.input_ids], dim=-1),
-                attention_mask=attention_mask,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                output_attentions=True,
-                return_dict=True,
-            )
-        else:
-            question_output = self.text_encoder(
-                torch.cat([question.input_ids, captions.input_ids], dim=-1),
-                attention_mask=attention_mask,
-                return_dict=True,
-            )
+        n_img_facts[1] = 0
+        n_img_facts[3] = 0
+
+        cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float)
+        cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0
+        question_output = self.text_encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
+            cross_attention_weight=cross_attention_weight,
+            output_attentions=True,
+            return_dict=True,
+        )
 
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None

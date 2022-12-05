@@ -14,7 +14,7 @@ pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/mo
 vit: 'base'
 batch_size_train: 1
 batch_size_val: 1
-batch_size_test: 1
+batch_size_test: 8
 vit_grad_ckpt: False
 vit_ckpt_layer: 0
 init_lr: 1e-4
