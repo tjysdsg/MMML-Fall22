@@ -102,15 +102,17 @@ def validate(args, dev_dataloader, model):
             allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
-            patch_images = data['patch_images'].to(args.device)
-            patch_masks = data['patch_masks'].to(args.device)
+            if not args.without_image:
+                patch_images = data['patch_images'].to(args.device)
+                patch_masks = data['patch_masks'].to(args.device)
 
             squeezed_sources = sources.view(-1, sources.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
             squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
-            squeezed_patch_masks = patch_masks.view(-1)
-            squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+            if not args.without_image:
+                squeezed_patch_masks = patch_masks.view(-1)
+                squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
 
             outputs = model(
                 input_ids=squeezed_sources, 
@@ -186,15 +188,17 @@ def train(args, model, tokenizer):
             allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
-            patch_masks = data['patch_masks'].to(args.device)
-            patch_images = data['patch_images'].to(args.device)
+            if not args.without_image:
+                patch_masks = data['patch_masks'].to(args.device)
+                patch_images = data['patch_images'].to(args.device)
 
             squeezed_sources = sources.view(-1, sources.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
             squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
-            squeezed_patch_masks = patch_masks.view(-1)
-            squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+            if not args.without_image:
+                squeezed_patch_masks = patch_masks.view(-1)
+                squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -287,8 +291,9 @@ def test(args, model, tokenizer):
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
             constraint_masks = data['constraint_masks'].to(args.device)
             allowed_words = data['allowed_words'].to(args.device)
-            patch_images = data['patch_images'].to(args.device)
-            patch_masks = data['patch_masks'].to(args.device)
+            if not args.without_image:
+                patch_images = data['patch_images'].to(args.device)
+                patch_masks = data['patch_masks'].to(args.device)
             source_ids = data['source_ids']
             source_types = data['source_types']
             q_ids = data['q_ids']
@@ -338,13 +343,15 @@ def distributed_setup(args, model):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+
     parser.add_argument('--distributed', action='store_true')
+    parser.add_argument('--without_image', action='store_true')
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
     parser.add_argument('--model_name', type=str, default='OFA-tiny', help='model name or path')
     parser.add_argument('--model_dir', type=str, default='./OFA-tiny')
-    parser.add_argument('--image_dir', type=str, default='../../utils/webqa_data/images')
+    parser.add_argument('--image_dir', type=str, default='../../images')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')
     parser.add_argument('--test_file', type=str, default='test.jsonl', help='path to test file')

@@ -96,14 +96,18 @@ class WebQATestDataset(Dataset):
             elif 'img_fact' in instance.keys():
                 source_types.append('img')
                 source_ids.append(instance['img_fact']['image_id'])
-                try:
-                    image = Image.open(os.path.join(self.args.image_dir, str(instance['img_fact']['image_id']) + '.jpg'))
-                    patch_image = self.patch_resize_transform(image)
-                    patch_mask = True
-                except:
-                    patch_image = torch.zeros((3, self.patch_image_size, self.patch_image_size))
-                    patch_mask = False
-                    print('missing picture: {}, we need to ignore this.'.format(instance['img_fact']['image_id']))
+                if self.args.without_image:
+                    patch_image = None
+                    patch_mask = None
+                else:
+                    try:
+                        image = Image.open(os.path.join(self.args.image_dir, str(instance['img_fact']['image_id']) + '.jpg'))
+                        patch_image = self.patch_resize_transform(image)
+                        patch_mask = True
+                    except:
+                        patch_image = torch.zeros((3, self.patch_image_size, self.patch_image_size))
+                        patch_mask = False
+                        print('missing picture: {}, we need to ignore this.'.format(instance['img_fact']['image_id']))
             sources.append(instance['source'])
             prev_outputs.append(instance['prev_output'])
             patch_images.append(patch_image)
@@ -129,8 +133,12 @@ class WebQATestDataset(Dataset):
             padding_value=False,
         )
 
-        patch_images = torch.stack(patch_images, dim=0)
-        patch_masks = torch.BoolTensor(patch_masks)
+        if self.args.without_image:
+            patch_images = torch.stack(patch_images, dim=0)
+            patch_masks = torch.BoolTensor(patch_masks)
+        else:
+            patch_images = None
+            patch_masks = None
 
         decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
         return {
