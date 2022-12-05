@@ -196,8 +196,11 @@ class BLIP_VQA(nn.Module):
         :param train: train or inference
         """
 
-        image_embeds, lengths = self.encode_images(image, n_img_facts)
-        image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
+        is_text_question = n_img_facts[0] == 0
+
+        if not is_text_question:
+            image_embeds, lengths = self.encode_images(image, n_img_facts)
+            image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
         question = self.tokenizer(question, padding='longest', return_tensors="pt").to(image.device)
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
@@ -209,17 +212,28 @@ class BLIP_VQA(nn.Module):
 
         # image-grounded text encoder
         attention_mask = torch.cat([question.attention_mask, captions.attention_mask], dim=-1)
-        question_output = self.text_encoder(torch.cat([question.input_ids, captions.input_ids], dim=-1),
-                                            attention_mask=attention_mask,
-                                            encoder_hidden_states=image_embeds,
-                                            encoder_attention_mask=image_atts,
-                                            output_attentions=True,
-                                            return_dict=True)
+
+        if not is_text_question:
+            question_output = self.text_encoder(
+                torch.cat([question.input_ids, captions.input_ids], dim=-1),
+                attention_mask=attention_mask,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                output_attentions=True,
+                return_dict=True,
+            )
+        else:
+            question_output = self.text_encoder(
+                torch.cat([question.input_ids, captions.input_ids], dim=-1),
+                attention_mask=attention_mask,
+                return_dict=True,
+            )
 
         # (batch, num_heads, question_len, image_embeds_len)
-        multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
+        multimodal_cross_atts = None
         if train:
             if self.multitask:  # Retrieval
+                multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
                 atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
                 atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
 

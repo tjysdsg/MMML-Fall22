@@ -18,7 +18,7 @@ class WebQADataset(Dataset):
     ):
         if ignored_questions is None:
             ignored_questions = []
-        self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape']  # FIXME: , 'text']
+        self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'text']
         if 'all' not in qcate:
             self.qcate = list(set(qcate).intersection(set(self.qcate)))
 
@@ -125,7 +125,8 @@ class WebQADataset(Dataset):
 
         n_neg_facts = random.randint(0, self.max_n_neg_facts)
         if self.split != 'test':
-            neg_img_caps = random.sample(neg_img_caps, n_neg_facts)
+            if len(neg_img_caps) > n_neg_facts:
+                neg_img_caps = random.sample(neg_img_caps, n_neg_facts)
         else:
             neg_img_caps = []
 
@@ -181,6 +182,9 @@ def webqa_collate_fn(batch):
         - questions: a batch of questions
         - answers: a batch of answers
         - n_facts: a list of integers
+
+    NOTE: Only support batch size of 1 because for text-based questions, we don't use cross attention,
+    which means we cannot mix text-based and image-based questions in a batch
     """
     pad_max_len = 0
     (
@@ -188,7 +192,7 @@ def webqa_collate_fn(batch):
     ) = [], [], [], [], [], [], [], []
     for image, caption, question, answer, qid, qcate, retr in batch:
         if image is None:  # placeholder for samples without image facts
-            image_lists.append(torch.zeros(1, 3, 480, 480))  # FIXME: load H and W from configs
+            image_lists.append(None)
             n_facts.append(0)  # set to 0 so the placeholder is masked
             pad_max_len = max(pad_max_len, 1)
         else:
@@ -205,10 +209,13 @@ def webqa_collate_fn(batch):
 
         retr_labels.append(retr)
 
-    image_pad = [
-        F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
-        for img in image_lists
-    ]
-    image_pad = torch.stack(image_pad)
+    if image_lists[0] is not None:
+        image_pad = [
+            F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
+            for img in image_lists
+        ]
+        image_pad = torch.stack(image_pad)
+    else:
+        image_pad = torch.zeros(1)
 
     return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels

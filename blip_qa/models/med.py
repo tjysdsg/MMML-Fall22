@@ -339,7 +339,6 @@ class BertLayer(nn.Module):
             encoder_attention_mask=None,
             past_key_value=None,
             output_attentions=False,
-            mode=None,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -355,9 +354,7 @@ class BertLayer(nn.Module):
         outputs = self_attention_outputs[1:-1]
         present_key_value = self_attention_outputs[-1]
 
-        if mode == 'multimodal':
-            assert encoder_hidden_states is not None, "encoder_hidden_states must be given for cross-attention layers"
-
+        if encoder_hidden_states is not None:
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -367,8 +364,7 @@ class BertLayer(nn.Module):
                 output_attentions=output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[
-                                1:-1]  # add cross attentions if we output attention weights
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
@@ -403,7 +399,6 @@ class BertEncoder(nn.Module):
             output_attentions=False,
             output_hidden_states=False,
             return_dict=True,
-            mode='multimodal',
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -440,7 +435,6 @@ class BertEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    mode=mode,
                 )
             else:
                 layer_outputs = layer_module(
@@ -451,7 +445,6 @@ class BertEncoder(nn.Module):
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
-                    mode=mode,
                 )
 
             hidden_states = layer_outputs[0]
@@ -685,7 +678,6 @@ class BertModel(BertPreTrainedModel):
             output_hidden_states=None,
             return_dict=None,
             is_decoder=False,
-            mode='multimodal',
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -791,7 +783,6 @@ class BertModel(BertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            mode=mode,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -845,7 +836,6 @@ class BertLMHeadModel(BertPreTrainedModel):
             return_logits=False,
             is_decoder=True,
             reduction='mean',
-            mode='multimodal',
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -897,7 +887,6 @@ class BertLMHeadModel(BertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             is_decoder=is_decoder,
-            mode=mode,
         )
 
         sequence_output = outputs[0]
