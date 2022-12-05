@@ -11,7 +11,7 @@ CUDA_VISIBLE_DEVICES=1 python main.py \
 --num_epochs 4 \
 --evaluation_steps 200 \
 --max_length 300 \
---dev_batch_size 2 \
+--dev_batch_size 1 \
 --train_batch_size 1 \
 --choice_num 16 \
 --learning_rate 1e-3 \
