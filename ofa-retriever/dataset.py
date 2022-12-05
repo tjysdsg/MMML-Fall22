@@ -134,11 +134,11 @@ class WebQATestDataset(Dataset):
         )
 
         if self.args.without_image:
-            patch_images = torch.stack(patch_images, dim=0)
-            patch_masks = torch.BoolTensor(patch_masks)
-        else:
             patch_images = None
             patch_masks = None
+        else:
+            patch_images = torch.stack(patch_images, dim=0)
+            patch_masks = torch.BoolTensor(patch_masks)
 
         decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
         return {
@@ -292,13 +292,18 @@ class WebQADataset(Dataset):
                 batch_sources.append(torch.LongTensor(pos_img_fact['source']))
                 batch_prev_outputs.append(torch.LongTensor(pos_img_fact['prev_output']))
                 batch_labels.append(1)
-                try:
-                    image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
-                    batch_patch_images.append(self.patch_resize_transform(image))
-                    batch_patch_masks.append(True)
-                except:
-                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                    batch_patch_masks.append(False)
+                if self.args.without_image:
+                    patch_image = None
+                    patch_mask = None
+                else:
+                    try:
+                        image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
+                        batch_patch_images.append(self.patch_resize_transform(image))
+                        batch_patch_masks.append(True)
+                    except:
+                        batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                        batch_patch_masks.append(False)
+                        print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
             # negative text fact
             neg_txt_count = 0
@@ -321,13 +326,18 @@ class WebQADataset(Dataset):
                     batch_sources.append(torch.LongTensor(neg_img_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
                     batch_labels.append(0)
-                    try:
-                        image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
-                        batch_patch_images.append(self.patch_resize_transform(image))
-                        batch_patch_masks.append(True)
-                    except:
-                        batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                        batch_patch_masks.append(False)
+                    if self.args.without_image:
+                        patch_image = None
+                        patch_mask = None
+                    else:
+                        try:
+                            image = Image.open(os.path.join(self.args.image_dir, str(pos_img_fact['image_id']) + '.jpg'))
+                            batch_patch_images.append(self.patch_resize_transform(image))
+                            batch_patch_masks.append(True)
+                        except:
+                            batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                            batch_patch_masks.append(False)
+                            print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
             # construct constraint mask
             allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
@@ -385,11 +395,16 @@ class WebQADataset(Dataset):
         labels = torch.LongTensor(labels)
         labels = labels.view(bsz, -1)
 
-        patch_images = torch.stack(patch_images, dim=0)
-        patch_images = patch_images.view(bsz, -1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
-        
-        patch_masks = torch.BoolTensor(patch_masks)
-        patch_masks = patch_masks.view(bsz, -1)
+        if self.args.without_image:
+            patch_images = None
+            patch_masks = None
+        else:
+            patch_images = torch.stack(patch_images, dim=0)
+            patch_images = patch_images.view(bsz, -1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+            
+            patch_masks = torch.BoolTensor(patch_masks)
+            patch_masks = patch_masks.view(bsz, -1)
+
 
         decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
         logit_mask = (labels != -100)

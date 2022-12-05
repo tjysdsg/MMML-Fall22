@@ -117,20 +117,27 @@ def validate(args, dev_dataloader, model):
                 squeezed_patch_masks = None
                 squeezed_patch_images = None
 
-            outputs = model(
-                input_ids=squeezed_sources, 
-                decoder_input_ids=squeezed_prev_outputs,
-                patch_masks=squeezed_patch_masks,
-                patch_images=squeezed_patch_images,
-                attention_mask=squeezed_decoder_attention_mask,
-            )
-            logits = outputs['logits']
-            logits.masked_fill_(~squeezed_constraint_masks, -float('inf'))
-            last_token_ids = squeezed_prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
-            last_token_ids[last_token_ids<0] = 0 # fix the all [PAD] case
-            logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
-            logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
-
+            assert (args.dev_batch_size * args.choice_num) % args.real_batch_size == 0
+            real_logits = []
+            for idx in range(args.dev_batch_size * args.choice_num // args.real_batch_size):
+                start_idx = idx * args.real_batch_size
+                end_idx = (idx + 1) * args.real_batch_size
+                # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
+                outputs = model(
+                    input_ids=squeezed_sources[start_idx:end_idx], 
+                    decoder_input_ids=squeezed_prev_outputs[start_idx:end_idx],
+                    patch_masks=squeezed_patch_masks[start_idx:end_idx] if not args.without_image else None,
+                    patch_images=squeezed_patch_images[start_idx:end_idx] if not args.without_image else None,
+                    attention_mask=squeezed_decoder_attention_mask[start_idx:end_idx],
+                )
+                logits = outputs['logits']
+                logits.masked_fill_(~squeezed_constraint_masks[start_idx:end_idx], -float('inf'))
+                last_token_ids = squeezed_prev_outputs[start_idx:end_idx].ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
+                last_token_ids[last_token_ids<0] = 0
+                logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
+                logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
+                real_logits.append(logits)
+            logits = torch.cat(real_logits, dim=0)
             preds = logits.view(-1, args.choice_num, args.label_num)
             refs = torch.nn.functional.one_hot(labels * logit_mask)
             refs = refs.view(-1, args.choice_num, args.label_num)
@@ -207,22 +214,29 @@ def train(args, model, tokenizer):
                 squeezed_patch_images = None
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
-                # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
-                #import pdb; pdb.set_trace()
-                outputs = model(
-                    input_ids=squeezed_sources, 
-                    decoder_input_ids=squeezed_prev_outputs,
-                    patch_images=squeezed_patch_images,
-                    patch_masks=squeezed_patch_masks,
-                    attention_mask=squeezed_decoder_attention_mask,
-                )
-                logits = outputs['logits']
-                logits.masked_fill_(~squeezed_constraint_masks, -float('inf'))
-                last_token_ids = squeezed_prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
-                last_token_ids[last_token_ids<0] = 0 # fix the all [PAD] case
-                logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
-                logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
 
+                assert (args.train_batch_size * args.choice_num) % args.real_batch_size == 0
+                real_logits = []
+                for idx in range(args.train_batch_size * args.choice_num // args.real_batch_size):
+                    start_idx = idx * args.real_batch_size
+                    end_idx = (idx + 1) * args.real_batch_size
+                    # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
+                    outputs = model(
+                        input_ids=squeezed_sources[start_idx:end_idx], 
+                        decoder_input_ids=squeezed_prev_outputs[start_idx:end_idx],
+                        patch_masks=squeezed_patch_masks[start_idx:end_idx] if not args.without_image else None,
+                        patch_images=squeezed_patch_images[start_idx:end_idx] if not args.without_image else None,
+                        attention_mask=squeezed_decoder_attention_mask[start_idx:end_idx],
+                    )
+                    logits = outputs['logits']
+                    logits.masked_fill_(~squeezed_constraint_masks[start_idx:end_idx], -float('inf'))
+                    last_token_ids = squeezed_prev_outputs[start_idx:end_idx].ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
+                    last_token_ids[last_token_ids<0] = 0
+                    logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
+                    logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
+                    real_logits.append(logits)
+
+                logits = torch.cat(real_logits, dim=0)
                 preds = logits.view(-1, args.choice_num, args.label_num)
                 refs = torch.nn.functional.one_hot(labels * logit_mask)
                 refs = refs.view(-1, args.choice_num, args.label_num)
@@ -349,7 +363,7 @@ def distributed_setup(args, model):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
+    parser.add_argument('--real_batch_size', type=int, default=1)
     parser.add_argument('--distributed', action='store_true')
     parser.add_argument('--without_image', action='store_true')
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
