@@ -113,6 +113,9 @@ def validate(args, dev_dataloader, model):
             if not args.without_image:
                 squeezed_patch_masks = patch_masks.view(-1)
                 squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+            else:
+                squeezed_patch_masks = None
+                squeezed_patch_images = None
 
             outputs = model(
                 input_ids=squeezed_sources, 
@@ -199,6 +202,9 @@ def train(args, model, tokenizer):
             if not args.without_image:
                 squeezed_patch_masks = patch_masks.view(-1)
                 squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
+            else:
+                squeezed_patch_masks = None
+                squeezed_patch_images = None
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask

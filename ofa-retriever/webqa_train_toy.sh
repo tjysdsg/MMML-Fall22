@@ -14,4 +14,5 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --dev_batch_size 2 \
 --train_batch_size 1 \
 --choice_num 16 \
+--without_image \
 --have_cached_dataset
