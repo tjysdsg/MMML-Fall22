@@ -40,8 +40,8 @@ class WebQADataset(Dataset):
                 if data_split == 'test' or datum['Qcate'] in self.qcate:
                     if use_num_samples == -1 or count < use_num_samples:
                         question_id = datum['Guid']
-                        Q = pre_caption(datum['Q'].replace('"', ""), 100)
-                        A = pre_caption(datum['A'][0].replace('"', ""), 100)
+                        Q = pre_caption(datum['Q'].replace('"', ""), 50)
+                        A = pre_caption(datum['A'][0].replace('"', ""), 50)
 
                         gold_text_facts, neg_text_facts = self.extract_text_facts_for_question(datum)
                         gold_img_and_caps, neg_img_and_caps = self.extract_img_facts_for_question(datum)
@@ -69,14 +69,14 @@ class WebQADataset(Dataset):
 
         if self.split == 'test':
             for fa in datum['txt_Facts']:
-                gold_text_facts.append(pre_caption(fa['fact'], 100))
+                gold_text_facts.append(pre_caption(fa['fact'], 40))
         else:
             if 'txt_posFacts' in datum:
                 for fa in datum['txt_posFacts']:
-                    gold_text_facts.append(pre_caption(fa['fact'], 100))
+                    gold_text_facts.append(pre_caption(fa['fact'], 40))
             if 'txt_negFacts' in datum:
                 for fa in datum['txt_negFacts']:
-                    neg_text_facts.append(pre_caption(fa['fact'], 100))
+                    neg_text_facts.append(pre_caption(fa['fact'], 40))
         return gold_text_facts, neg_text_facts
 
     def extract_img_facts_for_question(self, datum: dict):
