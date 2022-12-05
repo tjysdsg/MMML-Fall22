@@ -184,7 +184,7 @@ def inference(config, model, data_loader, device):
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
             print({"question_id": qid, "answer": p})
-            result.append({"question_id": qid, "answer": p})
+            result.append({"question_id": qid, "pred": p, "answer": ans})
 
     return result
 

@@ -23,7 +23,7 @@ def main():
 
     answers = {}
     for g in gen:
-        answers[g['question_id']] = g['answer']
+        answers[g['question_id']] = g['pred']
 
     res = {}
     for q, q_data in retr.items():
