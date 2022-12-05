@@ -14,7 +14,7 @@ class WebQADataset(Dataset):
             self, data_json, transform, image_dir, eos='[SEP]', split="train",
             ignored_questions: List[str] = None, use_num_samples: int = -1,
             qcate: Literal['text', 'YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'all'] = 'all',
-            max_n_neg_facts=4,
+            max_n_neg_facts=0,
     ):
         if ignored_questions is None:
             ignored_questions = []

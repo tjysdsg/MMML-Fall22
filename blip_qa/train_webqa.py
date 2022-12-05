@@ -200,7 +200,7 @@ def main(args, config):
 
     #### Dataset #### 
     print("Creating WebQA datasets")
-    datasets = create_dataset(config)
+    datasets = create_dataset(config, max_n_neg_facts=4 if args.multitask else 0)
 
     if args.distributed:
         num_tasks = utils.get_world_size()
