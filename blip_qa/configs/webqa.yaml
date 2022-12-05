@@ -12,8 +12,8 @@ pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/mo
 
 # size of vit model; base or large
 vit: 'base'
-batch_size_train: 1
-batch_size_val: 1
+batch_size_train: 4
+batch_size_val: 8
 batch_size_test: 8
 vit_grad_ckpt: False
 vit_ckpt_layer: 0
@@ -23,7 +23,7 @@ init_lr: 1e-4
 weight_decay: 0.05
 min_lr: 0
 max_epoch: 10
-grad_accum: 32
+grad_accum: 8
 grad_clip: 5
 
 # multitask
