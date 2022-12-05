@@ -146,8 +146,19 @@ def webqa_fl(predictions, ground_truths, bart_score_path='bart_score.pth'):  # P
 
 
 if __name__ == '__main__':
-    prediction = 'yes, it is a blue circle'
-    ground_truth = 'no, it is a blue'
-    fl = webqa_fl(prediction, ground_truth)
-    acc = webqa_acc_approx(prediction, ground_truth, Qcate="number")
+    # 'd5cbd2580dba11ecb1e81171463288e9'
+    # prediction = 'both the sanfran 14 trolleybus and the third light rail trolleybus run off of the ground'
+    # ground_truth = 'Both the SanFran 14TrSF trolleybus and the Third light rail vehicle run off of electricity'
+
+    # FL = 1
+    # prediction = 'Both the SanFran 14 trolleybus and the Third light rail vehicle run off of electricity'
+    # ground_truth = 'Both the SanFran fourteen trolleybus and the Third light rail vehicle run off of electricity'
+    # fl = webqa_fl([prediction], [ground_truth])
+
+    prediction = 'both the SanFran 14TrSF trolleybus and the Third light rail vehicle run off of electricity'
+    ground_truth = 'Both the SanFran 14TrSF trolleybus and the Third light rail vehicle run off of electricity'
+    fl = webqa_fl([prediction], [ground_truth])
+
+    # acc = webqa_acc_approx(prediction, ground_truth, Qcate="Others")
+    acc = 0
     print(f'FL: {fl}, Acc {acc}')
