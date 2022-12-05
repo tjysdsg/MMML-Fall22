@@ -30,7 +30,7 @@ def main():
         res = json.load(f)
 
     for guid, data in res.items():
-        data['sources'] = [feat2img[int(s)] if s.isnumeric() else s for s in data['sources']]
+        data['sources'] = [feat2img[int(s)] if isinstance(s, int) or s.isnumeric() else s for s in data['sources']]
 
     with open(args.output, 'w') as f:
         json.dump(res, f, indent=2)

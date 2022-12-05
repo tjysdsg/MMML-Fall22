@@ -27,6 +27,9 @@ def main():
 
     res = {}
     for q, q_data in retr.items():
+        if q not in answers:
+            print(f'Fuck {q}')
+            continue
         q_data['answer'] = answers[q]
         res[q] = q_data
 

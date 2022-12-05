@@ -183,6 +183,7 @@ def inference(config, model, data_loader, device):
             pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
+            print({"question_id": qid, "answer": p})
             result.append({"question_id": qid, "answer": p})
 
     return result
