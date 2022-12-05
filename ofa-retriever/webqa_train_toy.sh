@@ -5,13 +5,14 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --use_wandb \
 --cache_dir ./cache/WebQA_toy_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
---gradient_accumulation_step 16 \
+--gradient_accumulation_step 1 \
 --train_file train.jsonl \
 --val_file val.jsonl \
 --num_epochs 4 \
 --evaluation_steps 5 \
---max_length 300 \
---dev_batch_size 2 \
+--max_length 00 \
+--dev_batch_size 1 \
 --train_batch_size 1 \
+--real_batch_size 1 \
 --choice_num 16 \
 --have_cached_dataset
