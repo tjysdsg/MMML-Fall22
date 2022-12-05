@@ -174,7 +174,7 @@ def inference(config, model, data_loader, device):
 
     print("Start inference")
     result = []
-    data_iter = tqdm(data_loader, desc="Validation", disable=0)
+    data_iter = tqdm(data_loader, desc="Inference", disable=0)
     for i, (
             images, captions, question, answer, n_img_facts, question_ids, qcates, _,
     ) in enumerate(data_iter):
@@ -183,7 +183,7 @@ def inference(config, model, data_loader, device):
             pred = model(images, captions, question, answer, n_img_facts, train=False)
 
         for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
-            result.append({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
+            result.append({"question_id": qid, "answer": p})
 
     return result
 
