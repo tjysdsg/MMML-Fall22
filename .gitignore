@@ -689,3 +689,6 @@ ofa-retriever/checkpoints/*
 !**/dummy_file
 ofa-retriever/OFA/
 slurm
+ofa-retriever/ofa-large/*
+ofa-retriever/ofa-base/*
+!**/dummy_file

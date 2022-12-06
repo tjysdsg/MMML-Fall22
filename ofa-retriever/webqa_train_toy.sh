@@ -8,12 +8,15 @@ python main.py \
 --dataset_dir ./data/WebQA_full_data/ \
 --gradient_accumulation_step 1 \
 --train_file train.jsonl \
---val_file val.jsonl \
---num_epochs 1 \
---evaluation_steps 5 \
---max_length 300 \
+--val_file train.jsonl \
+--num_epochs 100 \
+--evaluation_steps 50 \
+--question_max_length 100 \
+--fact_max_length 150 \
+--answer_max_length 1 \
 --dev_batch_size 1 \
 --train_batch_size 1 \
---real_batch_size 16 \
---choice_num 16 \
---have_cached_dataset
+--real_batch_size 4 \
+--learning_rate 1e-4 \
+--without_image \
+--choice_num 32 \

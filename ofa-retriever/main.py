@@ -31,6 +31,7 @@ def load_dataset(args, tokenizer):
         else:
             train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
             dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
+            dev_dataloader = train_dataloader
         loader_dict['train'] = train_dataloader
         loader_dict['dev'] = dev_dataloader
 
@@ -93,8 +94,6 @@ def validate(args, dev_dataloader, model):
         gth_labels = []
         pred_labels = []
         for idx, data in enumerate(tqdm(dev_dataloader)):
-            if idx > 1000:
-                break
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
@@ -117,9 +116,9 @@ def validate(args, dev_dataloader, model):
                 squeezed_patch_masks = None
                 squeezed_patch_images = None
 
-            assert (args.dev_batch_size * args.choice_num) % args.real_batch_size == 0
+            assert args.choice_num % args.real_batch_size == 0
             real_logits = []
-            for idx in range(args.dev_batch_size * args.choice_num // args.real_batch_size):
+            for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
                 start_idx = idx * args.real_batch_size
                 end_idx = (idx + 1) * args.real_batch_size
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -148,7 +147,6 @@ def validate(args, dev_dataloader, model):
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
             # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.classifier_threshold).float()
-
             pred_labels.append(predictions.tolist())
             gth_labels.append(labels.view(-1).tolist())
             eval_losses.append(eval_loss.item()) 
@@ -215,9 +213,9 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
 
-                assert (args.train_batch_size * args.choice_num) % args.real_batch_size == 0
+                assert args.choice_num % args.real_batch_size == 0
                 real_logits = []
-                for idx in range(args.train_batch_size * args.choice_num // args.real_batch_size):
+                for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
                     start_idx = idx * args.real_batch_size
                     end_idx = (idx + 1) * args.real_batch_size
                     # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -240,7 +238,6 @@ def train(args, model, tokenizer):
                 preds = logits.view(-1, args.choice_num, args.label_num)
                 refs = torch.nn.functional.one_hot(labels * logit_mask)
                 refs = refs.view(-1, args.choice_num, args.label_num)
-
                 # need to fix the -inf problem since the -inf will not be masked by the logit_mask
                 preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
                 loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
@@ -314,6 +311,9 @@ def test(args, model, tokenizer):
             if not args.without_image:
                 patch_images = data['patch_images'].to(args.device)
                 patch_masks = data['patch_masks'].to(args.device)
+            else:
+                patch_images = None
+                patch_masks = None
             source_ids = data['source_ids']
             source_types = data['source_types']
             q_ids = data['q_ids']
@@ -383,7 +383,9 @@ if __name__ == '__main__':
     parser.add_argument('--gradient_accumulation_step', type=int, default=1)
     parser.add_argument('--dev_batch_size', type=int, default=1)
     parser.add_argument('--test_batch_size', type=int, default=4)
-    parser.add_argument('--max_length', type=int, default=512)
+    parser.add_argument('--question_max_length', type=int, default=100)
+    parser.add_argument('--fact_max_length', type=int, default=150)
+    parser.add_argument('--answer_max_length', type=int, default=100)
     parser.add_argument('--num_epochs', type=int, default=10)
     parser.add_argument('--learning_rate', type=float, default=5e-5)
     parser.add_argument('--optimizer_type', type=str, default='adamw')

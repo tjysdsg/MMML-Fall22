@@ -2,7 +2,6 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
-import torch.nn.functional as F
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -129,10 +128,11 @@ class BLIP_VQA(nn.Module):
     def __init__(self,
                  med_config='configs/med_config.json',
                  image_size=480,
+                 cased=True,
                  vit='base',
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
-                 multitask=True,
+                 multitask_retr=True,
                  ):
         """
         Args:
@@ -147,7 +147,7 @@ class BLIP_VQA(nn.Module):
 
         self.visual_encoder, vision_width = create_vit(vit, image_size, vit_grad_ckpt, vit_ckpt_layer,
                                                        drop_path_rate=0.1)
-        self.tokenizer = init_tokenizer()
+        self.tokenizer = init_tokenizer(cased)
 
         encoder_config = BertConfig.from_json_file(med_config)
         encoder_config.encoder_width = vision_width
@@ -158,8 +158,8 @@ class BLIP_VQA(nn.Module):
 
         self.num_heads = encoder_config.num_attention_heads
         self.num_patches = self.visual_encoder.patch_embed.num_patches + 1
-        self.multitask = multitask
-        if multitask:
+        self.multitask_retr = multitask_retr
+        if multitask_retr:
             self.retr_ffn = nn.Linear(self.num_patches, 1)
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
@@ -196,43 +196,41 @@ class BLIP_VQA(nn.Module):
         :param train: train or inference
         """
 
-        is_text_question = n_img_facts[0] == 0
-
-        if not is_text_question:
-            image_embeds, lengths = self.encode_images(image, n_img_facts)
-            image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
+        image_embeds, lengths = self.encode_images(image, n_img_facts)
+        image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
         question = self.tokenizer(question, padding='longest', return_tensors="pt").to(image.device)
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
 
         # concatenate captions and tokenize them
-        captions = [' '.join(cap) for cap in captions]
+        captions = [f' {self.tokenizer.sep_token} '.join(cap) for cap in captions]
         captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
-        captions.input_ids[:, 0] = self.tokenizer.sep_token_id
+        # mask the first token since we already have a sep_token_id set to the last token of question
+        captions.input_ids[:, 0] = self.tokenizer.pad_token_id
+        captions.attention_mask[:, 0] = 0
 
         # image-grounded text encoder
+        input_ids = torch.cat([question.input_ids, captions.input_ids], dim=-1)
         attention_mask = torch.cat([question.attention_mask, captions.attention_mask], dim=-1)
+        input_ids = input_ids[:, :512]
+        attention_mask = attention_mask[:, :512]
 
-        if not is_text_question:
-            question_output = self.text_encoder(
-                torch.cat([question.input_ids, captions.input_ids], dim=-1),
-                attention_mask=attention_mask,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_atts,
-                output_attentions=True,
-                return_dict=True,
-            )
-        else:
-            question_output = self.text_encoder(
-                torch.cat([question.input_ids, captions.input_ids], dim=-1),
-                attention_mask=attention_mask,
-                return_dict=True,
-            )
+        cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float)
+        cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0
+        question_output = self.text_encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_atts,
+            cross_attention_weight=cross_attention_weight,
+            output_attentions=self.multitask_retr,
+            return_dict=True,
+        )
 
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None
         if train:
-            if self.multitask:  # Retrieval
+            if self.multitask_retr:  # Retrieval
                 multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
                 atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
                 atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)

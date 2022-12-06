@@ -10,7 +10,7 @@ python main.py \
 --train_file train.jsonl \
 --val_file val.jsonl \
 --num_epochs 4 \
---evaluation_steps 100 \
+--evaluation_steps 50 \
 --max_length 200 \
 --dev_batch_size 1 \
 --train_batch_size 1 \

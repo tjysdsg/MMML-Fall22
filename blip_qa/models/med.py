@@ -337,6 +337,7 @@ class BertLayer(nn.Module):
             head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            cross_attention_weight=None,
             past_key_value=None,
             output_attentions=False,
     ):
@@ -363,7 +364,15 @@ class BertLayer(nn.Module):
                 encoder_attention_mask,
                 output_attentions=output_attentions,
             )
-            attention_output = cross_attention_outputs[0]
+
+            # mix self-attention with cross_attention if weight is provided
+            if cross_attention_weight is not None:
+                cross_attention_weight = cross_attention_weight.unsqueeze(-1)
+                attention_output = attention_output * (1 - cross_attention_weight) \
+                                   + cross_attention_weight * cross_attention_outputs[0]
+            else:
+                attention_output = cross_attention_outputs[0]
+
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
@@ -394,6 +403,7 @@ class BertEncoder(nn.Module):
             head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            cross_attention_weight=None,
             past_key_values=None,
             use_cache=None,
             output_attentions=False,
@@ -435,6 +445,7 @@ class BertEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    cross_attention_weight,
                 )
             else:
                 layer_outputs = layer_module(
@@ -443,6 +454,7 @@ class BertEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    cross_attention_weight,
                     past_key_value,
                     output_attentions,
                 )
@@ -676,6 +688,7 @@ class BertModel(BertPreTrainedModel):
             use_cache=None,
             output_attentions=None,
             output_hidden_states=None,
+            cross_attention_weight=None,
             return_dict=None,
             is_decoder=False,
     ):
@@ -778,6 +791,7 @@ class BertModel(BertPreTrainedModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            cross_attention_weight=cross_attention_weight,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,

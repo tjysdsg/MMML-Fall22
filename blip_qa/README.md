@@ -34,9 +34,19 @@ python train_webqa.py --resume output/WebQA/checkpoint09.pth
 
 # Inference
 
+On validation:
+
 ```bash
 python train_webqa.py --inference --resume output/WebQA/checkpoint09.pth
 # output/WebQA/*_pred.json
+```
+
+On test:
+
+```bash
+python filter_test_facts_from_retrieval_pred.py --retrieval-results=xxx # creates test.json
+python train_webqa.py --inference --inference_split=test --resume=xxx.pth
+python generate_submission.py
 ```
 
 # Results
@@ -44,6 +54,8 @@ python train_webqa.py --inference --resume output/WebQA/checkpoint09.pth
 ## Image-based questions
 
 Beam size = 10
+
+Validation set with only image-based questions:
 
 ```json
 {

@@ -42,7 +42,34 @@ def main(args, config):
     )
     model = model.to(device)
 
+    image = torch.zeros((3, 2, 3, 480, 480)).to(device)
+    questions = [
+        'why are you running',
+        'can you speak english',
+        'your laptop is a junk',
+    ]
+    captions = [
+        ['hey you', 'shut up dude'],
+        ['screw you', 'i do not know what you mean', 'what are you doing'],
+        ['this homework is killing me'],
+    ]
+    answers = [
+        'fuck you',
+        'screw you',
+        'motherfucker shut your fucking mouth',
+    ]
+    n_img_facts = [
+        2,
+        0,
+        1
+    ]
+    loss, _, _ = model(image, captions, questions, answers, n_img_facts, train=True)
+
     for images, captions, question, answer, n_img_facts, question_ids, qcates, retr_labels in train_loader:
+        print('QUESTION:', question)
+        print('CAPTIONS:', captions)
+        print('ANSWER:', answer)
+
         # visualize images
         # batch_size, nf, channel, H, W = images.shape
 
@@ -67,16 +94,17 @@ def main(args, config):
             loss, retr, multimodal_cross_atts
         ) = model(images, captions, question, answer, n_img_facts, train=True)
 
-        retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
-        retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
-        retr_preds = torch.cat(retr_preds)
-        retr_loss = F.binary_cross_entropy_with_logits(
-            retr_preds, retr_labels, reduction='sum'
-        ) / images.size(0)
+        # MULTITASK
+        # retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
+        # retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
+        # retr_preds = torch.cat(retr_preds)
+        # retr_loss = F.binary_cross_entropy_with_logits(
+        #     retr_preds, retr_labels, reduction='sum'
+        # ) / images.size(0)
 
-        print('retr predictions', F.sigmoid(retr_preds))
-        print('retr labels', retr_labels)
-        print('retr loss', retr_loss)
+        # print('retr predictions', F.sigmoid(retr_preds))
+        # print('retr labels', retr_labels)
+        # print('retr loss', retr_loss)
 
         # for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
         #     print({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
@@ -84,7 +112,7 @@ def main(args, config):
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='./configs/webqa.yaml')
+    parser.add_argument('--config', default='./configs/webqa_cased.yaml')
     parser.add_argument('--output_dir', default='output/WebQA')
     parser.add_argument('--seed', default=42, type=int)
     args = parser.parse_args()
