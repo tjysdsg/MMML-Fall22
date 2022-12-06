@@ -117,9 +117,9 @@ def validate(args, dev_dataloader, model):
                 squeezed_patch_masks = None
                 squeezed_patch_images = None
 
-            assert args.choice_num % args.real_batch_size == 0
+            assert args.val_choice_num % args.real_batch_size == 0
             real_logits = []
-            for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
+            for idx in range(sources.size(0) * args.val_choice_num // args.real_batch_size):
                 start_idx = idx * args.real_batch_size
                 end_idx = (idx + 1) * args.real_batch_size
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -138,9 +138,9 @@ def validate(args, dev_dataloader, model):
                 logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
                 real_logits.append(logits)
             logits = torch.cat(real_logits, dim=0)
-            preds = logits.view(-1, args.choice_num, args.label_num)
+            preds = logits.view(-1, args.val_choice_num, args.label_num)
             refs = torch.nn.functional.one_hot(labels * logit_mask)
-            refs = refs.view(-1, args.choice_num, args.label_num)
+            refs = refs.view(-1, args.val_choice_num, args.label_num)
             
             # need to fix the -inf problem since the -inf will not be masked by the logit_mask
             preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
@@ -214,9 +214,9 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
 
-                assert args.choice_num % args.real_batch_size == 0
+                assert args.train_choice_num % args.real_batch_size == 0
                 real_logits = []
-                for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
+                for idx in range(sources.size(0) * args.train_choice_num // args.real_batch_size):
                     start_idx = idx * args.real_batch_size
                     end_idx = (idx + 1) * args.real_batch_size
                     # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -236,9 +236,9 @@ def train(args, model, tokenizer):
                     real_logits.append(logits)
 
                 logits = torch.cat(real_logits, dim=0)
-                preds = logits.view(-1, args.choice_num, args.label_num)
+                preds = logits.view(-1, args.train_choice_num, args.label_num)
                 refs = torch.nn.functional.one_hot(labels * logit_mask)
-                refs = refs.view(-1, args.choice_num, args.label_num)
+                refs = refs.view(-1, args.train_choice_num, args.label_num)
                 # need to fix the -inf problem since the -inf will not be masked by the logit_mask
                 preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
                 loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)

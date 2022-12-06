@@ -289,7 +289,7 @@ class WebQADataset(Dataset):
                         batch_patch_masks.append(False)
                         print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
-            if self.args.split == 'train':
+            if self.split == 'train':
                 random.shuffle(instance['neg_img_facts'])
                 random.shuffle(instance['neg_txt_facts'])
                 choice_num = self.args.train_choice_num
@@ -299,7 +299,7 @@ class WebQADataset(Dataset):
             # negative text fact
             neg_txt_count = 0
             for neg_txt_fact in instance['neg_txt_facts']:
-                if neg_txt_count < self.args.choice_num // 2 - 1:
+                if neg_txt_count < choice_num // 2 - 1:
                     neg_txt_count += 1
                     batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
@@ -310,7 +310,7 @@ class WebQADataset(Dataset):
             # negative image fact
             neg_img_count = 0
             for neg_img_fact in instance['neg_img_facts']:
-                if neg_img_count < self.args.choice_num // 2 - 1:
+                if neg_img_count < choice_num // 2 - 1:
                     neg_img_count += 1
                     batch_sources.append(torch.LongTensor(neg_img_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
@@ -335,15 +335,15 @@ class WebQADataset(Dataset):
                 batch_constraint_mask.append(constraint_mask)
 
             # pad to be the same length
-            if len(batch_sources) > self.args.choice_num:
-                batch_sources = batch_sources[:self.args.choice_num]
-                batch_prev_outputs = batch_prev_outputs[:self.args.choice_num]
-                batch_constraint_mask = batch_constraint_mask[:self.args.choice_num]
-                batch_labels = batch_labels[:self.args.choice_num]
-                batch_patch_images = batch_patch_images[:self.args.choice_num]
-                batch_patch_masks = batch_patch_masks[:self.args.choice_num] 
+            if len(batch_sources) > choice_num:
+                batch_sources = batch_sources[:choice_num]
+                batch_prev_outputs = batch_prev_outputs[:choice_num]
+                batch_constraint_mask = batch_constraint_mask[:choice_num]
+                batch_labels = batch_labels[:choice_num]
+                batch_patch_images = batch_patch_images[:choice_num]
+                batch_patch_masks = batch_patch_masks[:choice_num] 
             else:
-                num_placeholder = self.args.choice_num - len(batch_sources)
+                num_placeholder = choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_constraint_mask += [torch.zeros((1, self.args.vocab_size)).bool() for _ in range(num_placeholder)]
