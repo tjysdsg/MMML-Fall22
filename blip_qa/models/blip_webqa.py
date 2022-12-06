@@ -205,7 +205,9 @@ class BLIP_VQA(nn.Module):
         # concatenate captions and tokenize them
         captions = [f' {self.tokenizer.sep_token} '.join(cap) for cap in captions]
         captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
-        captions.input_ids[:, 0] = self.tokenizer.sep_token_id
+        # mask the first token since we already have a sep_token_id set to the last token of question
+        captions.input_ids[:, 0] = self.tokenizer.pad_token_id
+        captions.attention_mask[:, 0] = 0
 
         # image-grounded text encoder
         input_ids = torch.cat([question.input_ids, captions.input_ids], dim=-1)
@@ -221,7 +223,7 @@ class BLIP_VQA(nn.Module):
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_atts,
             cross_attention_weight=cross_attention_weight,
-            output_attentions=True,
+            output_attentions=self.multitask_retr,
             return_dict=True,
         )
 

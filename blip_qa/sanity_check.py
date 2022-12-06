@@ -42,6 +42,29 @@ def main(args, config):
     )
     model = model.to(device)
 
+    image = torch.zeros((3, 2, 3, 480, 480)).to(device)
+    questions = [
+        'why are you running',
+        'can you speak english',
+        'your laptop is a junk',
+    ]
+    captions = [
+        ['hey you', 'shut up dude'],
+        ['screw you', 'i do not know what you mean', 'what are you doing'],
+        ['this homework is killing me'],
+    ]
+    answers = [
+        'fuck you',
+        'screw you',
+        'motherfucker shut your fucking mouth',
+    ]
+    n_img_facts = [
+        2,
+        0,
+        1
+    ]
+    loss, _, _ = model(image, captions, questions, answers, n_img_facts, train=True)
+
     for images, captions, question, answer, n_img_facts, question_ids, qcates, retr_labels in train_loader:
         print('QUESTION:', question)
         print('CAPTIONS:', captions)
