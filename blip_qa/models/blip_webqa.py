@@ -151,7 +151,7 @@ class BLIP_VQA(nn.Module):
 
         encoder_config = BertConfig.from_json_file(med_config)
         encoder_config.encoder_width = vision_width
-        self.text_encoder = BertModel(config=encoder_config, add_pooling_layer=False)
+        self.text_encoder = BertModel(config=encoder_config, add_pooling_layer=True)
 
         decoder_config = BertConfig.from_json_file(med_config)
         self.text_decoder = BertLMHeadModel(config=decoder_config)
@@ -160,7 +160,8 @@ class BLIP_VQA(nn.Module):
         self.num_patches = self.visual_encoder.patch_embed.num_patches + 1
         self.multitask_retr = multitask_retr
         if multitask_retr:
-            self.retr_ffn = nn.Linear(self.num_patches, 1)
+            # self.retr_ffn = nn.Linear(self.num_patches, 1)
+            self.retr_ffn = nn.Linear(encoder_config.hidden_size, 6)
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
@@ -231,13 +232,15 @@ class BLIP_VQA(nn.Module):
         multimodal_cross_atts = None
         if train:
             if self.multitask_retr:  # Retrieval
-                multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
-                atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
-                atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
+                # multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
+                # atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
+                # atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
 
-                # (batch, n_facts, num_patches)
-                atts = atts.view(atts.shape[0], -1, self.num_patches)
-                retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
+                # # (batch, n_facts, num_patches)
+                # atts = atts.view(atts.shape[0], -1, self.num_patches)
+                # retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
+
+                retr = self.retr_ffn(question_output.pooler_output)
             else:
                 retr = None
 
