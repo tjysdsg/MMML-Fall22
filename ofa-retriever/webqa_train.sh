@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=2 python main.py \
+CUDA_VISIBLE_DEVICES=0 python main.py \
 --train \
 --use_fp16 \
 --task webqa-finetune-full-data \
@@ -18,6 +18,7 @@ CUDA_VISIBLE_DEVICES=2 python main.py \
 --dev_batch_size 1 \
 --train_batch_size 1 \
 --real_batch_size 1 \
---choice_num 6 \
+--train_choice_num 6 \
+--val_choice_num 36 \
 --learning_rate 5e-5 \
 --have_cached_dataset

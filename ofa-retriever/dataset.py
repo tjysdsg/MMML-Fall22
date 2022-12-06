@@ -289,10 +289,15 @@ class WebQADataset(Dataset):
                         batch_patch_masks.append(False)
                         print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
+            if self.args.split == 'train':
+                random.shuffle(instance['neg_img_facts'])
+                random.shuffle(instance['neg_txt_facts'])
+                choice_num = self.args.train_choice_num
+            else:
+                choice_num = self.args.val_choice_num
+
             # negative text fact
             neg_txt_count = 0
-            if self.split == 'train':
-                random.shuffle(instance['neg_txt_facts'])
             for neg_txt_fact in instance['neg_txt_facts']:
                 if neg_txt_count < self.args.choice_num // 2 - 1:
                     neg_txt_count += 1
@@ -304,8 +309,6 @@ class WebQADataset(Dataset):
 
             # negative image fact
             neg_img_count = 0
-            if self.split == 'train':
-                random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
                 if neg_img_count < self.args.choice_num // 2 - 1:
                     neg_img_count += 1
@@ -347,6 +350,7 @@ class WebQADataset(Dataset):
                 batch_labels += [-100 for _ in range(num_placeholder)]
                 batch_patch_images += [torch.zeros((3, self.patch_image_size, self.patch_image_size)) for _ in range(num_placeholder)]
                 batch_patch_masks += [False for _ in range(num_placeholder)]
+                
 
             # add one batch data
             sources += batch_sources # get (bsz x choice_num) x seq_len 
