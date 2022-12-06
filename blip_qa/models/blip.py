@@ -48,6 +48,37 @@ def is_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
+def load_blip_state_dict(model, state_dict):
+    if 'visual_encoder.pos_embed' in state_dict:
+        state_dict['visual_encoder.pos_embed'] = interpolate_pos_embed(
+            state_dict['visual_encoder.pos_embed'],
+            model.visual_encoder,
+        )
+    if 'visual_encoder_m.pos_embed' in model.state_dict().keys():
+        state_dict['visual_encoder_m.pos_embed'] = interpolate_pos_embed(
+            state_dict['visual_encoder_m.pos_embed'],
+            model.visual_encoder_m,
+        )
+
+    def init_empty(k):
+        v = torch.zeros_like(model.state_dict()[k])
+        if 'bias' in k:
+            torch.nn.init.zeros_(v)
+        else:
+            torch.nn.init.xavier_uniform(v)
+        state_dict[k] = v
+
+    for key in model.state_dict():
+        if key in state_dict:
+            if state_dict[key].shape != model.state_dict()[key].shape:
+                del state_dict[key]
+        else:
+            init_empty(key)
+
+    msg = model.load_state_dict(state_dict, strict=False)
+    return model, msg
+
+
 def load_checkpoint(model, url_or_filename):
     if is_url(url_or_filename):
         cached_file = download_cached_file(url_or_filename, check_hash=False, progress=True)
@@ -58,17 +89,7 @@ def load_checkpoint(model, url_or_filename):
         raise RuntimeError('checkpoint url or path is invalid')
 
     state_dict = checkpoint['model']
+    model, msg = load_blip_state_dict(model, state_dict)
 
-    state_dict['visual_encoder.pos_embed'] = interpolate_pos_embed(state_dict['visual_encoder.pos_embed'],
-                                                                   model.visual_encoder)
-    if 'visual_encoder_m.pos_embed' in model.state_dict().keys():
-        state_dict['visual_encoder_m.pos_embed'] = interpolate_pos_embed(state_dict['visual_encoder_m.pos_embed'],
-                                                                         model.visual_encoder_m)
-    for key in model.state_dict().keys():
-        if key in state_dict.keys():
-            if state_dict[key].shape != model.state_dict()[key].shape:
-                del state_dict[key]
-
-    msg = model.load_state_dict(state_dict, strict=False)
-    print('load checkpoint from %s' % url_or_filename)
+    print(f'Loaded checkpoint from {url_or_filename}')
     return model, msg

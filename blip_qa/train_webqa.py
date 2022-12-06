@@ -228,6 +228,7 @@ def main(args, config):
     optimizer_state = None
     print("Creating model")
     if args.resume:
+        from models.blip import load_blip_state_dict
         obj = torch.load(args.resume, map_location='cpu')
         # config = obj['config']
         epoch = obj['epoch'] + 1
@@ -241,8 +242,7 @@ def main(args, config):
             vit_ckpt_layer=config['vit_ckpt_layer'],
             multitask_retr=config['multitask_retr'],
         )
-        model.load_state_dict(obj['model'])
-
+        model, _ = load_blip_state_dict(model, obj['model'])
         optimizer_state = obj['optimizer']
     else:
         model = blip_vqa(
