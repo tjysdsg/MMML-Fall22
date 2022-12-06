@@ -1,14 +1,11 @@
 import argparse
-import os
 import ruamel_yaml as yaml
-import numpy as np
 from pathlib import Path
 import torch
 from data import create_dataset, create_loader
 from data.webqa_dataset import webqa_collate_fn
 from models.blip_webqa import blip_vqa
 import torch.nn.functional as F
-from matplotlib import pyplot as plt
 
 
 @torch.no_grad()
@@ -39,6 +36,7 @@ def main(args, config):
         vit=config['vit'],
         vit_grad_ckpt=config['vit_grad_ckpt'],
         vit_ckpt_layer=config['vit_ckpt_layer'],
+        multitask_qcate=True
     )
     model = model.to(device)
 
@@ -91,20 +89,12 @@ def main(args, config):
         # run model
         images = images.to(device, non_blocking=True)
         (
-            loss, retr, multimodal_cross_atts
+            loss, mt_res, multimodal_cross_atts
         ) = model(images, captions, question, answer, n_img_facts, train=True)
 
         # MULTITASK
-        # retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
-        # retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
-        # retr_preds = torch.cat(retr_preds)
-        # retr_loss = F.binary_cross_entropy_with_logits(
-        #     retr_preds, retr_labels, reduction='sum'
-        # ) / images.size(0)
-
-        # print('retr predictions', F.sigmoid(retr_preds))
-        # print('retr labels', retr_labels)
-        # print('retr loss', retr_loss)
+        mt_res = F.softmax(mt_res, dim=-1)
+        print(torch.argmax(mt_res, dim=-1))
 
         # for ans, p, qid, qcate in zip(answer, pred, question_ids, qcates):
         #     print({"question_id": qid, 'qcate': qcate, "pred": p, "answer": ans})
