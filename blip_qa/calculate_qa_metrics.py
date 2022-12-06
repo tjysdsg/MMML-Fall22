@@ -23,8 +23,23 @@ def main():
 def calc_qa_metrics(preds: List[str], refs: List[str], qcates: List[str]):
     assert len(preds) == len(refs) == len(qcates), f'{len(preds)} {len(refs)} {len(qcates)}'
 
+    # save bart scores
+    bart_scores = webqa_fl(preds, refs)
+    bart_res = []
+    i = 0
+    for pred, ref, qcate in zip(preds, refs, qcates):
+        bart_res.append(dict(
+            pred=pred,
+            answer=ref,
+            qcate=qcate,
+            bart_score=bart_scores['scores'][i],
+        ))
+        i += 1
+    with open('bart_scores.json', 'w', encoding='utf-8') as f:
+        json.dump(bart_res, f)
+
     ret = {'color': [], 'shape': [], 'YesNo': [], 'number': [], 'text': [], 'Others': [], 'choose': [],
-           'f1': [], 'recall': [], 'acc': [], 'fl': webqa_fl(preds, refs)['fl']}
+           'f1': [], 'recall': [], 'acc': [], 'fl': bart_scores['fl']}
     for pred, ref, qcate in zip(preds, refs, qcates):
         eval_output = webqa_acc_approx(pred, ref, qcate)['acc_approx']
         ret[qcate].append(eval_output)
