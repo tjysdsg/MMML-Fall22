@@ -224,7 +224,7 @@ def main(args, config):
     print("Creating model")
     if args.resume:
         obj = torch.load(args.resume, map_location='cpu')
-        config = obj['config']
+        # config = obj['config']
         epoch = obj['epoch'] + 1
         global_step = obj['global_step'] + 1
 
