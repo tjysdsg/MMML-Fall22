@@ -285,7 +285,7 @@ def main(args, config):
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='./configs/webqa_cased.yaml')
+    parser.add_argument('--config', default='configs/webqa_uncased_img_only.yaml')
     parser.add_argument('--output_dir', default='output_img_only')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
