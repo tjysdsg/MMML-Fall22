@@ -14,7 +14,7 @@ class WebQADataset(Dataset):
             self, data_json, transform, image_dir, eos='[SEP]', split="train",
             ignored_questions: List[str] = None, use_num_samples: int = -1,
             qcate: Literal['text', 'YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'all'] = 'all',
-            max_n_neg_facts=0,
+            max_n_neg_facts=0, cased=True,
     ):
         if ignored_questions is None:
             ignored_questions = []
@@ -27,6 +27,7 @@ class WebQADataset(Dataset):
         self.image_dir = image_dir
         self.eos = eos
         self.max_n_neg_facts = max_n_neg_facts
+        self.cased = cased
 
         self.instance_list = []
         count = 0
@@ -40,8 +41,8 @@ class WebQADataset(Dataset):
                 if data_split == 'test' or datum['Qcate'] in self.qcate:
                     if use_num_samples == -1 or count < use_num_samples:
                         question_id = datum['Guid']
-                        Q = pre_caption(datum['Q'].replace('"', ""), 50)
-                        A = pre_caption(datum['A'][0].replace('"', ""), 50)
+                        Q = pre_caption(datum['Q'].replace('"', ""), self.cased, max_words=50)
+                        A = pre_caption(datum['A'][0].replace('"', ""), self.cased, max_words=50)
 
                         gold_text_facts, neg_text_facts = self.extract_text_facts_for_question(datum)
                         gold_img_and_caps, neg_img_and_caps = self.extract_img_facts_for_question(datum)
@@ -69,14 +70,14 @@ class WebQADataset(Dataset):
 
         if self.split == 'test':
             for fa in datum['txt_Facts']:
-                gold_text_facts.append(pre_caption(fa['fact'], 40))
+                gold_text_facts.append(pre_caption(fa['fact'], self.cased, max_words=40))
         else:
             if 'txt_posFacts' in datum:
                 for fa in datum['txt_posFacts']:
-                    gold_text_facts.append(pre_caption(fa['fact'], 40))
+                    gold_text_facts.append(pre_caption(fa['fact'], self.cased, max_words=40))
             if 'txt_negFacts' in datum:
                 for fa in datum['txt_negFacts']:
-                    neg_text_facts.append(pre_caption(fa['fact'], 40))
+                    neg_text_facts.append(pre_caption(fa['fact'], self.cased, max_words=40))
         return gold_text_facts, neg_text_facts
 
     def extract_img_facts_for_question(self, datum: dict):
@@ -99,7 +100,7 @@ class WebQADataset(Dataset):
     def load_image_fact(self, im: dict):
         image_feature_path = os.path.join(self.image_dir, f"{im['image_id']}.jpg")
         cap = im['caption'].strip()
-        return image_feature_path, pre_caption(cap, 100)
+        return image_feature_path, pre_caption(cap, self.cased, max_words=40)
 
     @staticmethod
     def check_image_feature_path(facts):

@@ -2,7 +2,6 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
-import torch.nn.functional as F
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -129,6 +128,7 @@ class BLIP_VQA(nn.Module):
     def __init__(self,
                  med_config='configs/med_config.json',
                  image_size=480,
+                 cased=True,
                  vit='base',
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
@@ -147,7 +147,7 @@ class BLIP_VQA(nn.Module):
 
         self.visual_encoder, vision_width = create_vit(vit, image_size, vit_grad_ckpt, vit_ckpt_layer,
                                                        drop_path_rate=0.1)
-        self.tokenizer = init_tokenizer()
+        self.tokenizer = init_tokenizer(cased)
 
         encoder_config = BertConfig.from_json_file(med_config)
         encoder_config.encoder_width = vision_width
