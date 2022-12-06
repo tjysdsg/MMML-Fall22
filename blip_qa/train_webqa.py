@@ -69,7 +69,7 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
                 qa_loss, retr, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
                 # Retrieval loss
-                if args.multitask:
+                if config['multitask_retr']:
                     retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
                     retr_preds = torch.cat(retr_preds)
                     retr_loss = F.binary_cross_entropy_with_logits(
@@ -201,7 +201,12 @@ def main(args, config):
 
     #### Dataset #### 
     print("Creating WebQA datasets")
-    datasets = create_dataset(config, max_n_neg_facts=4 if args.multitask else 0, cased=config.cased)
+    datasets = create_dataset(
+        config,
+        max_n_neg_facts=4 if config['multitask_retr'] else 0,
+        cased=config['cased'],
+        image_only=config['image_only'],
+    )
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -234,7 +239,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask=args.multitask,
+            multitask_retr=config['multitask_retr'],
         )
         model.load_state_dict(obj['model'])
 
@@ -247,7 +252,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask=args.multitask,
+            multitask_retr=config['multitask_retr'],
         )
     model = model.to(device)
 
@@ -280,9 +285,8 @@ def main(args, config):
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='./configs/webqa.yaml')
-    parser.add_argument('--multitask', action='store_true', default=False)
-    parser.add_argument('--output_dir', default='output')
+    parser.add_argument('--config', default='configs/webqa_uncased_img_only.yaml')
+    parser.add_argument('--output_dir', default='output_img_only')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
     parser.add_argument('--seed', default=42, type=int)

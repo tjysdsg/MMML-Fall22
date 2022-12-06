@@ -9,7 +9,9 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', default=r'E:\webqa\data\WebQA_test.json')
     parser.add_argument('--retrieval-results', type=str, required=True)
-    parser.add_argument('--output', type=str, default='test.json')
+    parser.add_argument('--include-text-facts', action='store_true')
+    parser.add_argument('--output', type=str, default='test_img_only.json')
+    parser.add_argument('--max-n-facts', type=int, default=5)
     return parser.parse_args()
 
 
@@ -42,8 +44,13 @@ def main():
             else:
                 text_facts.append(all_text_facts[s])
 
-        q_data['img_Facts'] = img_facts[:5]
-        q_data['txt_Facts'] = text_facts[:5]
+        q_data['img_Facts'] = img_facts[:args.max_n_facts]
+
+        if args.include_text_facts:
+            q_data['txt_Facts'] = text_facts[:args.max_n_facts]
+        else:
+            q_data['txt_Facts'] = []
+
         n_facts = len(q_data['img_Facts']) + len(q_data['txt_Facts'])
         if n_facts == 0:
             continue

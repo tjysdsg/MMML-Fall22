@@ -4,7 +4,7 @@ import json
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from typing import List, Literal
+from typing import List
 from data.utils import pre_caption
 import torch.nn.functional as F
 
@@ -13,14 +13,15 @@ class WebQADataset(Dataset):
     def __init__(
             self, data_json, transform, image_dir, eos='[SEP]', split="train",
             ignored_questions: List[str] = None, use_num_samples: int = -1,
-            qcate: Literal['text', 'YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'all'] = 'all',
-            max_n_neg_facts=0, cased=True,
+            image_only=False, max_n_neg_facts=0, cased=True,
     ):
         if ignored_questions is None:
             ignored_questions = []
-        self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'text']
-        if 'all' not in qcate:
-            self.qcate = list(set(qcate).intersection(set(self.qcate)))
+
+        if image_only:
+            self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape']
+        else:
+            self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'text']
 
         self.split = split
         self.transform = transform
