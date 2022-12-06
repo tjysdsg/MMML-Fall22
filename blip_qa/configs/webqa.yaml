@@ -10,6 +10,9 @@ image_size: 480
 # set pretrained as a file path or an url
 pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth'
 
+# tokenizer
+cased: true
+
 # size of vit model; base or large
 vit: 'base'
 batch_size_train: 4

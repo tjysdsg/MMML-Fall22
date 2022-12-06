@@ -201,7 +201,7 @@ def main(args, config):
 
     #### Dataset #### 
     print("Creating WebQA datasets")
-    datasets = create_dataset(config, max_n_neg_facts=4 if args.multitask else 0)
+    datasets = create_dataset(config, max_n_neg_facts=4 if args.multitask else 0, cased=config.cased)
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -230,6 +230,7 @@ def main(args, config):
 
         model = blip_vqa(
             image_size=config['image_size'],
+            cased=config['cased'],
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
@@ -242,6 +243,7 @@ def main(args, config):
         model = blip_vqa(
             pretrained=config['pretrained'],
             image_size=config['image_size'],
+            cased=config['cased'],
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
