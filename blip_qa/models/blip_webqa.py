@@ -203,7 +203,7 @@ class BLIP_VQA(nn.Module):
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
 
         # concatenate captions and tokenize them
-        captions = [' '.join(cap) for cap in captions]
+        captions = [f' {self.tokenizer.sep_token} '.join(cap) for cap in captions]
         captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
         captions.input_ids[:, 0] = self.tokenizer.sep_token_id
 
