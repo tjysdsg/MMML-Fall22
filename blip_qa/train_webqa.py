@@ -27,7 +27,7 @@ def init_wandb(output_dir: str):
     )
     os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'
     os.environ['WANDB_DIR'] = output_dir
-    wandb.init(project="blip_webqa_qa")
+    wandb.init(project="blip_webqa_qa_img_only")
 
 
 def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
@@ -43,6 +43,10 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
     alpha = config['alpha']
     assert 0 <= alpha <= 1
 
+    qcate2index = {}
+    for i, qc in enumerate(['YesNo', 'Others', 'choose', 'number', 'color', 'shape']):
+        qcate2index[qc] = i
+
     scaler = amp.GradScaler()
 
     print(f"Start training from epoch {epoch_start}")
@@ -56,31 +60,35 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
         batch_size = config['batch_size_train']
         avg_loss = 0.0
         avg_qa_loss = 0.0
-        avg_retr_loss = 0.0
+        avg_mt_loss = 0.0
 
         model.train()
         for i, (
-                images, captions, question, answer, n_img_facts, _, _, retr_labels,
+                images, captions, question, answer, n_img_facts, _, qcates, retr_labels,
         ) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
-            retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
 
             with amp.autocast():
-                qa_loss, retr, _ = model(images, captions, question, answer, n_img_facts, train=True)
+                qa_loss, mt_res, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
                 # Retrieval loss
-                if config['multitask_retr']:
-                    retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
-                    retr_preds = torch.cat(retr_preds)
-                    retr_loss = F.binary_cross_entropy_with_logits(
-                        retr_preds, retr_labels, reduction='sum'
-                    ) / images.size(0)
+                if config['multitask_qcate']:
+                    # retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
+                    # retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
+                    # retr_preds = torch.cat(retr_preds)
+                    # retr_loss = F.binary_cross_entropy_with_logits(
+                    #     retr_preds, retr_labels, reduction='sum'
+                    # ) / images.size(0)
+
+                    mt_labels = torch.as_tensor([qcate2index[qc] for qc in qcates], dtype=torch.long, device=device)
+                    mt_res = F.softmax(mt_res, dim=-1)
+                    mt_loss = F.cross_entropy(mt_res, mt_labels)
 
                     # overall loss
-                    loss = (1 - alpha) * qa_loss + alpha * retr_loss
+                    loss = (1 - alpha) * qa_loss + alpha * mt_loss
 
                     avg_qa_loss += qa_loss.item() * batch_size
-                    avg_retr_loss += retr_loss.item() * batch_size
+                    avg_mt_loss += mt_loss.item() * batch_size
                 else:
                     loss = qa_loss
 
@@ -105,17 +113,17 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
 
                 # log avg losses
                 avg_qa_loss /= grad_accum * batch_size
-                avg_retr_loss /= grad_accum * batch_size
+                avg_mt_loss /= grad_accum * batch_size
                 avg_loss /= grad_accum * batch_size
                 print(f'Epoch[{epoch}] step {global_step}:'
-                      f'\tloss {avg_loss:.4f}\tqa_loss {avg_qa_loss:.4f}\tretr_loss {avg_retr_loss:.4f}')
+                      f'\tloss {avg_loss:.4f}\tqa_loss {avg_qa_loss:.4f}\tmt_loss {avg_mt_loss:.4f}')
                 wandb.log({
-                    f'loss': avg_loss, 'qa_loss': avg_qa_loss, 'retr_loss': avg_retr_loss, 'step': global_step,
+                    f'loss': avg_loss, 'qa_loss': avg_qa_loss, 'mt_loss': avg_mt_loss, 'step': global_step,
                 })
 
                 # reset
                 avg_qa_loss = 0.0
-                avg_retr_loss = 0.0
+                avg_mt_loss = 0.0
                 avg_loss = 0.0
 
         if utils.is_main_process():
@@ -203,7 +211,8 @@ def main(args, config):
     print("Creating WebQA datasets")
     datasets = create_dataset(
         config,
-        max_n_neg_facts=4 if config['multitask_retr'] else 0,
+        # max_n_neg_facts=4 if config['multitask_retr'] else 0,
+        max_n_neg_facts=0,
         cased=config['cased'],
         image_only=config['image_only'],
     )
@@ -240,7 +249,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask_retr=config['multitask_retr'],
+            multitask_qcate=config['multitask_qcate'],
         )
         model, _ = load_blip_state_dict(model, obj['model'])
         optimizer_state = obj['optimizer']
@@ -252,7 +261,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask_retr=config['multitask_retr'],
+            multitask_qcate=config['multitask_qcate'],
         )
     model = model.to(device)
 
@@ -285,7 +294,7 @@ def main(args, config):
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='configs/webqa_uncased_img_only.yaml')
+    parser.add_argument('--config', default='configs/webqa_uncased_img_only_multitask.yaml')
     parser.add_argument('--output_dir', default='output_img_only')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')

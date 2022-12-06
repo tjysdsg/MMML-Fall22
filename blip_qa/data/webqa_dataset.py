@@ -23,6 +23,10 @@ class WebQADataset(Dataset):
         else:
             self.qcate = ['YesNo', 'Others', 'choose', 'number', 'color', 'shape', 'text']
 
+        self.qcate2index = {}
+        for i, qc in enumerate(self.qcate):
+            self.qcate2index[qc] = i
+
         self.split = split
         self.transform = transform
         self.image_dir = image_dir
