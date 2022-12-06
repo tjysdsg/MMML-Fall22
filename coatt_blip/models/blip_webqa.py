@@ -233,6 +233,8 @@ class BLIP_VQA(nn.Module):
             return_dict=True,
         )
 
+        # TODO: add hierachical co-attention module here
+
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None
         if train:
