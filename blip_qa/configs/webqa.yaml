@@ -21,7 +21,7 @@ init_lr: 1e-4
 
 # optimizer
 weight_decay: 0.05
-min_lr: 0
+min_lr: 1e-5
 max_epoch: 10
 grad_accum: 8
 grad_clip: 5
