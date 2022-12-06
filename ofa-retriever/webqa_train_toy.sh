@@ -8,10 +8,14 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --gradient_accumulation_step 1 \
 --train_file train.jsonl \
 --val_file train.jsonl \
---num_epochs 4 \
---evaluation_steps 5 \
---max_length 00 \
+--num_epochs 100 \
+--evaluation_steps 50 \
+--question_max_length 100 \
+--fact_max_length 150 \
+--answer_max_length 1 \
 --dev_batch_size 1 \
 --train_batch_size 1 \
---real_batch_size 16 \
---choice_num 16 \
+--real_batch_size 4 \
+--learning_rate 1e-4 \
+--without_image \
+--choice_num 32 \
