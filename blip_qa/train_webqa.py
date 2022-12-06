@@ -211,7 +211,7 @@ def main(args, config):
     print("Creating WebQA datasets")
     datasets = create_dataset(
         config,
-        max_n_neg_facts=4 if config['multitask_retr'] else 0,
+        0,
         cased=config['cased'],
         image_only=config['image_only'],
     )

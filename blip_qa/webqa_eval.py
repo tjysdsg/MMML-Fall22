@@ -142,7 +142,7 @@ def webqa_fl(predictions, ground_truths, bart_score_path='bart_score.pth'):  # P
     norm_score[norm_score > 1] = 1
     norm_score = norm_score.tolist()
     fl = sum(norm_score) / len(norm_score)
-    return {'fl': fl}
+    return {'fl': fl, 'scores': norm_score}
 
 
 if __name__ == '__main__':
