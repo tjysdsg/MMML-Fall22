@@ -687,3 +687,5 @@ ofa-retriever/WebQA_tmp/*
 ofa-retriever/OFA_code/*
 ofa-retriever/checkpoints/*
 !**/dummy_file
+ofa-retriever/OFA/
+slurm
