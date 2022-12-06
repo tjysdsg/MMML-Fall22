@@ -132,7 +132,7 @@ class BLIP_VQA(nn.Module):
                  vit='base',
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
-                 multitask=True,
+                 multitask_retr=True,
                  ):
         """
         Args:
@@ -158,8 +158,8 @@ class BLIP_VQA(nn.Module):
 
         self.num_heads = encoder_config.num_attention_heads
         self.num_patches = self.visual_encoder.patch_embed.num_patches + 1
-        self.multitask = multitask
-        if multitask:
+        self.multitask_retr = multitask_retr
+        if multitask_retr:
             self.retr_ffn = nn.Linear(self.num_patches, 1)
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
@@ -228,7 +228,7 @@ class BLIP_VQA(nn.Module):
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None
         if train:
-            if self.multitask:  # Retrieval
+            if self.multitask_retr:  # Retrieval
                 multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
                 atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
                 atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
