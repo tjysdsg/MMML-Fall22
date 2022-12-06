@@ -294,7 +294,7 @@ class WebQADataset(Dataset):
             if self.split == 'train':
                 random.shuffle(instance['neg_txt_facts'])
             for neg_txt_fact in instance['neg_txt_facts']:
-                if neg_txt_count < self.args.choice_num // 2:
+                if neg_txt_count < self.args.choice_num // 2 - 1:
                     neg_txt_count += 1
                     batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
@@ -307,7 +307,7 @@ class WebQADataset(Dataset):
             if self.split == 'train':
                 random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
-                if neg_img_count < self.args.choice_num // 2:
+                if neg_img_count < self.args.choice_num // 2 - 1:
                     neg_img_count += 1
                     batch_sources.append(torch.LongTensor(neg_img_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
