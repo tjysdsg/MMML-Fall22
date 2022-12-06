@@ -142,7 +142,7 @@ def webqa_fl(predictions, ground_truths, bart_score_path='bart_score.pth'):  # P
     norm_score[norm_score > 1] = 1
     norm_score = norm_score.tolist()
     fl = sum(norm_score) / len(norm_score)
-    return {'fl': fl}
+    return {'fl': fl, 'scores': norm_score}
 
 
 if __name__ == '__main__':
@@ -155,8 +155,8 @@ if __name__ == '__main__':
     # ground_truth = 'Both the SanFran fourteen trolleybus and the Third light rail vehicle run off of electricity'
     # fl = webqa_fl([prediction], [ground_truth])
 
-    prediction = 'both the SanFran 14TrSF trolleybus and the Third light rail vehicle run off of electricity'
-    ground_truth = 'Both the SanFran 14TrSF trolleybus and the Third light rail vehicle run off of electricity'
+    prediction = "the facade of the bakery sattin et fils in rethel, france, is red"
+    ground_truth = "the facade of the bakery sattin et fils in rethel, france, is colored red"
     fl = webqa_fl([prediction], [ground_truth])
 
     # acc = webqa_acc_approx(prediction, ground_truth, Qcate="Others")

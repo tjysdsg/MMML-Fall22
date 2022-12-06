@@ -171,6 +171,7 @@ class WebQADataset(Dataset):
         self.tokenizer = tokenizer
         self.data = self.build_dataset(split=split)
         self.patch_image_size = patch_image_size
+        self.split = split
 
         if imagenet_default_mean_and_std:
             mean = IMAGENET_DEFAULT_MEAN
@@ -210,13 +211,11 @@ class WebQADataset(Dataset):
 
             for data in tqdm(dataset):
                 question = data['Q']
-
+                prev_output = [self.tokenizer.bos_token_id]
                 for pos_txt_fact in data['pos_txt_facts']:
                     fact_input = self.tokenizer.encode(pos_txt_fact['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     pos_txt_fact['source'] = source
                     pos_txt_fact['prev_output'] = prev_output
 
@@ -224,8 +223,6 @@ class WebQADataset(Dataset):
                     fact_input = self.tokenizer.encode(neg_txt_fact['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     neg_txt_fact['source'] = source
                     neg_txt_fact['prev_output'] = prev_output
 
@@ -233,8 +230,6 @@ class WebQADataset(Dataset):
                     fact_input = self.tokenizer.encode(pos_img_fact['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     pos_img_fact['source'] = source
                     pos_img_fact['prev_output'] = prev_output
 
@@ -242,8 +237,6 @@ class WebQADataset(Dataset):
                     fact_input = self.tokenizer.encode(neg_img_fact['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     neg_img_fact['source'] = source
                     neg_img_fact['prev_output'] = prev_output
 
@@ -274,9 +267,9 @@ class WebQADataset(Dataset):
             for pos_txt_fact in instance['pos_txt_facts']:
                 batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
                 batch_prev_outputs.append(torch.LongTensor(pos_txt_fact['prev_output']))
+                batch_labels.append(1)
                 batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                 batch_patch_masks.append(False)
-                batch_labels.append(1)
             
             # positive image fact
             for pos_img_fact in instance['pos_img_facts']:
@@ -296,11 +289,17 @@ class WebQADataset(Dataset):
                         batch_patch_masks.append(False)
                         print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
+            if self.split == 'train':
+                random.shuffle(instance['neg_img_facts'])
+                random.shuffle(instance['neg_txt_facts'])
+                choice_num = self.args.train_choice_num
+            else:
+                choice_num = self.args.val_choice_num
+
             # negative text fact
             neg_txt_count = 0
-            #random.shuffle(instance['neg_txt_facts'])
             for neg_txt_fact in instance['neg_txt_facts']:
-                if neg_txt_count < self.args.choice_num // 2:
+                if neg_txt_count < choice_num // 2 - 1:
                     neg_txt_count += 1
                     batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
@@ -310,9 +309,8 @@ class WebQADataset(Dataset):
 
             # negative image fact
             neg_img_count = 0
-            #random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
-                if neg_img_count < self.args.choice_num // 2:
+                if neg_img_count < choice_num // 2 - 1:
                     neg_img_count += 1
                     batch_sources.append(torch.LongTensor(neg_img_fact['source']))
                     batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
@@ -337,21 +335,22 @@ class WebQADataset(Dataset):
                 batch_constraint_mask.append(constraint_mask)
 
             # pad to be the same length
-            if len(batch_sources) > self.args.choice_num:
-                batch_sources = batch_sources[:self.args.choice_num]
-                batch_prev_outputs = batch_prev_outputs[:self.args.choice_num]
-                batch_constraint_mask = batch_constraint_mask[:self.args.choice_num]
-                batch_labels = batch_labels[:self.args.choice_num]
-                batch_patch_images = batch_patch_images[:self.args.choice_num]
-                batch_patch_masks = batch_patch_masks[:self.args.choice_num] 
+            if len(batch_sources) > choice_num:
+                batch_sources = batch_sources[:choice_num]
+                batch_prev_outputs = batch_prev_outputs[:choice_num]
+                batch_constraint_mask = batch_constraint_mask[:choice_num]
+                batch_labels = batch_labels[:choice_num]
+                batch_patch_images = batch_patch_images[:choice_num]
+                batch_patch_masks = batch_patch_masks[:choice_num] 
             else:
-                num_placeholder = self.args.choice_num - len(batch_sources)
+                num_placeholder = choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_constraint_mask += [torch.zeros((1, self.args.vocab_size)).bool() for _ in range(num_placeholder)]
                 batch_labels += [-100 for _ in range(num_placeholder)]
                 batch_patch_images += [torch.zeros((3, self.patch_image_size, self.patch_image_size)) for _ in range(num_placeholder)]
                 batch_patch_masks += [False for _ in range(num_placeholder)]
+                
 
             # add one batch data
             sources += batch_sources # get (bsz x choice_num) x seq_len 

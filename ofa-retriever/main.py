@@ -31,7 +31,6 @@ def load_dataset(args, tokenizer):
         else:
             train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
             dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
-            dev_dataloader = train_dataloader
         loader_dict['train'] = train_dataloader
         loader_dict['dev'] = dev_dataloader
 
@@ -94,6 +93,8 @@ def validate(args, dev_dataloader, model):
         gth_labels = []
         pred_labels = []
         for idx, data in enumerate(tqdm(dev_dataloader)):
+            if idx > 1000:
+                break
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
@@ -116,9 +117,9 @@ def validate(args, dev_dataloader, model):
                 squeezed_patch_masks = None
                 squeezed_patch_images = None
 
-            assert args.choice_num % args.real_batch_size == 0
+            assert args.val_choice_num % args.real_batch_size == 0
             real_logits = []
-            for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
+            for idx in range(sources.size(0) * args.val_choice_num // args.real_batch_size):
                 start_idx = idx * args.real_batch_size
                 end_idx = (idx + 1) * args.real_batch_size
                 # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -137,9 +138,9 @@ def validate(args, dev_dataloader, model):
                 logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
                 real_logits.append(logits)
             logits = torch.cat(real_logits, dim=0)
-            preds = logits.view(-1, args.choice_num, args.label_num)
+            preds = logits.view(-1, args.val_choice_num, args.label_num)
             refs = torch.nn.functional.one_hot(labels * logit_mask)
-            refs = refs.view(-1, args.choice_num, args.label_num)
+            refs = refs.view(-1, args.val_choice_num, args.label_num)
             
             # need to fix the -inf problem since the -inf will not be masked by the logit_mask
             preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
@@ -213,9 +214,9 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
 
-                assert args.choice_num % args.real_batch_size == 0
+                assert args.train_choice_num % args.real_batch_size == 0
                 real_logits = []
-                for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
+                for idx in range(sources.size(0) * args.train_choice_num // args.real_batch_size):
                     start_idx = idx * args.real_batch_size
                     end_idx = (idx + 1) * args.real_batch_size
                     # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
@@ -235,9 +236,9 @@ def train(args, model, tokenizer):
                     real_logits.append(logits)
 
                 logits = torch.cat(real_logits, dim=0)
-                preds = logits.view(-1, args.choice_num, args.label_num)
+                preds = logits.view(-1, args.train_choice_num, args.label_num)
                 refs = torch.nn.functional.one_hot(labels * logit_mask)
-                refs = refs.view(-1, args.choice_num, args.label_num)
+                refs = refs.view(-1, args.train_choice_num, args.label_num)
                 # need to fix the -inf problem since the -inf will not be masked by the logit_mask
                 preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
                 loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
@@ -402,7 +403,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
     parser.add_argument('--test_classifier_threshold', type=float, default=0.3)
-    parser.add_argument('--choice_num', type=int, default=16)
+    parser.add_argument('--train_choice_num', type=int, default=16)
+    parser.add_argument('--val_choice_num', type=int, default=32)
     parser.add_argument('--use_fp16', action='store_true')
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--prefetch_factor', type=int, default=8)
