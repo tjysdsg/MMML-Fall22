@@ -686,4 +686,6 @@ ofa-retriever/data/WebQA_test_data/*
 ofa-retriever/WebQA_tmp/*
 ofa-retriever/OFA_code/*
 ofa-retriever/checkpoints/*
+ofa-retriever/ofa-large/*
+ofa-retriever/ofa-base/*
 !**/dummy_file

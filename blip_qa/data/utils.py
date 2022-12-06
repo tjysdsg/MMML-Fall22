@@ -12,7 +12,7 @@ def pre_caption(caption, max_words=50):
     caption = re.sub(
         r"([.!\"()*#:;~])",
         ' ',
-        caption.lower(),
+        caption,
     )
     caption = re.sub(
         r"\s{2,}",
@@ -34,7 +34,7 @@ def pre_question(question, max_ques_words=50):
     question = re.sub(
         r"([.!\"()*#:;~])",
         '',
-        question.lower(),
+        question,
     )
     question = question.rstrip(' ')
 
