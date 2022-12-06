@@ -93,6 +93,8 @@ def validate(args, dev_dataloader, model):
         gth_labels = []
         pred_labels = []
         for idx, data in enumerate(tqdm(dev_dataloader)):
+            if idx > 1000:
+                break
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)

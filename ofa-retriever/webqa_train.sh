@@ -11,7 +11,7 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --train_file train.jsonl \
 --val_file val.jsonl \
 --num_epochs 4 \
---evaluation_steps 100 \
+--evaluation_steps 400 \
 --question_max_length 50 \
 --fact_max_length 100 \
 --answer_max_length 1 \
