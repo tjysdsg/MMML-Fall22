@@ -31,7 +31,6 @@ def load_dataset(args, tokenizer):
         else:
             train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
             dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=True, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
-            dev_dataloader = train_dataloader
         loader_dict['train'] = train_dataloader
         loader_dict['dev'] = dev_dataloader
 
