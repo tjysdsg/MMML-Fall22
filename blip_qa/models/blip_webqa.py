@@ -132,7 +132,7 @@ class BLIP_VQA(nn.Module):
                  vit='base',
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
-                 multitask_retr=True,
+                 multitask_qcate=True,
                  ):
         """
         Args:
@@ -158,10 +158,10 @@ class BLIP_VQA(nn.Module):
 
         self.num_heads = encoder_config.num_attention_heads
         self.num_patches = self.visual_encoder.patch_embed.num_patches + 1
-        self.multitask_retr = multitask_retr
-        if multitask_retr:
+        self.multitask_qcate = multitask_qcate
+        if multitask_qcate:
             # self.retr_ffn = nn.Linear(self.num_patches, 1)
-            self.retr_ffn = nn.Linear(encoder_config.hidden_size, 6)
+            self.multitask_ffn = nn.Linear(encoder_config.hidden_size, 6)
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
@@ -224,14 +224,14 @@ class BLIP_VQA(nn.Module):
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_atts,
             cross_attention_weight=cross_attention_weight,
-            output_attentions=self.multitask_retr,
+            # output_attentions=True,
             return_dict=True,
         )
 
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None
         if train:
-            if self.multitask_retr:  # Retrieval
+            if self.multitask_qcate:
                 # multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
                 # atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
                 # atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
@@ -240,9 +240,9 @@ class BLIP_VQA(nn.Module):
                 # atts = atts.view(atts.shape[0], -1, self.num_patches)
                 # retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
 
-                retr = self.retr_ffn(question_output.pooler_output)
+                mt_res = self.multitask_ffn(question_output.pooler_output)
             else:
-                retr = None
+                mt_res = None
 
             '''
             n: number of answers for each question
@@ -263,7 +263,7 @@ class BLIP_VQA(nn.Module):
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
-            return loss, retr, multimodal_cross_atts
+            return loss, mt_res, multimodal_cross_atts
         else:
             num_beams = 10
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)

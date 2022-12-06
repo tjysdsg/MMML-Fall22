@@ -31,5 +31,5 @@ grad_accum: 8
 grad_clip: 5
 
 # multitask
-multitask_retr: false
+multitask_qcate: false
 alpha: 0.7
