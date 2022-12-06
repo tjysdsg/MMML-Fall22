@@ -171,6 +171,7 @@ class WebQADataset(Dataset):
         self.tokenizer = tokenizer
         self.data = self.build_dataset(split=split)
         self.patch_image_size = patch_image_size
+        self.split = split
 
         if imagenet_default_mean_and_std:
             mean = IMAGENET_DEFAULT_MEAN
@@ -210,13 +211,11 @@ class WebQADataset(Dataset):
 
             for data in tqdm(dataset):
                 question = data['Q']
-
+                prev_output = [self.tokenizer.bos_token_id]
                 for pos_txt_fact in data['pos_txt_facts']:
                     fact_input = self.tokenizer.encode(pos_txt_fact['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     pos_txt_fact['source'] = source
                     pos_txt_fact['prev_output'] = prev_output
 
@@ -224,8 +223,6 @@ class WebQADataset(Dataset):
                     fact_input = self.tokenizer.encode(neg_txt_fact['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     neg_txt_fact['source'] = source
                     neg_txt_fact['prev_output'] = prev_output
 
@@ -233,8 +230,6 @@ class WebQADataset(Dataset):
                     fact_input = self.tokenizer.encode(pos_img_fact['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     pos_img_fact['source'] = source
                     pos_img_fact['prev_output'] = prev_output
 
@@ -242,8 +237,6 @@ class WebQADataset(Dataset):
                     fact_input = self.tokenizer.encode(neg_img_fact['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
-                    prev_output = [self.tokenizer.bos_token_id]
-                    #prev_output = source[:]
                     neg_img_fact['source'] = source
                     neg_img_fact['prev_output'] = prev_output
 
@@ -274,9 +267,9 @@ class WebQADataset(Dataset):
             for pos_txt_fact in instance['pos_txt_facts']:
                 batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
                 batch_prev_outputs.append(torch.LongTensor(pos_txt_fact['prev_output']))
+                batch_labels.append(1)
                 batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                 batch_patch_masks.append(False)
-                batch_labels.append(1)
             
             # positive image fact
             for pos_img_fact in instance['pos_img_facts']:
@@ -298,7 +291,8 @@ class WebQADataset(Dataset):
 
             # negative text fact
             neg_txt_count = 0
-            #random.shuffle(instance['neg_txt_facts'])
+            if self.split == 'train':
+                random.shuffle(instance['neg_txt_facts'])
             for neg_txt_fact in instance['neg_txt_facts']:
                 if neg_txt_count < self.args.choice_num // 2:
                     neg_txt_count += 1
@@ -310,7 +304,8 @@ class WebQADataset(Dataset):
 
             # negative image fact
             neg_img_count = 0
-            #random.shuffle(instance['neg_img_facts'])
+            if self.split == 'train':
+                random.shuffle(instance['neg_img_facts'])
             for neg_img_fact in instance['neg_img_facts']:
                 if neg_img_count < self.args.choice_num // 2:
                     neg_img_count += 1
