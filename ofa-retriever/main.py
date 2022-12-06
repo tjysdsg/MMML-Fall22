@@ -314,6 +314,9 @@ def test(args, model, tokenizer):
             if not args.without_image:
                 patch_images = data['patch_images'].to(args.device)
                 patch_masks = data['patch_masks'].to(args.device)
+            else:
+                patch_images = None
+                patch_masks = None
             source_ids = data['source_ids']
             source_types = data['source_types']
             q_ids = data['q_ids']
@@ -369,8 +372,8 @@ if __name__ == '__main__':
     parser.add_argument('--cache_dir', type=str, default='./cache', help='the location of cache file')
     parser.add_argument('--have_cached_dataset', action='store_true')
     parser.add_argument('--dataset_dir', type=str, default='./data/')
-    parser.add_argument('--model_name', type=str, default='ofa-base', help='model name or path')
-    parser.add_argument('--model_dir', type=str, default='./ofa-base')
+    parser.add_argument('--model_name', type=str, default='ofa-tiny', help='model name or path')
+    parser.add_argument('--model_dir', type=str, default='./ofa-tiny')
     parser.add_argument('--image_dir', type=str, default='../../images')
     parser.add_argument('--train_file', type=str, default='train.jsonl', help='path to train file, jsonl for scirex, conll for sciner')
     parser.add_argument('--val_file', type=str, default='val.jsonl', help='path to dev file')

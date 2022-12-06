@@ -59,12 +59,14 @@ class WebQATestDataset(Dataset):
                 question = data['Q']
 
                 if 'txt_fact' in data.keys():
-                    text_input = 'Is text " {} " related to the question of " {} "?'.format(data['txt_fact']['fact'], question)
+                    text_input = '{} </s> {}'.format(data['txt_fact']['fact'], question)
+                    #text_input = 'Is text " {} " related to the question of " {} "?'.format(data['txt_fact']['fact'], question)
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     data['source'] = torch.LongTensor(source)
                     data['prev_output'] = torch.LongTensor(source)
                 elif 'img_fact' in data.keys():
-                    text_input = 'Is image caption " {} " related to the question of " {} "?'.format(data['img_fact']['caption'], question)
+                    text_input = '{} </s> {}'.format(data['img_fact']['caption'], question)
+                    #text_input = 'Is image caption " {} " related to the question of " {} "?'.format(data['img_fact']['caption'], question)
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     data['source'] = torch.LongTensor(source)
                     data['prev_output'] = torch.LongTensor(source)
@@ -85,7 +87,7 @@ class WebQATestDataset(Dataset):
         sources = []
         constraint_masks = []
 
-        allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
+        allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['related', 'related']))
         for instance in batch:
             q_ids.append(instance['Q_id'])
             if 'txt_fact' in instance.keys():
@@ -114,7 +116,7 @@ class WebQATestDataset(Dataset):
             patch_masks.append(patch_mask)
 
             constraint_mask = torch.zeros((len(instance['source']), self.args.vocab_size)).bool()
-            constraint_mask[-1][allowed_words] = True
+            constraint_mask[0][allowed_words] = True
             constraint_masks.append(constraint_mask)
 
         sources = pad_sequence(
@@ -210,48 +212,56 @@ class WebQADataset(Dataset):
                 question = data['Q']
 
                 for pos_txt_fact in data['pos_txt_facts']:
-                    text_input = 'Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question)
+                    text_input = '{} </s> {}'.format(pos_txt_fact['fact'], question)
+                    #text_input = 'Is text " {} " related to the question of " {} "?'.format(pos_txt_fact['fact'], question)
                     text_output = 'yes'
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
                     assert len(target) == 1
-                    prev_output = source[:]
+                    prev_output = [self.tokenizer.bos_token_id]
+                    #prev_output = source[:]
                     target = prev_output[1:] + target
                     pos_txt_fact['source'] = source
                     pos_txt_fact['target'] = target
                     pos_txt_fact['prev_output'] = prev_output
 
                 for neg_txt_fact in data['neg_txt_facts']:
-                    text_input = 'Is text " {} " related to the question of " {} "?'.format(neg_txt_fact['fact'], question)
+                    text_input = '{} </s> {}'.format(neg_txt_fact['fact'], question)
+                    #text_input = 'Is text " {} " related to the question of " {} "?'.format(neg_txt_fact['fact'], question)
                     text_output = 'no'
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
                     assert len(target) == 1
-                    prev_output = source[:]
+                    prev_output = [self.tokenizer.bos_token_id]
+                    #prev_output = source[:]
                     target = prev_output[1:] + target
                     neg_txt_fact['source'] = source
                     neg_txt_fact['target'] = target
                     neg_txt_fact['prev_output'] = prev_output
 
                 for pos_img_fact in data['pos_img_facts']:
-                    text_input = 'Is image caption " {} " related to the question of " {} "?'.format(pos_img_fact['caption'], question)
+                    text_input = '{} </s> {}'.format(pos_img_fact['fact'], question)
+                    #text_input = 'Is image caption " {} " related to the question of " {} "?'.format(pos_img_fact['caption'], question)                    
                     text_output = 'yes'
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
                     assert len(target) == 1
-                    prev_output = source[:]
+                    prev_output = [self.tokenizer.bos_token_id]
+                    #prev_output = source[:]
                     target = prev_output[1:] + target
                     pos_img_fact['source'] = source
                     pos_img_fact['target'] = target
                     pos_img_fact['prev_output'] = prev_output
 
                 for neg_img_fact in data['neg_img_facts']:
-                    text_input = 'Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question)
+                    text_input = '{} </s> {}'.format(neg_img_fact['fact'], question)
+                    #text_input = 'Is image caption " {} " related to the question of " {} "?'.format(neg_img_fact['caption'], question)
                     text_output = 'no'
                     source = self.tokenizer.encode(text_input, truncation=True, max_length=self.args.max_length, add_special_tokens=True)
                     target = self.tokenizer.encode(text_output, truncation=True, max_length=self.args.max_length, add_special_tokens=False)
                     assert len(target) == 1
-                    prev_output = source[:]
+                    #prev_output = source[:]
+                    prev_output = [self.tokenizer.bos_token_id]
                     target = prev_output[1:] + target
                     neg_img_fact['source'] = source
                     neg_img_fact['target'] = target
@@ -343,7 +353,7 @@ class WebQADataset(Dataset):
             allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['yes', 'no']))
             for prev_output in batch_prev_outputs:
                 constraint_mask = torch.zeros((prev_output.shape[0], self.args.vocab_size)).bool()
-                constraint_mask[-1][allowed_words] = True
+                constraint_mask[0][allowed_words] = True
                 batch_constraint_mask.append(constraint_mask)
 
             # pad to be the same length
