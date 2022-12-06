@@ -1,18 +1,19 @@
-CUDA_VISIBLE_DEVICES=3 python main.py \
+python main.py \
 --train \
 --use_fp16 \
 --task webqa-finetune-full-data \
 --use_wandb \
+--image_dir images \
 --cache_dir ./cache/WebQA_toy_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
 --gradient_accumulation_step 1 \
 --train_file train.jsonl \
 --val_file val.jsonl \
---num_epochs 4 \
+--num_epochs 1 \
 --evaluation_steps 5 \
---max_length 00 \
+--max_length 300 \
 --dev_batch_size 1 \
 --train_batch_size 1 \
---real_batch_size 1 \
+--real_batch_size 16 \
 --choice_num 16 \
 --have_cached_dataset
