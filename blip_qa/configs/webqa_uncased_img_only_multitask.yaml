@@ -6,16 +6,17 @@ test_file: 'test.json'
 image_dir: '/ocean/projects/cis210027p/shared/corpora/webqa/images'
 
 image_size: 480
+image_only: true
 
 # set pretrained as a file path or an url
 pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_base_vqa_capfilt_large.pth'
 
 # tokenizer
-cased: true
+cased: false
 
 # size of vit model; base or large
 vit: 'base'
-batch_size_train: 4
+batch_size_train: 2
 batch_size_val: 8
 batch_size_test: 8
 vit_grad_ckpt: False
@@ -30,4 +31,5 @@ grad_accum: 8
 grad_clip: 5
 
 # multitask
+multitask: true
 alpha: 0.7

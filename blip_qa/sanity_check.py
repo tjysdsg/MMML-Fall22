@@ -89,7 +89,7 @@ def main(args, config):
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='./configs/webqa.yaml')
+    parser.add_argument('--config', default='./configs/webqa_cased.yaml')
     parser.add_argument('--output_dir', default='output/WebQA')
     parser.add_argument('--seed', default=42, type=int)
     args = parser.parse_args()
