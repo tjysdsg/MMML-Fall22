@@ -63,13 +63,13 @@ class WebQATestDataset(Dataset):
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
                     data['source'] = torch.LongTensor(source)
-                    data['prev_output'] = torch.LongTensor(source)
+                    data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
                 elif 'img_fact' in data.keys():
                     fact_input = self.tokenizer.encode(data['img_fact']['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False)
                     question_input = self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False)
                     source = [self.tokenizer.bos_token_id] + fact_input + [self.tokenizer.sep_token_id] + question_input + [self.tokenizer.sep_token_id]
                     data['source'] = torch.LongTensor(source)
-                    data['prev_output'] = torch.LongTensor(source)
+                    data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
 
             print('=' * 20 + 'Saving dataset' + '=' * 20)
             torch.save(dataset, os.path.join(self.args.cache_dir, 'WebQA_test_dataset'))
@@ -115,8 +115,8 @@ class WebQATestDataset(Dataset):
             patch_images.append(patch_image)
             patch_masks.append(patch_mask)
 
-            constraint_mask = torch.zeros((len(instance['source']), self.args.vocab_size)).bool()
-            constraint_mask[0][allowed_words] = True
+            constraint_mask = torch.zeros((instance['prev_output'].shape[0], self.args.vocab_size)).bool()
+            constraint_mask[-1][allowed_words] = True
             constraint_masks.append(constraint_mask)
 
         sources = pad_sequence(
