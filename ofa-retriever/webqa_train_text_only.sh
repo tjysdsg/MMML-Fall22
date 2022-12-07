@@ -5,20 +5,21 @@ CUDA_VISIBLE_DEVICES=1 python main.py \
 --use_wandb \
 --model_name ofa-base \
 --model_dir ./ofa-base \
+--image_dir ../../utils/webqa_data/images/ \
 --cache_dir ./cache/WebQA_full_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
 --gradient_accumulation_step 8 \
 --train_file train.jsonl \
 --val_file val.jsonl \
---num_epochs 4 \
---evaluation_steps 25 \
+--num_epochs 15 \
+--evaluation_steps 400 \
 --question_max_length 50 \
 --fact_max_length 100 \
 --answer_max_length 1 \
---dev_batch_size 1 \
---train_batch_size 1 \
---real_batch_size 2 \
---train_choice_num 16 \
+--dev_batch_size 2 \
+--train_batch_size 2 \
+--real_batch_size 32 \
+--train_choice_num 32 \
 --val_choice_num 32 \
 --learning_rate 5e-5 \
 --without_image \
