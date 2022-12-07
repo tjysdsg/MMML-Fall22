@@ -98,7 +98,6 @@ def validate(args, dev_dataloader, model):
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
-            constraint_masks = data['constraint_masks'].to(args.device)
             allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
@@ -109,7 +108,6 @@ def validate(args, dev_dataloader, model):
             squeezed_sources = sources.view(-1, sources.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
-            squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
             if not args.without_image:
                 squeezed_patch_masks = patch_masks.view(-1)
                 squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
@@ -131,7 +129,6 @@ def validate(args, dev_dataloader, model):
                     attention_mask=squeezed_decoder_attention_mask[start_idx:end_idx],
                 )
                 logits = outputs['logits']
-                logits.masked_fill_(~squeezed_constraint_masks[start_idx:end_idx], -float('inf'))
                 last_token_ids = squeezed_prev_outputs[start_idx:end_idx].ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
                 last_token_ids[last_token_ids<0] = 0
                 logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
@@ -193,7 +190,6 @@ def train(args, model, tokenizer):
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
-            constraint_masks = data['constraint_masks'].to(args.device)
             allowed_words = data['allowed_words'].to(args.device)
             labels = data['labels'].to(args.device)
             logit_mask = data['logit_mask'].to(args.device)
@@ -204,7 +200,6 @@ def train(args, model, tokenizer):
             squeezed_sources = sources.view(-1, sources.size(-1))
             squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
             squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
-            squeezed_constraint_masks = constraint_masks.view(-1, constraint_masks.size(-2), constraint_masks.size(-1))
             if not args.without_image:
                 squeezed_patch_masks = patch_masks.view(-1)
                 squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
@@ -228,7 +223,6 @@ def train(args, model, tokenizer):
                         attention_mask=squeezed_decoder_attention_mask[start_idx:end_idx],
                     )
                     logits = outputs['logits']
-                    logits.masked_fill_(~squeezed_constraint_masks[start_idx:end_idx], -float('inf'))
                     last_token_ids = squeezed_prev_outputs[start_idx:end_idx].ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
                     last_token_ids[last_token_ids<0] = 0
                     logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
@@ -307,7 +301,6 @@ def test(args, model, tokenizer):
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
-            constraint_masks = data['constraint_masks'].to(args.device)
             allowed_words = data['allowed_words'].to(args.device)
             if not args.without_image:
                 patch_images = data['patch_images'].to(args.device)
@@ -327,7 +320,6 @@ def test(args, model, tokenizer):
                 attention_mask=decoder_attention_mask,
             ) 
             logits = outputs['logits']
-            logits.masked_fill_(~constraint_masks, -float('inf'))
             last_token_ids = prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
             logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
             logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))

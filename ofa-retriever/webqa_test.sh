@@ -6,5 +6,5 @@ CUDA_VISIBLE_DEVICES=1 python main.py --test \
 --test_file test.jsonl \
 --test_batch_size 60 \
 --num_workers 4 \
---test_classifier_threshold 0.15 \
+--test_classifier_threshold 0.25 \
 --have_cached_dataset

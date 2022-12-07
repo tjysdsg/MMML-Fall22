@@ -18,4 +18,3 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --real_batch_size 4 \
 --learning_rate 1e-4 \
 --without_image \
---choice_num 32 \
