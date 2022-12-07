@@ -87,7 +87,7 @@ class WebQATestDataset(Dataset):
         sources = []
         constraint_masks = []
 
-        allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['related', 'related']))
+        allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['no', 'yes']))
         for instance in batch:
             q_ids.append(instance['Q_id'])
             if 'txt_fact' in instance.keys():

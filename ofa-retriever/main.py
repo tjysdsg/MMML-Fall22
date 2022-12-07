@@ -336,7 +336,6 @@ def test(args, model, tokenizer):
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
             # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
             predictions = (softmax_logits > args.test_classifier_threshold).float()
-
             assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
             for idx in range(len(predictions)):
                 prediction = predictions[idx]
@@ -346,6 +345,7 @@ def test(args, model, tokenizer):
                     test_results[qid] = {"sources": [], "answer": ""}
                 if prediction == 1:
                     test_results[qid]["sources"].append(source_id)
+            print(test_results[qid]["sources"])
 
     with open("./data/WebQA_test_data/submission.json", "w") as outfile:
         json.dump(test_results, outfile)
