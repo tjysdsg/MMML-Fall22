@@ -55,7 +55,7 @@ python generate_submission.py
 
 Beam size = 10
 
-Validation set with only image-based questions:
+### Validation set with only image-based questions
 
 ```json
 {
@@ -72,4 +72,38 @@ Validation set with only image-based questions:
   "fl": 0.39096362071974833,
   "qa": 0.22564775086823263
 }
+```
+
+### Validation set with only image-based questions + multitask qcate prediction:
+
+```json
+{
+  "color": 0.5713487629688748,
+  "shape": 0.3063063063063063,
+  "YesNo": 0.43317230273752017,
+  "number": 0.39094502665931236,
+  "text": 0,
+  "Others": 0.7226031371313983,
+  "choose": 0.7365517507135446,
+  "f1": 0.43646233120113714,
+  "recall": 0.72858281605389,
+  "acc": 0.5726921550810953,
+  "fl": 0.4019844845903144,
+  "qa": 0.23021336078919047
+}
+```
+
+# Case Study
+
+```
+"d5cd225c0dba11ecb1e81171463288e9"
+
+Q: Is the base of Opening Doors sculpture at Eden Villa Park taller than the base of Chen Wenqin's Infinity Curve sculpture?
+A: The base of Opening Doors sculpture at Eden Villa Park is shorter than the base of Chen Wenqin's Infinity Curve sculpture.
+P: the base of opening doors sculpture at eden villa park is not taller than the base of che guang's olympic sculpture sculpture
+
+bart_score: 0.13739829230954648
+topic: "modern artwork"
+split: "val"
+Qcate: "YesNo"
 ```
