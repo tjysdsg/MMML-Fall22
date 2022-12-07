@@ -384,7 +384,7 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer_type', type=str, default='adamw')
     parser.add_argument('--scheduler_type', type=str, default='cosine')
     parser.add_argument('--weight_decay', type=float, default=0.0)
-    parser.add_argument('--warmup_steps', type=int, default=0)
+    parser.add_argument('--warmup_steps', type=int, default=1000)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--label_num', type=int, default=2, help='number of labels, 1 for pos, 1 for neg')

@@ -261,7 +261,7 @@ class WebQADataset(Dataset):
             for pos_txt_fact in instance['pos_txt_facts']:
                 batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
                 batch_prev_outputs.append(torch.LongTensor(pos_txt_fact['prev_output']))
-                batch_labels.append(0)
+                batch_labels.append(1)
                 batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                 batch_patch_masks.append(False)
             

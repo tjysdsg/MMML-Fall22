@@ -7,7 +7,7 @@ CUDA_VISIBLE_DEVICES=1 python main.py \
 --model_dir ./ofa-base \
 --cache_dir ./cache/WebQA_full_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
---gradient_accumulation_step 16 \
+--gradient_accumulation_step 8 \
 --train_file train.jsonl \
 --val_file val.jsonl \
 --num_epochs 4 \
@@ -17,8 +17,10 @@ CUDA_VISIBLE_DEVICES=1 python main.py \
 --answer_max_length 1 \
 --dev_batch_size 1 \
 --train_batch_size 1 \
---real_batch_size 1 \
+--real_batch_size 2 \
 --train_choice_num 16 \
 --val_choice_num 32 \
 --learning_rate 5e-5 \
 --without_image \
+--warmup_steps 2000 \
+--have_cached_dataset
