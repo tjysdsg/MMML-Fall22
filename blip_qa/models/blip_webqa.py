@@ -231,6 +231,20 @@ class BLIP_VQA(nn.Module):
             return_dict=True,
         )
 
+        def forward():
+            ab = AB()
+
+            vit_layers = self.visual_encoder.blocks
+            text_layers = self.text_encoder.encoder.layer
+            bottleneck = None
+            for i in range(num_layers):
+                v_att = vit_layers[i]()
+                t_att = text_layers[i]()
+
+                bottlenecck = ab(v_att, t_att, bottleneck=bottleneck)
+
+            bottlenecck
+
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None
         if train:
