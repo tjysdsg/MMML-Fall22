@@ -1,0 +1,26 @@
+CUDA_VISIBLE_DEVICES=2 python main.py \
+--train \
+--use_fp16 \
+--task webqa-finetune-full-data \
+--use_wandb \
+--model_name ofa-base \
+--model_dir ./ofa-base \
+--image_dir ../../utils/webqa_data/images/ \
+--cache_dir ./cache/WebQA_full_data_cache/ \
+--dataset_dir ./data/WebQA_full_data/ \
+--gradient_accumulation_step 8 \
+--train_file train.jsonl \
+--val_file val.jsonl \
+--num_epochs 15 \
+--evaluation_steps 400 \
+--question_max_length 50 \
+--fact_max_length 100 \
+--answer_max_length 1 \
+--dev_batch_size 32 \
+--train_batch_size 8 \
+--real_batch_size 8 \
+--choice_num 8 \
+--learning_rate 8e-4 \
+--without_image \
+--warmup_steps 2000 \
+--have_cached_dataset

@@ -689,4 +689,5 @@ ofa-retriever/OFA_code/*
 ofa-retriever/checkpoints/*
 ofa-retriever/ofa-large/*
 ofa-retriever/ofa-base/*
+ofa-retriever/ofa-huge/*
 !**/dummy_file

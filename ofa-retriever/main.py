@@ -155,7 +155,6 @@ def validate(args, dev_dataloader, model):
         pred_labels.append(preds_label)
         gth_labels.append(gth_label)
 
-    import pdb; pdb.set_trace()
     metric = evaluate.load("f1")
     true_predictions = []
     true_labels = []
@@ -331,27 +330,15 @@ def test(args, model, tokenizer):
             logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
             logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
 
-            # need to fix the -inf problem since the -inf will not be masked by the logit_mask
-            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
-            '''
-            predictions = [0] * len(q_ids)
-            indexes = softmax_logits.topk(k=2)[1]
-            for index in indexes:
-                predictions[index] = 1
-            '''
-            # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
-            #predictions = (softmax_logits > args.test_classifier_threshold).float()
-            predictions = softmax_logits
-            assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
-            for idx in range(len(predictions)):
-                prediction = predictions[idx]
+            scores = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            assert len(scores) == len(q_ids) == len(source_ids) == len(source_types)
+            for idx in range(len(scores)):
+                score = scores[idx]
                 qid = q_ids[idx]
                 source_id = source_ids[idx]
                 if qid not in test_results.keys():
                     test_results[qid] = {"sources": [], "answer": ""}
-                #if prediction == 1:
-                #    test_results[qid]["sources"].append(source_id)
-                test_results[qid]['sources'].append((source_id, prediction))
+                test_results[qid]['sources'].append((source_id, score))
         
         for qid in test_results.keys():
             test_results[qid]['sources'] = sorted(test_results[qid]['sources'], key=lambda x: x[1], reverse=True)
