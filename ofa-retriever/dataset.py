@@ -183,7 +183,7 @@ class WebQAValDataset(Dataset):
         return self.data[index]
     
     def build_dataset(self, split):
-        if os.path.exists(os.path.join(self.args.cache_dir, split)):
+        if self.args.have_cached_dataset:
             dataset = torch.load(os.path.join(self.args.cache_dir, split))
         else:
             if split == 'val':
@@ -394,7 +394,21 @@ class WebQATrainDataset(Dataset):
             batch_labels = []
             batch_patch_images = []
             batch_patch_masks = []
+
+            random.shuffle(instance['pos_txt_facts'])
+            random.shuffle(instance['pos_img_facts'])
+            random.shuffle(instance['neg_img_facts'])
+            random.shuffle(instance['neg_txt_facts'])
+            pos_choice_num = 1
+            neg_choice_num = self.args.choice_num - 1
+            if len(instance['pos_txt_facts']) > 0:
+                instance['pos_txt_facts'] = instance['pos_txt_facts'][:pos_choice_num]
+            else:
+                instance['pos_img_facts'] = instance['pos_img_facts'][:pos_choice_num]
             
+            instance['neg_txt_facts'] = instance['neg_txt_facts'][:(neg_choice_num//2)]
+            instance['neg_img_facts'] = instance['neg_img_facts'][:(neg_choice_num - neg_choice_num//2)]
+
             # positive text fact
             for pos_txt_fact in instance['pos_txt_facts']:
                 batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
@@ -421,52 +435,39 @@ class WebQATrainDataset(Dataset):
                         batch_patch_masks.append(False)
                         print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
-            random.shuffle(instance['neg_img_facts'])
-            random.shuffle(instance['neg_txt_facts'])
-            choice_num = self.args.train_choice_num
 
             # negative text fact
             neg_txt_count = 0
             for neg_txt_fact in instance['neg_txt_facts']:
-                if neg_txt_count < choice_num // 2 - 1:
-                    neg_txt_count += 1
-                    batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
-                    batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
-                    batch_labels.append(0)
-                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                    batch_patch_masks.append(False)
+                batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
+                batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
+                batch_labels.append(0)
+                batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                batch_patch_masks.append(False)
 
             # negative image fact
             neg_img_count = 0
             for neg_img_fact in instance['neg_img_facts']:
-                if neg_img_count < choice_num // 2 - 1:
-                    neg_img_count += 1
-                    batch_sources.append(torch.LongTensor(neg_img_fact['source']))
-                    batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
-                    batch_labels.append(0)
-                    if self.args.without_image:
-                        patch_image = None
-                        patch_mask = None
-                    else:
-                        try:
-                            image = Image.open(os.path.join(self.args.image_dir, str(neg_img_fact['image_id']) + '.jpg'))
-                            batch_patch_images.append(self.patch_resize_transform(image))
-                            batch_patch_masks.append(True)
-                        except:
-                            batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                            batch_patch_masks.append(False)
-                            print('missing picture: {}, we need to ignore this.'.format(neg_img_fact['image_id']))
+                batch_sources.append(torch.LongTensor(neg_img_fact['source']))
+                batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
+                batch_labels.append(0)
+                if self.args.without_image:
+                    patch_image = None
+                    patch_mask = None
+                else:
+                    try:
+                        image = Image.open(os.path.join(self.args.image_dir, str(neg_img_fact['image_id']) + '.jpg'))
+                        batch_patch_images.append(self.patch_resize_transform(image))
+                        batch_patch_masks.append(True)
+                    except:
+                        batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                        batch_patch_masks.append(False)
+                        print('missing picture: {}, we need to ignore this.'.format(neg_img_fact['image_id']))
 
 
             # pad to be the same length
-            if len(batch_sources) > choice_num:
-                batch_sources = batch_sources[:choice_num]
-                batch_prev_outputs = batch_prev_outputs[:choice_num]
-                batch_labels = batch_labels[:choice_num]
-                batch_patch_images = batch_patch_images[:choice_num]
-                batch_patch_masks = batch_patch_masks[:choice_num] 
-            else:
-                num_placeholder = choice_num - len(batch_sources)
+            if len(batch_sources) < self.args.choice_num:
+                num_placeholder = self.args.choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_labels += [-100 for _ in range(num_placeholder)]

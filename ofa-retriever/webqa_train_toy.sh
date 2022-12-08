@@ -21,4 +21,3 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --learning_rate 1e-4 \
 --warmup_steps 0 \
 --without_image \
---have_cached_dataset

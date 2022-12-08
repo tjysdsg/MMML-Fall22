@@ -118,20 +118,16 @@ def validate(args, dev_dataloader, model):
             logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
             logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
 
-            # need to fix the -inf problem since the -inf will not be masked by the logit_mask
-            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
-            predictions = softmax_logits
-            assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
-            for idx in range(len(predictions)):
-                prediction = predictions[idx]
+            scores = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            assert len(scores) == len(q_ids) == len(source_ids) == len(source_types)
+            for idx in range(len(scores)):
+                score = scores[idx]
                 qid = q_ids[idx]
                 source_id = source_ids[idx]
                 label = labels[idx].item()
                 if qid not in valid_results.keys():
                     valid_results[qid] = {"sources": [], "pos_sources": [], "neg_sources": [], "answer": ""}
-                #if prediction == 1:
-                #    test_results[qid]["sources"].append(source_id)
-                valid_results[qid]['sources'].append((source_id, prediction.item()))
+                valid_results[qid]['sources'].append((source_id, score.item()))
                 if label == 1:
                     valid_results[qid]['pos_sources'].append(source_id)
                 elif label == 0:
@@ -159,6 +155,7 @@ def validate(args, dev_dataloader, model):
         pred_labels.append(preds_label)
         gth_labels.append(gth_label)
 
+    import pdb; pdb.set_trace()
     metric = evaluate.load("f1")
     true_predictions = []
     true_labels = []
@@ -194,6 +191,7 @@ def train(args, model, tokenizer):
     scheduler = attach_scheduler(args, optimizer, total_training_steps)
 
     scaler = torch.cuda.amp.GradScaler(enabled=args.use_fp16)
+    ce_loss = torch.nn.CrossEntropyLoss()
 
     train_losses = []
     for epoch in range(args.num_epochs):
@@ -220,12 +218,11 @@ def train(args, model, tokenizer):
 
             with torch.cuda.amp.autocast(enabled=args.use_fp16):
 
-                assert args.train_choice_num % args.real_batch_size == 0
+                assert args.choice_num % args.real_batch_size == 0
                 real_logits = []
-                for idx in range(sources.size(0) * args.train_choice_num // args.real_batch_size):
+                for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
                     start_idx = idx * args.real_batch_size
                     end_idx = (idx + 1) * args.real_batch_size
-                    # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
                     outputs = model(
                         input_ids=squeezed_sources[start_idx:end_idx], 
                         decoder_input_ids=squeezed_prev_outputs[start_idx:end_idx],
@@ -241,12 +238,11 @@ def train(args, model, tokenizer):
                     real_logits.append(logits)
 
                 logits = torch.cat(real_logits, dim=0)
-                preds = logits.view(-1, args.train_choice_num, args.label_num)
-                refs = torch.nn.functional.one_hot(labels * logit_mask)
-                refs = refs.view(-1, args.train_choice_num, args.label_num)
-                # need to fix the -inf problem since the -inf will not be masked by the logit_mask
-                preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
-                loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
+                logits = logits.view(-1, args.choice_num, args.label_num)
+                logits.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
+                scores = logits[..., 1]
+                labels = labels.argmax(dim=-1)
+                loss = ce_loss(scores, labels)
                 loss = loss / args.gradient_accumulation_step
                 scaler.scale(loss).backward()
 
@@ -417,8 +413,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_wandb', action='store_true')
     parser.add_argument('--classifier_threshold', type=float, default=0.3)
     parser.add_argument('--test_classifier_threshold', type=float, default=0.3)
-    parser.add_argument('--train_choice_num', type=int, default=16)
-    parser.add_argument('--val_choice_num', type=int, default=32)
+    parser.add_argument('--choice_num', type=int, default=8)
     parser.add_argument('--use_fp16', action='store_true')
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--prefetch_factor', type=int, default=8)
