@@ -14,20 +14,13 @@ from utils import cosine_lr_schedule
 from data import create_dataset, create_sampler, create_loader
 from data.webqa_dataset import webqa_collate_fn
 import wandb
-import time
 from torch.cuda import amp
 
 
 def init_wandb(output_dir: str):
-    # need to change to your own API when using
-    os.environ['EXP_NUM'] = 'WebQA'
-    os.environ['WANDB_NAME'] = time.strftime(
-        '%Y-%m-%d %H:%M:%S',
-        time.localtime(int(round(time.time() * 1000)) / 1000)
-    )
-    os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'
     os.environ['WANDB_DIR'] = output_dir
-    wandb.init(project="blip_webqa_qa_img_only")
+    wandb.login()
+    wandb.init(project="blip_webqa_qa_img_only_multitask_med")
 
 
 def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
@@ -294,8 +287,7 @@ def main(args, config):
 
 def load_args_configs():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', default='configs/webqa_uncased_img_only_multitask.yaml')
-    parser.add_argument('--output_dir', default='output_img_only')
+    parser.add_argument('--config', default='configs/uncased_img_only_multitask.yaml')
     parser.add_argument('--inference', action='store_true')
     parser.add_argument('--inference_split', type=str, default='val')
     parser.add_argument('--seed', default=42, type=int)
@@ -304,6 +296,8 @@ def load_args_configs():
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=False, type=bool)
     args = parser.parse_args()
+
+    args.output_dir = f'output_{Path(args.config).name.split(".")[0]}'
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
 
