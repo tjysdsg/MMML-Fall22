@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 python main.py \
+CUDA_VISIBLE_DEVICES=1 python main.py \
 --train \
 --use_fp16 \
 --task webqa-finetune-full-data \
@@ -17,9 +17,10 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
 --fact_max_length 100 \
 --answer_max_length 1 \
 --dev_batch_size 32 \
---train_batch_size 1 \
---real_batch_size 8 \
---choice_num 8 \
+--train_batch_size 4 \
+--real_batch_size 16 \
+--choice_num 16 \
 --learning_rate 1e-4 \
 --without_image \
 --warmup_steps 2000 \
+--have_cached_dataset
