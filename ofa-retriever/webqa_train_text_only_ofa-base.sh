@@ -20,6 +20,6 @@ CUDA_VISIBLE_DEVICES=0 python main.py \
 --train_batch_size 1 \
 --real_batch_size 8 \
 --choice_num 8 \
---learning_rate 8e-4 \
+--learning_rate 1e-4 \
 --without_image \
 --warmup_steps 2000 \
