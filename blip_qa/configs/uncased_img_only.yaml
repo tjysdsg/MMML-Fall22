@@ -33,3 +33,6 @@ grad_clip: 5
 # multitask
 multitask_qcate: false
 alpha: 0.7
+
+# med
+med: false

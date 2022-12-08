@@ -35,4 +35,4 @@ multitask_qcate: true
 alpha: 0.7
 
 # med
-med: false
+med: true

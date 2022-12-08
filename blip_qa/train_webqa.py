@@ -256,6 +256,9 @@ def main(args, config):
             vit_ckpt_layer=config['vit_ckpt_layer'],
             multitask_qcate=config['multitask_qcate'],
         )
+
+    if config['med']:
+        model.enable_med()
     model = model.to(device)
 
     optimizer = torch.optim.AdamW(params=model.parameters(), lr=config['init_lr'], weight_decay=config['weight_decay'])
