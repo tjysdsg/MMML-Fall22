@@ -11,7 +11,7 @@ from modeling_ofa import OFAModel
 from torch.utils.data import DataLoader
 from transformers.models.ofa import OFATokenizer
 from transformers import get_cosine_schedule_with_warmup
-from dataset import WebQADataset, WebQATestDataset
+from dataset import WebQATrainDataset, WebQAValDataset, WebQATestDataset
 
 
 def load_dataset(args, tokenizer):
@@ -21,8 +21,8 @@ def load_dataset(args, tokenizer):
     loader_dict = {}
 
     if args.train:
-        train_dataset = WebQADataset(args, tokenizer, split='train')
-        dev_dataset = WebQADataset(args, tokenizer, split='val')
+        train_dataset = WebQATrainDataset(args, tokenizer, split='train')
+        dev_dataset = WebQAValDataset(args, tokenizer, split='val')
         if torch.cuda.device_count() > 1 and args.distributed:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
             dev_sampler = torch.utils.data.distributed.DistributedSampler(dev_dataset, num_replicas=dist.get_world_size(), rank=dist.get_rank(), shuffle=True)
@@ -85,6 +85,70 @@ def cross_entropy_with_logits_loss(prediction, target, logit_mask):
     loss = (-m).view(batch_size, -1).sum(dim=-1) / (normalizer + 1e-8)
     return torch.mean(loss)
 
+
+def validate(args, model, tokenizer):
+    valid_results = {}
+    model.eval()
+    with torch.no_grad():
+        loaders = load_dataset(args, tokenizer)
+        for idx, data in enumerate(tqdm(loaders['dev'])):
+            sources = data['sources'].to(args.device)
+            prev_outputs = data['prev_outputs'].to(args.device)
+            decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
+            allowed_words = data['allowed_words'].to(args.device)
+            labels = data['labels'].to(args.device)
+            if not args.without_image:
+                patch_images = data['patch_images'].to(args.device)
+                patch_masks = data['patch_masks'].to(args.device)
+            else:
+                patch_images = None
+                patch_masks = None
+            source_ids = data['source_ids']
+            source_types = data['source_types']
+            q_ids = data['q_ids']
+
+            outputs = model(
+                input_ids=sources, 
+                decoder_input_ids=prev_outputs,
+                patch_images=patch_images,
+                patch_masks=patch_masks,
+                attention_mask=decoder_attention_mask,
+            ) 
+            logits = outputs['logits']
+            last_token_ids = prev_outputs.ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
+            logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
+            logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
+
+            # need to fix the -inf problem since the -inf will not be masked by the logit_mask
+            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            '''
+            predictions = [0] * len(q_ids)
+            indexes = softmax_logits.topk(k=2)[1]
+            for index in indexes:
+                predictions[index] = 1
+            '''
+            # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
+            #predictions = (softmax_logits > args.test_classifier_threshold).float()
+            predictions = softmax_logits
+            assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
+            for idx in range(len(predictions)):
+                prediction = predictions[idx]
+                qid = q_ids[idx]
+                source_id = source_ids[idx]
+                label = labels[idx].item()
+                if qid not in valid_results.keys():
+                    valid_results[qid] = {"sources": [], "pos_sources": [], "neg_sources": [], "answer": ""}
+                #if prediction == 1:
+                #    test_results[qid]["sources"].append(source_id)
+                valid_results[qid]['sources'].append((source_id, prediction))
+                valid_results[qid]['pos_sources'].append(source_id)
+                valid_results[qid]['neg_sources'].append(source_id)
+        
+        for qid in valid_results.keys():
+            valid_results[qid]['sources'] = sorted(valid_results[qid]['sources'], key=lambda x: x[1], reverse=True)
+            valid_results[qid]['sources'] = [x[0] for x in valid_results[qid]['sources'][:2]]
+
+    return
 
 def validate(args, dev_dataloader, model):
     model.eval()
@@ -326,8 +390,15 @@ def test(args, model, tokenizer):
 
             # need to fix the -inf problem since the -inf will not be masked by the logit_mask
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
+            '''
+            predictions = [0] * len(q_ids)
+            indexes = softmax_logits.topk(k=2)[1]
+            for index in indexes:
+                predictions[index] = 1
+            '''
             # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
-            predictions = (softmax_logits > args.test_classifier_threshold).float()
+            #predictions = (softmax_logits > args.test_classifier_threshold).float()
+            predictions = softmax_logits
             assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
             for idx in range(len(predictions)):
                 prediction = predictions[idx]
@@ -335,9 +406,13 @@ def test(args, model, tokenizer):
                 source_id = source_ids[idx]
                 if qid not in test_results.keys():
                     test_results[qid] = {"sources": [], "answer": ""}
-                if prediction == 1:
-                    test_results[qid]["sources"].append(source_id)
-            print(test_results[qid]["sources"])
+                #if prediction == 1:
+                #    test_results[qid]["sources"].append(source_id)
+                test_results[qid]['sources'].append((source_id, prediction))
+        
+        for qid in test_results.keys():
+            test_results[qid]['sources'] = sorted(test_results[qid]['sources'], key=lambda x: x[1], reverse=True)
+            test_results[qid]['sources'] = [x[0] for x in test_results[qid]['sources'][:2]]
 
     with open("./data/WebQA_test_data/submission.json", "w") as outfile:
         json.dump(test_results, outfile)

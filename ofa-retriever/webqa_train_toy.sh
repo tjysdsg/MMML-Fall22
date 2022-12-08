@@ -3,13 +3,15 @@ CUDA_VISIBLE_DEVICES=3 python main.py \
 --use_fp16 \
 --task webqa-finetune-full-data \
 --use_wandb \
+--model_name ofa-base \
+--model_dir ./ofa-base \
 --cache_dir ./cache/WebQA_toy_data_cache/ \
 --dataset_dir ./data/WebQA_full_data/ \
 --gradient_accumulation_step 1 \
 --train_file train.jsonl \
 --val_file train.jsonl \
 --num_epochs 100 \
---evaluation_steps 50 \
+--evaluation_steps 5 \
 --question_max_length 100 \
 --fact_max_length 150 \
 --answer_max_length 1 \
