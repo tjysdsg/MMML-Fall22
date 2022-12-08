@@ -7,7 +7,8 @@ class AB:
         if bottleneck is None:
             bottleneck = guassian(batch, bt_size)
 
-        vb = self.vb_att(hidden_states=vit_output, encoder_hidden_states=bottleneck)[0]
-        tb = self.tb_att(hidden_states=text_output, encoder_hidden_states=bottleneck)[0]
+        # (batch, head, seq_len, hidden_size)
+        vb = self.vb_att(hidden_states=bottleneck, encoder_hidden_states=vit_output)[0]
+        tb = self.tb_att(hidden_states=bottleneck, encoder_hidden_states=text_output)[0]
 
         return ffn((vb + tb) / 2)
