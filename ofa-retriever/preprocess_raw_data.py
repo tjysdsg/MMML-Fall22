@@ -115,6 +115,14 @@ def write_dataset(dataset, output_file_name):
 
 
 if __name__ == '__main__':
+    # for full-size WebQA data
+    file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_train_val.json'
+    train_dataset = generate_train_dataset_from_raw_WebQA(file_name)
+    val_dataset = generate_val_dataset_from_raw_WebQA(file_name)
+    write_dataset(train_dataset, './data/WebQA_toy_data/train_toy.jsonl')
+    write_dataset(val_dataset, './data/WebQA_toy_data/val_toy.jsonl')
+
+    import pdb; pdb.set_trace()
     # for deliberately split small-size WebQA subdata
     file_name = '../text-retriever/raw_data/WebQA_subdata/train_subWebqa.json'
     train_dataset = generate_train_dataset_from_raw_WebQA(file_name)
@@ -122,13 +130,6 @@ if __name__ == '__main__':
     val_dataset = generate_val_dataset_from_raw_WebQA(file_name)
     write_dataset(train_dataset, './data/WebQA_sub_data/train.jsonl')
     write_dataset(val_dataset, './data/WebQA_sub_data/val.jsonl')
-
-    # for full-size WebQA data
-    file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_train_val.json'
-    train_dataset = generate_train_dataset_from_raw_WebQA(file_name)
-    val_dataset = generate_val_dataset_from_raw_WebQA(file_name)
-    write_dataset(train_dataset, './data/WebQA_full_data/train.jsonl')
-    write_dataset(val_dataset, './data/WebQA_full_data/val.jsonl')
 
     # for full-size WebQA test data
     file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_test.json'

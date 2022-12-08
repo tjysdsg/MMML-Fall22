@@ -183,17 +183,14 @@ class WebQAValDataset(Dataset):
         return self.data[index]
     
     def build_dataset(self, split):
-        if os.path.exists(os.path.join(self.args.cache_dir, 'WebQA_val_dataset')):
-            dataset = torch.load(os.path.join(self.args.cache_dir, 'WebQA_val_dataset'))
+        if os.path.exists(os.path.join(self.args.cache_dir, split)):
+            dataset = torch.load(os.path.join(self.args.cache_dir, split))
         else:
             if split == 'val':
-                with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.train_file), 'r') as jsonl_f:
+                with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.val_file), 'r') as jsonl_f:
                     dataset = [obj for obj in jsonl_f]
             else:
                 raise ValueError('no right dataset split')
-
-            if 'toy' in self.args.cache_dir:
-                dataset = dataset[:100]
 
             for data in tqdm(dataset):
                 question = data['Q']
@@ -340,8 +337,6 @@ class WebQATrainDataset(Dataset):
             else:
                 raise ValueError('no right dataset split')
 
-            if 'toy' in self.args.cache_dir:
-                dataset = dataset[:100]
 
             for data in tqdm(dataset):
                 question = data['Q']

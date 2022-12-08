@@ -86,12 +86,11 @@ def cross_entropy_with_logits_loss(prediction, target, logit_mask):
     return torch.mean(loss)
 
 
-def validate(args, model, tokenizer):
+def validate(args, dev_dataloader, model):
     valid_results = {}
     model.eval()
     with torch.no_grad():
-        loaders = load_dataset(args, tokenizer)
-        for idx, data in enumerate(tqdm(loaders['dev'])):
+        for idx, data in enumerate(tqdm(dev_dataloader)):
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
@@ -121,14 +120,6 @@ def validate(args, model, tokenizer):
 
             # need to fix the -inf problem since the -inf will not be masked by the logit_mask
             softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
-            '''
-            predictions = [0] * len(q_ids)
-            indexes = softmax_logits.topk(k=2)[1]
-            for index in indexes:
-                predictions[index] = 1
-            '''
-            # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
-            #predictions = (softmax_logits > args.test_classifier_threshold).float()
             predictions = softmax_logits
             assert len(predictions) == len(q_ids) == len(source_ids) == len(source_types)
             for idx in range(len(predictions)):
@@ -140,78 +131,33 @@ def validate(args, model, tokenizer):
                     valid_results[qid] = {"sources": [], "pos_sources": [], "neg_sources": [], "answer": ""}
                 #if prediction == 1:
                 #    test_results[qid]["sources"].append(source_id)
-                valid_results[qid]['sources'].append((source_id, prediction))
-                valid_results[qid]['pos_sources'].append(source_id)
-                valid_results[qid]['neg_sources'].append(source_id)
-        
-        for qid in valid_results.keys():
-            valid_results[qid]['sources'] = sorted(valid_results[qid]['sources'], key=lambda x: x[1], reverse=True)
-            valid_results[qid]['sources'] = [x[0] for x in valid_results[qid]['sources'][:2]]
+                valid_results[qid]['sources'].append((source_id, prediction.item()))
+                if label == 1:
+                    valid_results[qid]['pos_sources'].append(source_id)
+                elif label == 0:
+                    valid_results[qid]['neg_sources'].append(source_id)
 
-    return
-
-def validate(args, dev_dataloader, model):
-    model.eval()
-    with torch.no_grad():
-        eval_losses = []
-        gth_labels = []
-        pred_labels = []
-        for idx, data in enumerate(tqdm(dev_dataloader)):
-            if idx > 1000:
-                break
-            sources = data['sources'].to(args.device)
-            prev_outputs = data['prev_outputs'].to(args.device)
-            decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
-            allowed_words = data['allowed_words'].to(args.device)
-            labels = data['labels'].to(args.device)
-            logit_mask = data['logit_mask'].to(args.device)
-            if not args.without_image:
-                patch_images = data['patch_images'].to(args.device)
-                patch_masks = data['patch_masks'].to(args.device)
-
-            squeezed_sources = sources.view(-1, sources.size(-1))
-            squeezed_prev_outputs = prev_outputs.view(-1, prev_outputs.size(-1))
-            squeezed_decoder_attention_mask = decoder_attention_mask.view(-1, decoder_attention_mask.size(-1))
-            if not args.without_image:
-                squeezed_patch_masks = patch_masks.view(-1)
-                squeezed_patch_images = patch_images.view(-1, patch_images.size(-3), patch_images.size(-2), patch_images.size(-1))
-            else:
-                squeezed_patch_masks = None
-                squeezed_patch_images = None
-
-            assert args.val_choice_num % args.real_batch_size == 0
-            real_logits = []
-            for idx in range(sources.size(0) * args.val_choice_num // args.real_batch_size):
-                start_idx = idx * args.real_batch_size
-                end_idx = (idx + 1) * args.real_batch_size
-                # TODO (haofeiyu): to confirm whether the attention mask here is actually decoder_attention_mask
-                outputs = model(
-                    input_ids=squeezed_sources[start_idx:end_idx], 
-                    decoder_input_ids=squeezed_prev_outputs[start_idx:end_idx],
-                    patch_masks=squeezed_patch_masks[start_idx:end_idx] if not args.without_image else None,
-                    patch_images=squeezed_patch_images[start_idx:end_idx] if not args.without_image else None,
-                    attention_mask=squeezed_decoder_attention_mask[start_idx:end_idx],
-                )
-                logits = outputs['logits']
-                last_token_ids = squeezed_prev_outputs[start_idx:end_idx].ne(tokenizer.pad_token_id).sum(1, keepdim=True) - 1
-                last_token_ids[last_token_ids<0] = 0
-                logits = logits.gather(1, last_token_ids.unsqueeze(2).expand(-1, -1, logits.size(-1))).squeeze(1)
-                logits = logits.gather(1, allowed_words.unsqueeze(0).expand(logits.size(0), -1))
-                real_logits.append(logits)
-            logits = torch.cat(real_logits, dim=0)
-            preds = logits.view(-1, args.val_choice_num, args.label_num)
-            refs = torch.nn.functional.one_hot(labels * logit_mask)
-            refs = refs.view(-1, args.val_choice_num, args.label_num)
-            
-            # need to fix the -inf problem since the -inf will not be masked by the logit_mask
-            preds.masked_fill_(~logit_mask.unsqueeze(-1).expand(-1, -1, args.label_num), 0)
-            eval_loss = cross_entropy_with_logits_loss(preds, refs, logit_mask)
-            softmax_logits = torch.nn.functional.softmax(logits, dim=-1)[:, 1]
-            # TODO (haofeiyu): during evaluation, the extra negative sampling should not be ignored
-            predictions = (softmax_logits > args.classifier_threshold).float()
-            pred_labels.append(predictions.tolist())
-            gth_labels.append(labels.view(-1).tolist())
-            eval_losses.append(eval_loss.item()) 
+    gth_labels = []
+    pred_labels = []
+    for qid in valid_results.keys():
+        gth_label = []
+        preds_label = []
+        valid_results[qid]['sources'] = sorted(valid_results[qid]['sources'], key=lambda x: x[1], reverse=True)
+        valid_results[qid]['sources'] = [x[0] for x in valid_results[qid]['sources'][:2]]
+        for source in valid_results[qid]['pos_sources']:
+            gth_label.append(1)
+            if source not in valid_results[qid]['sources']:
+                preds_label.append(0)
+            if source in valid_results[qid]['sources']:
+                preds_label.append(1)
+        for source in valid_results[qid]['neg_sources']:
+            gth_label.append(0)
+            if source not in valid_results[qid]['sources']:
+                preds_label.append(0)
+            if source in valid_results[qid]['sources']:
+                preds_label.append(1)
+        pred_labels.append(preds_label)
+        gth_labels.append(gth_label)
 
     metric = evaluate.load("f1")
     true_predictions = []
@@ -224,7 +170,8 @@ def validate(args, dev_dataloader, model):
     f1 = results['f1']
 
     print(f'validation f1 : {f1}')
-    eval_loss = sum(eval_losses) / len(eval_losses)
+    #eval_loss = sum(eval_losses) / len(eval_losses)
+    eval_loss = 0
     print(f'validation loss : {eval_loss}')
     model.train()
     return f1, eval_loss
