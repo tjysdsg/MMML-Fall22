@@ -683,6 +683,7 @@ ofa-retriever/cache/WebQA_toy_data_cache/*
 ofa-retriever/data/WebQA_full_data/*
 ofa-retriever/data/WebQA_sub_data/*
 ofa-retriever/data/WebQA_test_data/*
+ofa-retriever/data/WebQA_toy_data/*
 ofa-retriever/WebQA_tmp/*
 ofa-retriever/OFA_code/*
 ofa-retriever/checkpoints/*
