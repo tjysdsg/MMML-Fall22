@@ -31,6 +31,7 @@ def generate_train_dataset_from_raw_WebQA(file_name):
                             neg_txt_facts.append(fact)
                 for img_fact_type in ['img_posFacts', 'img_negFacts']:
                     for img_fact in data[img_fact_type]:
+                        fact = {}
                         fact['title'] = img_fact['title']
                         fact['caption'] = img_fact['caption']
                         fact['image_id'] = img_fact['image_id']
@@ -122,7 +123,6 @@ if __name__ == '__main__':
     write_dataset(train_dataset, './data/WebQA_toy_data/train_toy.jsonl')
     write_dataset(val_dataset, './data/WebQA_toy_data/val_toy.jsonl')
 
-    import pdb; pdb.set_trace()
     # for deliberately split small-size WebQA subdata
     file_name = '../text-retriever/raw_data/WebQA_subdata/train_subWebqa.json'
     train_dataset = generate_train_dataset_from_raw_WebQA(file_name)
@@ -135,4 +135,3 @@ if __name__ == '__main__':
     file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_test.json'
     test_dataset = generate_test_dataset_from_raw_WebQA(file_name)
     write_dataset(test_dataset, './data/WebQA_test_data/test.jsonl')
-    import pdb; pdb.set_trace()

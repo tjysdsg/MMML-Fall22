@@ -337,7 +337,6 @@ class WebQATrainDataset(Dataset):
             else:
                 raise ValueError('no right dataset split')
 
-
             for data in tqdm(dataset):
                 question = data['Q']
                 prev_output = [self.tokenizer.bos_token_id]
@@ -437,7 +436,6 @@ class WebQATrainDataset(Dataset):
 
 
             # negative text fact
-            neg_txt_count = 0
             for neg_txt_fact in instance['neg_txt_facts']:
                 batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
                 batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
@@ -446,7 +444,6 @@ class WebQATrainDataset(Dataset):
                 batch_patch_masks.append(False)
 
             # negative image fact
-            neg_img_count = 0
             for neg_img_fact in instance['neg_img_facts']:
                 batch_sources.append(torch.LongTensor(neg_img_fact['source']))
                 batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
@@ -463,7 +460,6 @@ class WebQATrainDataset(Dataset):
                         batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
                         batch_patch_masks.append(False)
                         print('missing picture: {}, we need to ignore this.'.format(neg_img_fact['image_id']))
-
 
             # pad to be the same length
             if len(batch_sources) < self.args.choice_num:

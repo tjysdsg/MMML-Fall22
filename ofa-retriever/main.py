@@ -222,6 +222,7 @@ def train(args, model, tokenizer):
                 for idx in range(sources.size(0) * args.choice_num // args.real_batch_size):
                     start_idx = idx * args.real_batch_size
                     end_idx = (idx + 1) * args.real_batch_size
+                    import pdb; pdb.set_trace()
                     outputs = model(
                         input_ids=squeezed_sources[start_idx:end_idx], 
                         decoder_input_ids=squeezed_prev_outputs[start_idx:end_idx],
@@ -338,11 +339,14 @@ def test(args, model, tokenizer):
                 source_id = source_ids[idx]
                 if qid not in test_results.keys():
                     test_results[qid] = {"sources": [], "answer": ""}
-                test_results[qid]['sources'].append((source_id, score))
-        
-        for qid in test_results.keys():
-            test_results[qid]['sources'] = sorted(test_results[qid]['sources'], key=lambda x: x[1], reverse=True)
-            test_results[qid]['sources'] = [x[0] for x in test_results[qid]['sources'][:2]]
+                test_results[qid]['sources'].append((source_id, score.item()))
+
+    with open("./data/WebQA_test_data/submission_score.json", "w") as outfile:
+        json.dump(test_results, outfile)
+
+    for qid in test_results.keys():
+        test_results[qid]['sources'] = sorted(test_results[qid]['sources'], key=lambda x: x[1], reverse=True)
+        test_results[qid]['sources'] = [x[0] for x in test_results[qid]['sources'] if x[1] > 0.5]
 
     with open("./data/WebQA_test_data/submission.json", "w") as outfile:
         json.dump(test_results, outfile)
