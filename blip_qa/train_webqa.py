@@ -12,18 +12,20 @@ from models.blip_webqa import blip_vqa
 import utils
 from utils import cosine_lr_schedule
 from data import create_dataset, create_sampler, create_loader
-from data.webqa_dataset import webqa_collate_fn
 import wandb
 from torch.cuda import amp
 
 
-def init_wandb(output_dir: str):
+def init_wandb(output_dir: str, exp_name: str):
     os.environ['WANDB_DIR'] = output_dir
     wandb.login()
-    wandb.init(project="blip_webqa_qa_img_only_multitask_med")
+    wandb.init(project=f"blip_qa_{exp_name}")
 
 
-def train(config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device):
+def train(
+        config, args, model, train_loader, val_loader, optimizer, epoch_start: int, global_step: int, device,
+        qcate2index: dict,
+):
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
@@ -35,10 +37,6 @@ def train(config, args, model, train_loader, val_loader, optimizer, epoch_start:
     assert grad_clip > 0
     alpha = config['alpha']
     assert 0 <= alpha <= 1
-
-    qcate2index = {}
-    for i, qc in enumerate(['YesNo', 'Others', 'choose', 'number', 'color', 'shape']):
-        qcate2index[qc] = i
 
     scaler = amp.GradScaler()
 
@@ -207,7 +205,8 @@ def main(args, config):
         # max_n_neg_facts=4 if config['multitask_retr'] else 0,
         max_n_neg_facts=0,
         cased=config['cased'],
-        image_only=config['image_only'],
+        image_only=config.get('image_only', True),
+        no_img_input=config.get('no_img_input', False),
     )
 
     if args.distributed:
@@ -221,7 +220,6 @@ def main(args, config):
         datasets, samplers,
         batch_size=[config['batch_size_train'], config['batch_size_val'], config['batch_size_test']],
         num_workers=[4, 4, 4], is_trains=[True, False, False],
-        collate_fns=[webqa_collate_fn, webqa_collate_fn, webqa_collate_fn]
     )
 
     #### Model and optimizer ####
@@ -283,9 +281,12 @@ def main(args, config):
         # init wandb
         wandb_output_dir = os.path.join(args.output_dir, 'wandb')
         os.makedirs(wandb_output_dir, exist_ok=True)
-        init_wandb(wandb_output_dir)
+        init_wandb(wandb_output_dir, args.exp_name)
 
-        train(config, args, model, train_loader, val_loader, optimizer, epoch, global_step, device)
+        train(
+            config, args, model, train_loader, val_loader, optimizer, epoch, global_step, device,
+            qcate2index=datasets[0].qcate2index,
+        )
 
 
 def load_args_configs():
@@ -300,7 +301,8 @@ def load_args_configs():
     parser.add_argument('--distributed', default=False, type=bool)
     args = parser.parse_args()
 
-    args.output_dir = f'output_{Path(args.config).name.split(".")[0]}'
+    args.exp_name = Path(args.config).name.split(".")[0]
+    args.output_dir = f'output_{args.exp_name}'
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
 
