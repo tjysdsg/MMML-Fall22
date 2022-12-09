@@ -2,7 +2,7 @@
 train_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 val_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_train_val.json'
 # test_file: '/ocean/projects/cis210027p/shared/corpora/webqa/WebQA_test.json'
-test_file: 'test.json'
+test_file: 'test_img_only.json'
 image_dir: '/ocean/projects/cis210027p/shared/corpora/webqa/images'
 
 image_size: 480
@@ -26,16 +26,16 @@ init_lr: 1e-4
 # optimizer
 weight_decay: 0.05
 min_lr: 0
-max_epoch: 15
+max_epoch: 10
 grad_accum: 8
 grad_clip: 5
 
 # multitask
-multitask_qcate: true
+multitask_qcate: false
 alpha: 0.7
 
 # med
 med: false
 
 # ablation study
-no_img_input: false
+no_img_input: true
