@@ -91,6 +91,8 @@ def validate(args, dev_dataloader, model):
     model.eval()
     with torch.no_grad():
         for idx, data in enumerate(tqdm(dev_dataloader)):
+            if not args.without_image and idx > len(dev_dataloader) // 4:
+                break
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
