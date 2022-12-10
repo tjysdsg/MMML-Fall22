@@ -57,7 +57,6 @@ class WebQATestDataset(Dataset):
                 dataset = [obj for obj in jsonl_f]
             for data in tqdm(dataset):
                 question = data['Q']
-
                 if 'txt_fact' in data.keys():
                     fact_input = self.tokenizer.decode(self.tokenizer.encode(data['txt_fact']['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
                     question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
@@ -66,7 +65,7 @@ class WebQATestDataset(Dataset):
                     data['source'] = torch.LongTensor(source)
                     data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
                 elif 'img_fact' in data.keys():
-                    fact_input = self.tokenizer.decode(self.tokenizer.encode(data['txt_fact']['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
+                    fact_input = self.tokenizer.decode(self.tokenizer.encode(data['img_fact']['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
                     question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
                     text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
                     source = self.tokenizer.encode(text_input, add_special_tokens=True)
@@ -148,8 +147,152 @@ class WebQATestDataset(Dataset):
         }
 
 
+class WebQAValDataset(Dataset):
+    def __init__(
+        self,
+        args,
+        tokenizer,
+        split,
+        imagenet_default_mean_and_std=False,
+        patch_image_size=224,
+    ):
+        self.args = args
+        self.tokenizer = tokenizer
+        self.data = self.build_dataset(split=split)
+        self.patch_image_size = patch_image_size
+        self.split = split
 
-class WebQADataset(Dataset):
+        if imagenet_default_mean_and_std:
+            mean = IMAGENET_DEFAULT_MEAN
+            std = IMAGENET_DEFAULT_STD
+        else:
+            mean = [0.5, 0.5, 0.5]
+            std = [0.5, 0.5, 0.5]
+
+        self.patch_resize_transform = transforms.Compose([
+            lambda image: image.convert('RGB'),
+            transforms.Resize((patch_image_size, patch_image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ])
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, index):
+        return self.data[index]
+    
+    def build_dataset(self, split):
+        if self.args.have_cached_dataset:
+            dataset = torch.load(os.path.join(self.args.cache_dir, split))
+        else:
+            if split == 'val':
+                with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.val_file), 'r') as jsonl_f:
+                    dataset = [obj for obj in jsonl_f]
+            else:
+                raise ValueError('no right dataset split')
+
+            for data in tqdm(dataset):
+                question = data['Q']
+                if 'txt_fact' in data.keys():
+                    fact_input = self.tokenizer.decode(self.tokenizer.encode(data['txt_fact']['fact'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
+                    question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
+                    text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
+                    source = self.tokenizer.encode(text_input, add_special_tokens=True)
+                    data['source'] = torch.LongTensor(source)
+                    data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
+                elif 'img_fact' in data.keys():
+                    fact_input = self.tokenizer.decode(self.tokenizer.encode(data['img_fact']['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
+                    question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
+                    text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
+                    source = self.tokenizer.encode(text_input, add_special_tokens=True)
+                    data['source'] = torch.LongTensor(source)
+                    data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
+
+            print('=' * 20 + 'Saving dataset' + '=' * 20)
+            torch.save(dataset, os.path.join(self.args.cache_dir, split))
+            print('=' * 20 + 'Saving dataset done' + '=' * 20)
+        return dataset
+    
+    def collate_fn(self, batch):
+        sources = []
+        prev_outputs = []
+        patch_images = []
+        patch_masks = []
+        q_ids = []
+        source_types = []
+        source_ids = []
+        sources = []
+        labels = []
+        bsz = len(batch)
+
+        allowed_words = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(['no', 'yes']))
+        for instance in batch:
+            q_ids.append(instance['Q_id'])
+            if 'txt_fact' in instance.keys():
+                source_types.append('txt')
+                source_ids.append(instance['txt_fact']['snippet_id'])
+                labels.append(instance['label'])
+                patch_image = torch.zeros((3, self.patch_image_size, self.patch_image_size))
+                patch_mask = False
+            elif 'img_fact' in instance.keys():
+                source_types.append('img')
+                source_ids.append(instance['img_fact']['image_id'])
+                labels.append(instance['label'])
+                if self.args.without_image:
+                    patch_image = None
+                    patch_mask = None
+                else:
+                    try:
+                        image = Image.open(os.path.join(self.args.image_dir, str(instance['img_fact']['image_id']) + '.jpg'))
+                        patch_image = self.patch_resize_transform(image)
+                        patch_mask = True
+                    except:
+                        patch_image = torch.zeros((3, self.patch_image_size, self.patch_image_size))
+                        patch_mask = False
+                        print('missing picture: {}, we need to ignore this.'.format(instance['img_fact']['image_id']))
+            sources.append(instance['source'])
+            prev_outputs.append(instance['prev_output'])
+            patch_images.append(patch_image)
+            patch_masks.append(patch_mask)
+
+        sources = pad_sequence(
+            sources, 
+            batch_first=True, 
+            padding_value=self.tokenizer.pad_token_id
+        )
+        prev_outputs = pad_sequence(
+            prev_outputs, 
+            batch_first=True, 
+            padding_value=self.tokenizer.pad_token_id
+        )
+
+        labels = torch.LongTensor(labels)
+        labels = labels.view(bsz, -1)
+
+        if self.args.without_image:
+            patch_images = None
+            patch_masks = None
+        else:
+            patch_images = torch.stack(patch_images, dim=0)
+            patch_masks = torch.BoolTensor(patch_masks)
+
+        decoder_attention_mask = prev_outputs.ne(self.tokenizer.pad_token_id)
+        return {
+            'sources': sources,
+            'prev_outputs': prev_outputs,
+            'patch_masks': patch_masks,
+            'patch_images': patch_images,
+            'decoder_attention_mask': decoder_attention_mask,
+            'source_ids': source_ids,
+            'source_types': source_types,
+            'q_ids': q_ids,
+            'allowed_words': allowed_words,
+            'labels': labels,
+        }
+
+
+class WebQATrainDataset(Dataset):
     def __init__(
         self, 
         args, 
@@ -191,14 +334,8 @@ class WebQADataset(Dataset):
             if split == 'train':
                 with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.train_file), 'r') as jsonl_f:
                     dataset = [obj for obj in jsonl_f]
-            elif split == 'val':
-                with jsonlines.open(os.path.join(self.args.dataset_dir, self.args.val_file), 'r') as jsonl_f:
-                    dataset = [obj for obj in jsonl_f]
             else:
                 raise ValueError('no right dataset split')
-
-            if 'toy' in self.args.cache_dir:
-                dataset = dataset[:100]
 
             for data in tqdm(dataset):
                 question = data['Q']
@@ -256,7 +393,21 @@ class WebQADataset(Dataset):
             batch_labels = []
             batch_patch_images = []
             batch_patch_masks = []
+
+            random.shuffle(instance['pos_txt_facts'])
+            random.shuffle(instance['pos_img_facts'])
+            random.shuffle(instance['neg_img_facts'])
+            random.shuffle(instance['neg_txt_facts'])
+            pos_choice_num = 1
+            neg_choice_num = self.args.choice_num - 1
+            if len(instance['pos_txt_facts']) > 0:
+                instance['pos_txt_facts'] = instance['pos_txt_facts'][:pos_choice_num]
+            else:
+                instance['pos_img_facts'] = instance['pos_img_facts'][:pos_choice_num]
             
+            instance['neg_txt_facts'] = instance['neg_txt_facts'][:(neg_choice_num//2)]
+            instance['neg_img_facts'] = instance['neg_img_facts'][:(neg_choice_num - neg_choice_num//2)]
+
             # positive text fact
             for pos_txt_fact in instance['pos_txt_facts']:
                 batch_sources.append(torch.LongTensor(pos_txt_fact['source']))
@@ -283,55 +434,36 @@ class WebQADataset(Dataset):
                         batch_patch_masks.append(False)
                         print('missing picture: {}, we need to ignore this.'.format(pos_img_fact['image_id']))
 
-            if self.split == 'train':
-                random.shuffle(instance['neg_img_facts'])
-                random.shuffle(instance['neg_txt_facts'])
-                choice_num = self.args.train_choice_num
-            else:
-                choice_num = self.args.val_choice_num
 
             # negative text fact
-            neg_txt_count = 0
             for neg_txt_fact in instance['neg_txt_facts']:
-                if neg_txt_count < choice_num // 2 - 1:
-                    neg_txt_count += 1
-                    batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
-                    batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
-                    batch_labels.append(0)
-                    batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                    batch_patch_masks.append(False)
+                batch_sources.append(torch.LongTensor(neg_txt_fact['source']))
+                batch_prev_outputs.append(torch.LongTensor(neg_txt_fact['prev_output']))
+                batch_labels.append(0)
+                batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                batch_patch_masks.append(False)
 
             # negative image fact
-            neg_img_count = 0
             for neg_img_fact in instance['neg_img_facts']:
-                if neg_img_count < choice_num // 2 - 1:
-                    neg_img_count += 1
-                    batch_sources.append(torch.LongTensor(neg_img_fact['source']))
-                    batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
-                    batch_labels.append(0)
-                    if self.args.without_image:
-                        patch_image = None
-                        patch_mask = None
-                    else:
-                        try:
-                            image = Image.open(os.path.join(self.args.image_dir, str(neg_img_fact['image_id']) + '.jpg'))
-                            batch_patch_images.append(self.patch_resize_transform(image))
-                            batch_patch_masks.append(True)
-                        except:
-                            batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
-                            batch_patch_masks.append(False)
-                            print('missing picture: {}, we need to ignore this.'.format(neg_img_fact['image_id']))
-
+                batch_sources.append(torch.LongTensor(neg_img_fact['source']))
+                batch_prev_outputs.append(torch.LongTensor(neg_img_fact['prev_output']))
+                batch_labels.append(0)
+                if self.args.without_image:
+                    patch_image = None
+                    patch_mask = None
+                else:
+                    try:
+                        image = Image.open(os.path.join(self.args.image_dir, str(neg_img_fact['image_id']) + '.jpg'))
+                        batch_patch_images.append(self.patch_resize_transform(image))
+                        batch_patch_masks.append(True)
+                    except:
+                        batch_patch_images.append(torch.zeros((3, self.patch_image_size, self.patch_image_size)))
+                        batch_patch_masks.append(False)
+                        print('missing picture: {}, we need to ignore this.'.format(neg_img_fact['image_id']))
 
             # pad to be the same length
-            if len(batch_sources) > choice_num:
-                batch_sources = batch_sources[:choice_num]
-                batch_prev_outputs = batch_prev_outputs[:choice_num]
-                batch_labels = batch_labels[:choice_num]
-                batch_patch_images = batch_patch_images[:choice_num]
-                batch_patch_masks = batch_patch_masks[:choice_num] 
-            else:
-                num_placeholder = choice_num - len(batch_sources)
+            if len(batch_sources) < self.args.choice_num:
+                num_placeholder = self.args.choice_num - len(batch_sources)
                 batch_sources += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_prev_outputs += [torch.LongTensor([self.tokenizer.pad_token_id]) for _ in range(num_placeholder)]
                 batch_labels += [-100 for _ in range(num_placeholder)]

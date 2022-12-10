@@ -39,10 +39,11 @@ def create_sampler(datasets, shuffles, num_tasks, global_rank):
     return samplers
 
 
-def create_loader(datasets, samplers, batch_size, num_workers, is_trains, collate_fns):
+def create_loader(datasets, samplers, batch_size, num_workers, is_trains):
     loaders = []
-    for dataset, sampler, bs, n_worker, is_train, collate_fn in zip(datasets, samplers, batch_size, num_workers,
-                                                                    is_trains, collate_fns):
+    for dataset, sampler, bs, n_worker, is_train in zip(
+            datasets, samplers, batch_size, num_workers, is_trains
+    ):
         if is_train:
             shuffle = (sampler is None)
             drop_last = True
@@ -56,7 +57,7 @@ def create_loader(datasets, samplers, batch_size, num_workers, is_trains, collat
             pin_memory=True,
             sampler=sampler,
             shuffle=shuffle,
-            collate_fn=collate_fn,
+            collate_fn=dataset.collate_fn,
             drop_last=drop_last,
         )
         loaders.append(loader)

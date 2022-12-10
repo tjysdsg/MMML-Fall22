@@ -36,3 +36,6 @@ alpha: 0.7
 
 # med
 med: false
+
+# ablation study
+no_img_input: false
