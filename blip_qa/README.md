@@ -55,6 +55,24 @@ python generate_submission.py
 
 Beam size = 10
 
+### Validation set with only image-based questions but no image input
+
+```json
+{
+  "color": 0.38289438680500126,
+  "shape": 0.2545045045045045,
+  "YesNo": 0.43156199677938806,
+  "number": 0.38516271373414235,
+  "Others": 0.7213181382772192,
+  "choose": 0.7235306490819566,
+  "f1": 0.4063148542999289,
+  "recall": 0.7222666271106764,
+  "acc": 0.5536583532889315,
+  "fl": 0.3822659564226263,
+  "qa": 0.21164473995136973
+}
+```
+
 ### Validation set with only image-based questions
 
 ```json
@@ -63,7 +81,6 @@ Beam size = 10
   "shape": 0.26126126126126126,
   "YesNo": 0.46215780998389694,
   "number": 0.3894649751792609,
-  "text": 0,
   "Others": 0.7206404752328825,
   "choose": 0.7317241835044884,
   "f1": 0.44761904761904775,
@@ -82,7 +99,6 @@ Beam size = 10
   "shape": 0.3063063063063063,
   "YesNo": 0.43317230273752017,
   "number": 0.39094502665931236,
-  "text": 0,
   "Others": 0.7226031371313983,
   "choose": 0.7365517507135446,
   "f1": 0.43646233120113714,
@@ -90,6 +106,19 @@ Beam size = 10
   "acc": 0.5726921550810953,
   "fl": 0.4019844845903144,
   "qa": 0.23021336078919047
+}
+```
+
+### Test set, img_only_multitask model image-based outputs merged with T5 text-based outputs
+
+FL is low because BLIP is uncased while the test is cased
+
+```json
+{
+  "Retrieval": 0.7573,
+  "QA-FL": 0.3829,
+  "QA-Acc": 0.5179,
+  "QA": 0.2743
 }
 ```
 
