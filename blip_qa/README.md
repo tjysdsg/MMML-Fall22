@@ -109,6 +109,19 @@ Beam size = 10
 }
 ```
 
+### Test set, img_only_multitask model image-based outputs merged with T5 text-based outputs
+
+FL is low because BLIP is uncased while the test is cased
+
+```json
+{
+  "Retrieval": 0.7573,
+  "QA-FL": 0.3829,
+  "QA-Acc": 0.5179,
+  "QA": 0.2743
+}
+```
+
 # Case Study
 
 ```
