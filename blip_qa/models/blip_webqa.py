@@ -232,18 +232,18 @@ class BLIP_VQA(nn.Module):
         # TODO: add use_bottleneck as a flag. refer to 
         https://github.com/google-research/scenic/blob/556bc5be8452560228fa8318f61e414114abfb40/scenic/projects/mbt/model.py#L330
 
-        question_output = self.text_encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            cross_attention_weight=cross_attention_weight,
-            # output_attentions=True,
-            return_dict=True,
-        )
+        if not self.use_bottleneck:
+            question_output = self.text_encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                cross_attention_weight=cross_attention_weight,
+                # output_attentions=True,
+                return_dict=True,
+            )
 
-        def forward():
-            # ab = AB()
+        if self.use_bottleneck:
 
             vit_layers = self.visual_encoder.blocks
             text_layers = self.text_encoder.encoder.layer
@@ -267,7 +267,7 @@ class BLIP_VQA(nn.Module):
                 v_out = vit_layers[i](v_in)
 
                 t_in = concact(input_ids, bottleneck)
-                t_out = text_layers[i](t_in)
+                t_out = text_layers[i](t_in) # TODO: add mask 
 
                 # bottleneck = jnp.mean(jnp.stack(bottle, axis=-1), axis=-1)
                 bottleneck = mean(v_out, t_out)
@@ -302,6 +302,7 @@ class BLIP_VQA(nn.Module):
             answer.input_ids[:, 0] = self.tokenizer.bos_token_id
             answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100)
 
+            # TODO: replace `encoder_hidden_states` and `encoder_attention_mask` with bottle neck related states
             answer_output = self.text_decoder(answer.input_ids,
                                               attention_mask=answer.attention_mask,
                                               encoder_hidden_states=question_output.last_hidden_state,
@@ -316,6 +317,7 @@ class BLIP_VQA(nn.Module):
             return loss, mt_res, multimodal_cross_atts
         else:
             num_beams = 10
+            # TODO: replace decoder states (same above)
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
             question_atts = attention_mask.repeat_interleave(num_beams, dim=0).to(question_states.device)
 
