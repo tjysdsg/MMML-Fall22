@@ -195,7 +195,10 @@ class WebQADataset(Dataset):
                 pad_max_len = max(pad_max_len, 1)
             else:
                 image_lists.append(image)
-                n_facts.append(image.size(0))
+                if self.no_img_input:
+                    n_facts.append(0)
+                else:
+                    n_facts.append(image.size(0))
                 pad_max_len = max(pad_max_len, image.size(0))
 
             caption_lists.append(caption)
