@@ -2,6 +2,7 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
+import jax.numpy as jnp
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -133,6 +134,7 @@ class BLIP_VQA(nn.Module):
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
                  multitask_qcate=True,
+                 # TODO: add use bottleneck api
                  ):
         """
         Args:
@@ -162,6 +164,9 @@ class BLIP_VQA(nn.Module):
         if multitask_qcate:
             # self.retr_ffn = nn.Linear(self.num_patches, 1)
             self.multitask_ffn = nn.Linear(encoder_config.hidden_size, 6)
+        
+        # TODO: add self.use_bottleneck flag
+        self.use_bottleneck = True
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
@@ -199,7 +204,11 @@ class BLIP_VQA(nn.Module):
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
         """
-        import pdb; pdb.set_trace()
+        batch_size, max_n_facts, C, H, W = image.shape
+        # image = images.view(-1, C, H, W)
+        # if not self.use_bottleneck:
+        #     image_embeds = self.visual_encoder(image, )
+
         image_embeds, lengths = self.encode_images(image, n_img_facts)
         image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
@@ -219,20 +228,64 @@ class BLIP_VQA(nn.Module):
         input_ids = input_ids[:, :512]
         attention_mask = attention_mask[:, :512]
 
-        cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float) # Why cross attention all ones. Why not just same as attention_mask? Just ones? Any better way to initialize cross attention?
-        cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0 # didn't seem to make a difference. What does this do?
-        question_output = self.text_encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            cross_attention_weight=cross_attention_weight,
-            # output_attentions=True,
-            return_dict=True,
-        )
+        cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float)
+        cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0
+        
+        # TODO: add use_bottleneck as a flag. refer to https://github.com/google-research/scenic/blob/556bc5be8452560228fa8318f61e414114abfb40/scenic/projects/mbt/model.py#L330
+
+        import pdb; pdb.set_trace()
+
+        if not self.use_bottleneck:
+            question_output = self.text_encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                cross_attention_weight=cross_attention_weight,
+                # output_attentions=True,
+                return_dict=True,
+            )
+
+        if self.use_bottleneck:
+
+            # Checkpoint 1: check if the layers can be accessed layer by layer
+            vit_layers = self.visual_encoder.blocks
+            text_layers = self.text_encoder.encoder.layer
+            # TODO: Access num layers from layers above
+            num_layers = 12
+
+            bottleneck = None
+            n_bottlenecks = 4
+
+            if self.use_bottleneck:
+                n_bottlenecks = self.n_bottlenecks
+            # if self.classifier in ['token']:
+            #     n_bottlenecks += 1
+
+            # Checkpoint 2: check if bottleneck is properly initialized.
+            bottleneck = self.param('bottleneck',
+                                nn.initializers.normal(stddev=0.02),  # From BERT.
+                                (1, n_bottlenecks, C), bottleneck_dtype)
+            bottleneck = jnp.tile(bottleneck, [batch_size, 1, 1])
+
+
+            # Checkpoint 3: check whether each layer can encode
+            for i in range(num_layers):
+                bottle = []
+                
+                v_in = concact(image, bottleneck)
+                v_out = vit_layers[i](v_in)
+                bottle
+
+                t_in = concact(input_ids, bottleneck)
+                t_out = text_layers[i](t_in) # TODO: add mask 
+
+                bottleneck = jnp.mean(jnp.stack(bottle, axis=-1), axis=-1)
+                # bottleneck = mean(v_out, t_out)
+
 
         # (batch, num_heads, question_len, image_embeds_len)
-        multimodal_cross_atts = None # Still None, what does it do here
+        multimodal_cross_atts = None
         if train:
             if self.multitask_qcate:
                 # multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
@@ -255,6 +308,7 @@ class BLIP_VQA(nn.Module):
             answer.input_ids[:, 0] = self.tokenizer.bos_token_id
             answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100)
 
+            # TODO: replace `encoder_hidden_states` and `encoder_attention_mask` with bottle neck related states
             answer_output = self.text_decoder(answer.input_ids,
                                               attention_mask=answer.attention_mask,
                                               encoder_hidden_states=question_output.last_hidden_state,
@@ -269,6 +323,7 @@ class BLIP_VQA(nn.Module):
             return loss, mt_res, multimodal_cross_atts
         else:
             num_beams = 10
+            # TODO: replace decoder states (same above)
             question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
             question_atts = attention_mask.repeat_interleave(num_beams, dim=0).to(question_states.device)
 
