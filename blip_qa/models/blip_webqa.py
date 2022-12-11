@@ -2,6 +2,7 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
+# from bottleneck_attention import AB
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -133,6 +134,7 @@ class BLIP_VQA(nn.Module):
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
                  multitask_qcate=True,
+                 # TODO: add use bottleneck api
                  ):
         """
         Args:
@@ -148,6 +150,7 @@ class BLIP_VQA(nn.Module):
         self.visual_encoder, vision_width = create_vit(vit, image_size, vit_grad_ckpt, vit_ckpt_layer,
                                                        drop_path_rate=0.1)
         self.tokenizer = init_tokenizer(cased)
+        self.use_bottleneck = True # TODO: change
 
         encoder_config = BertConfig.from_json_file(med_config)
         encoder_config.encoder_width = vision_width
@@ -171,8 +174,8 @@ class BLIP_VQA(nn.Module):
             - image_embeds: (batch, n_facts * seq_len, embed_size)
             - lengths: Valid lengths (dim 1) of image_embeds
         """
-        batch_size, max_n_facts, C, H, W = images.shape
-        images = images.view(-1, C, H, W)
+        # batch_size, max_n_facts, C, H, W = images.shape
+        # images = images.view(-1, C, H, W)
         image_embeds = self.visual_encoder(images)  # (batch * n_facts, seq_len, embed_size)
 
         n_facts = [nf * image_embeds.size(1) for nf in n_facts]
@@ -199,6 +202,10 @@ class BLIP_VQA(nn.Module):
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
         """
+        batch_size, max_n_facts, C, H, W = images.shape
+        image = images.view(-1, C, H, W)
+        if not self.use_bottleneck:
+            image_embeds = self.visual_encoder(image, )
 
         image_embeds, lengths = self.encode_images(image, n_img_facts)
         image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
@@ -221,6 +228,10 @@ class BLIP_VQA(nn.Module):
 
         cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float)
         cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0
+        
+        # TODO: add use_bottleneck as a flag. refer to 
+        https://github.com/google-research/scenic/blob/556bc5be8452560228fa8318f61e414114abfb40/scenic/projects/mbt/model.py#L330
+
         question_output = self.text_encoder(
             input_ids,
             attention_mask=attention_mask,
@@ -232,18 +243,40 @@ class BLIP_VQA(nn.Module):
         )
 
         def forward():
-            ab = AB()
+            # ab = AB()
 
             vit_layers = self.visual_encoder.blocks
             text_layers = self.text_encoder.encoder.layer
             bottleneck = None
+            n_bottlenecks = 4
+
+            bottleneck = None
+            if self.use_bottleneck:
+                n_bottlenecks = self.n_bottlenecks
+            if self.classifier in ['token']:
+                n_bottlenecks += 1
+            bottleneck = self.param('bottleneck',
+                                nn.initializers.normal(stddev=0.02),  # From BERT.
+                                (1, n_bottlenecks, c), bottleneck_dtype)
+            bottleneck = jnp.tile(bottleneck, [n, 1, 1])
+
+
             for i in range(num_layers):
-                v_att = vit_layers[i]()
-                t_att = text_layers[i]()
+                
+                v_in = concact(image, bottleneck)
+                v_out = vit_layers[i](v_in)
 
-                bottlenecck = ab(v_att, t_att, bottleneck=bottleneck)
+                t_in = concact(input_ids, bottleneck)
+                t_out = text_layers[i](t_in)
 
-            bottlenecck
+                # bottleneck = jnp.mean(jnp.stack(bottle, axis=-1), axis=-1)
+                bottleneck = mean(v_out, t_out)
+
+                # v_att = vit_layers[i](ab_images)
+                # t_att = text_layers[i].get_attention(input_ids, attention_mask)
+
+                # # bottleneck = ab(v_att, t_att, bottleneck=bottleneck) # (B, SeqLen, nHead, ab_dim)
+
 
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None
