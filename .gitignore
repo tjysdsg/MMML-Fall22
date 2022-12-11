@@ -693,3 +693,4 @@ ofa-retriever/ofa-huge/*
 !**/dummy_file
 **/wandb/
 ab_blip/output_*
+coatt_blip
