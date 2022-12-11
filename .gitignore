@@ -691,3 +691,5 @@ ofa-retriever/ofa-large/*
 ofa-retriever/ofa-base/*
 ofa-retriever/ofa-huge/*
 !**/dummy_file
+**/wandb/
+ab_blip/output_*
