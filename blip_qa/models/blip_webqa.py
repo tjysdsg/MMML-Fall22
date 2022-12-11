@@ -134,6 +134,7 @@ class BLIP_VQA(nn.Module):
                  vit_grad_ckpt=False,
                  vit_ckpt_layer=0,
                  multitask_qcate=True,
+                 bottleneck = True,
                  # TODO: add use bottleneck api
                  ):
         """
@@ -150,7 +151,7 @@ class BLIP_VQA(nn.Module):
         self.visual_encoder, vision_width = create_vit(vit, image_size, vit_grad_ckpt, vit_ckpt_layer,
                                                        drop_path_rate=0.1)
         self.tokenizer = init_tokenizer(cased)
-        self.use_bottleneck = True # TODO: change
+        self.use_bottleneck = bottleneck # TODO: change
 
         encoder_config = BertConfig.from_json_file(med_config)
         encoder_config.encoder_width = vision_width
@@ -174,7 +175,7 @@ class BLIP_VQA(nn.Module):
             - image_embeds: (batch, n_facts * seq_len, embed_size)
             - lengths: Valid lengths (dim 1) of image_embeds
         """
-        # batch_size, max_n_facts, C, H, W = images.shape
+        # batch_size, max_n_facts, C, H, W = images.shape 
         # images = images.view(-1, C, H, W)
         image_embeds = self.visual_encoder(images)  # (batch * n_facts, seq_len, embed_size)
 
@@ -202,12 +203,15 @@ class BLIP_VQA(nn.Module):
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
         """
-        batch_size, max_n_facts, C, H, W = images.shape
-        image = images.view(-1, C, H, W)
-        if not self.use_bottleneck:
-            image_embeds = self.visual_encoder(image, )
+        batch_size, max_n_facts, C, H, W = image.shape
+        image = image.view(-1, C, H, W)
+        if self.use_bottleneck:
+            image_embeds = self.visual_encoder(image)  # (batch * n_facts, seq_len, embed_size)
+            # for bi in batch_size:
+                # TODO: mask
+        else:
+            image_embeds, lengths = self.encode_images(image, n_img_facts)
 
-        image_embeds, lengths = self.encode_images(image, n_img_facts)
         image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
         question = self.tokenizer(question, padding='longest', return_tensors="pt").to(image.device)
@@ -230,7 +234,7 @@ class BLIP_VQA(nn.Module):
         cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0
         
         # TODO: add use_bottleneck as a flag. refer to 
-        https://github.com/google-research/scenic/blob/556bc5be8452560228fa8318f61e414114abfb40/scenic/projects/mbt/model.py#L330
+        # https://github.com/google-research/scenic/blob/556bc5be8452560228fa8318f61e414114abfb40/scenic/projects/mbt/model.py#L330
 
         if not self.use_bottleneck:
             question_output = self.text_encoder(
@@ -255,22 +259,26 @@ class BLIP_VQA(nn.Module):
                 n_bottlenecks = self.n_bottlenecks
             if self.classifier in ['token']:
                 n_bottlenecks += 1
+            
+            n, c = input_ids.shape
+            bottleneck_dtype = input_ids.dtype
             bottleneck = self.param('bottleneck',
                                 nn.initializers.normal(stddev=0.02),  # From BERT.
                                 (1, n_bottlenecks, c), bottleneck_dtype)
-            bottleneck = jnp.tile(bottleneck, [n, 1, 1])
+            bottleneck = torch.tile(bottleneck, [n, 1, 1])
 
 
-            for i in range(num_layers):
+            for i in range(len(text_layers)): # #vit_layers = #text_layers?
                 
-                v_in = concact(image, bottleneck)
+                v_in = torch.cat(image, bottleneck)
                 v_out = vit_layers[i](v_in)
 
-                t_in = concact(input_ids, bottleneck)
-                t_out = text_layers[i](t_in) # TODO: add mask 
+                t_in = torch.cat(input_ids, bottleneck)
+                t_in_attention_mask = torch.cat([attention_mask, torch.zeros(bottleneck.shape)], dim=-1)
+                t_out = text_layers[i](t_in, attention_mask=t_in_attention_mask) # TODO: add mask 
 
                 # bottleneck = jnp.mean(jnp.stack(bottle, axis=-1), axis=-1)
-                bottleneck = mean(v_out, t_out)
+                bottleneck = torch.mean(v_out, t_out)
 
                 # v_att = vit_layers[i](ab_images)
                 # t_att = text_layers[i].get_attention(input_ids, attention_mask)
@@ -305,8 +313,10 @@ class BLIP_VQA(nn.Module):
             # TODO: replace `encoder_hidden_states` and `encoder_attention_mask` with bottle neck related states
             answer_output = self.text_decoder(answer.input_ids,
                                               attention_mask=answer.attention_mask,
-                                              encoder_hidden_states=question_output.last_hidden_state,
-                                              encoder_attention_mask=attention_mask,
+                                            #   encoder_hidden_states=question_output.last_hidden_state,
+                                              encoder_hidden_states=bottleneck,
+                                            #   encoder_attention_mask=attention_mask,
+                                              encoder_attention_mask=t_in_attention_mask,
                                               labels=answer_targets,
                                               return_dict=True,
                                               reduction='none',
@@ -330,8 +340,10 @@ class BLIP_VQA(nn.Module):
                 num_beams=num_beams,
                 eos_token_id=self.tokenizer.sep_token_id,
                 pad_token_id=self.tokenizer.pad_token_id,
-                encoder_hidden_states=question_states,
-                encoder_attention_mask=question_atts,
+                # encoder_hidden_states=question_states,
+                encoder_hidden_states=bottleneck,
+                # encoder_attention_mask=question_atts,
+                encoder_attention_mask=t_in_attention_mask,
             )
 
             answers = []
