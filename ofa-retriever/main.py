@@ -39,6 +39,11 @@ def load_dataset(args, tokenizer):
         test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, shuffle=False, collate_fn=test_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
         loader_dict['test'] = test_dataloader
     
+    if args.valid:
+        dev_dataset = WebQAValDataset(args, tokenizer, split='val')
+        dev_dataloader = DataLoader(dev_dataset, batch_size=args.dev_batch_size, shuffle=False, collate_fn=dev_dataset.collate_fn, num_workers=args.num_workers, prefetch_factor=args.prefetch_factor, pin_memory=True)
+        loader_dict['dev'] = dev_dataloader
+    
     return loader_dict
 
 
@@ -300,13 +305,14 @@ def train(args, model, tokenizer):
     return
 
 
-def test(args, model, tokenizer):
+
+def test(args, model, tokenizer, split='test'):
     test_results = {}
     model.eval()
     with torch.no_grad():
         model.load_state_dict(torch.load(args.checkpoint_save_dir + 'best_{}4{}.ckpt'.format(args.model_name, args.task)))
         loaders = load_dataset(args, tokenizer)
-        for idx, data in enumerate(tqdm(loaders['test'])):
+        for idx, data in enumerate(tqdm(loaders[split])):
             sources = data['sources'].to(args.device)
             prev_outputs = data['prev_outputs'].to(args.device)
             decoder_attention_mask = data['decoder_attention_mask'].to(args.device)
@@ -342,16 +348,23 @@ def test(args, model, tokenizer):
                 if qid not in test_results.keys():
                     test_results[qid] = {"sources": [], "answer": ""}
                 test_results[qid]['sources'].append((source_id, score.item()))
-
-    with open("./data/WebQA_test_data/submission_score.json", "w") as outfile:
-        json.dump(test_results, outfile)
+    if args.test:
+        with open("./data/WebQA_test_data/submission_score.json", "w") as outfile:
+            json.dump(test_results, outfile)
+    elif args.valid:
+        with open("./data/WebQA_test_data/valid_submission_score.json", "w") as outfile:
+            json.dump(test_results, outfile)
 
     for qid in test_results.keys():
         test_results[qid]['sources'] = sorted(test_results[qid]['sources'], key=lambda x: x[1], reverse=True)
         test_results[qid]['sources'] = [x[0] for x in test_results[qid]['sources'][:2]]
 
-    with open("./data/WebQA_test_data/submission.json", "w") as outfile:
-        json.dump(test_results, outfile)
+    if args.test:
+        with open("./data/WebQA_test_data/submission.json", "w") as outfile:
+            json.dump(test_results, outfile)
+    elif args.valid:
+        with open("./data/WebQA_test_data/valid_submission.json", "w") as outfile:
+            json.dump(test_results, outfile)
 
     return
 
@@ -400,6 +413,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--label_num', type=int, default=2, help='number of labels, 1 for pos, 1 for neg')
     parser.add_argument('--train', action='store_true')
+    parser.add_argument('--valid', action='store_true')
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--local_rank', type=int, default=-1)
     parser.add_argument('--evaluation_steps', type=int, default=50)
@@ -448,3 +462,6 @@ if __name__ == '__main__':
         train(args, model, tokenizer)
     elif args.test:
         test(args, model, tokenizer)
+    elif args.valid:
+        model.load_state_dict(torch.load(args.checkpoint_save_dir + 'best_{}4{}.ckpt'.format(args.model_name, args.task)))
+        test(args, model, tokenizer, split='dev')

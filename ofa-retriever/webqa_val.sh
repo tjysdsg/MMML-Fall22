@@ -1,0 +1,11 @@
+CUDA_VISIBLE_DEVICES=0 python main.py --valid \
+--cache_dir ./cache/WebQA_full_data_cache/ \
+--image_dir ../../utils/webqa_data/images/ \
+--task webqa-finetune-mm \
+--dataset_dir ./data/WebQA_full_data/ \
+--model_name ofa-base \
+--model_dir ./ofa-base \
+--val_file val.jsonl \
+--dev_batch_size 128 \
+--num_workers 4 \
+--have_cached_dataset
