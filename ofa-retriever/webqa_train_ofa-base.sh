@@ -1,7 +1,7 @@
 CUDA_VISIBLE_DEVICES=2 python main.py \
 --train \
 --use_fp16 \
---task webqa-finetune-full-data \
+--task webqa-finetune \
 --use_wandb \
 --model_name ofa-base \
 --model_dir ./ofa-base \
@@ -16,7 +16,7 @@ CUDA_VISIBLE_DEVICES=2 python main.py \
 --question_max_length 50 \
 --fact_max_length 100 \
 --answer_max_length 1 \
---dev_batch_size 128 \
+--dev_batch_size 64 \
 --train_batch_size 1 \
 --real_batch_size 16 \
 --choice_num 16 \

@@ -176,6 +176,7 @@ def validate(args, dev_dataloader, model):
 
 
 def train(args, model, tokenizer):
+    #model.load_state_dict(torch.load(args.checkpoint_save_dir + 'best_{}4{}.ckpt'.format(args.model_name, args.task)))
     best_checkpoint_name = None
     best_eval_f1 = -float('inf')
     best_eval_loss = float('inf')
