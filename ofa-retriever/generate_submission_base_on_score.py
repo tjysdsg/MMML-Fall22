@@ -1,6 +1,6 @@
 import json
 
-with open("./data/WebQA_test_data/submission_score_textonly.json", "r") as infile:
+with open("./data/WebQA_test_data/submission_score.json", "r") as infile:
     test_results = json.load(infile)
 
 # 0 - 3463 is image-based questions
@@ -32,5 +32,5 @@ for idx, qid in enumerate(test_results.keys()):
 
     test_results[qid]['sources'] = res_sources
 
-with open("./data/WebQA_test_data/submission_textonly3.json", "w") as outfile:
+with open("./data/WebQA_test_data/submission.json", "w") as outfile:
     json.dump(test_results, outfile)
