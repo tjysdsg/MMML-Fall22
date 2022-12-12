@@ -46,67 +46,72 @@ class WebQADataset(Dataset):
             if data_split in split:
                 if data_split == 'test' or datum['Qcate'] in self.qcate:
                     if use_num_samples == -1 or count < use_num_samples:
-                        question_id = datum['Guid']
-                        Q = pre_caption(datum['Q'].replace('"', ""), self.cased, max_words=50)
-                        A = pre_caption(datum['A'][0].replace('"', ""), self.cased, max_words=50)
-
-                        gold_text_facts, neg_text_facts = self.extract_text_facts_for_question(datum)
-                        gold_img_and_caps, neg_img_and_caps = self.extract_img_facts_for_question(datum)
-
-                        if not self.check_image_feature_path(gold_img_and_caps):
-                            print(f"Question {i} skipped because image is not found")
+                        instance = self.load_question_instance(datum)
+                        if instance is None:
                             continue
 
-                        assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
-
-                        # ========================
-                        self.instance_list.append(
-                            (
-                                gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps,
-                                Q, A, question_id, datum['Qcate'] if self.split != 'test' else '',
-                            )
-                        )
+                        self.instance_list.append(instance)
                         count += 1
 
         print(f"Load {len(self.instance_list)} instances from {count} samples")
 
-    def extract_text_facts_for_question(self, datum: dict):
+    def clean_text(self, text: str) -> str:
+        return pre_caption(text.replace('"', ""), self.cased, max_words=40)
+
+    def load_question_instance(self, datum: dict):
+        question_id = datum['Guid']
+        Q = self.clean_text(datum['Q'])
+        A = self.clean_text(datum['A'])
+
+        gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps = self.extract_sources_for_question(datum)
+
+        if not self.check_image_feature_path(gold_img_and_caps):
+            print(f"Question {question_id} skipped because image is not found")
+            return None
+
+        assert len(gold_text_facts) > 0 or len(gold_img_and_caps) > 0
+
+        return (
+            gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps,
+            Q, A, question_id, datum['Qcate'] if self.split != 'test' else '',
+        )
+
+    def extract_sources_for_question(self, datum: dict):
+        qid = datum['Guid']
+        # text
         gold_text_facts = []
         neg_text_facts = []
-
         if self.split == 'test':
-            for fa in datum['txt_Facts']:
-                gold_text_facts.append(pre_caption(fa['fact'], self.cased, max_words=40))
+            gold_text_facts += self.load_text_facts(qid, datum['txt_Facts'])
         else:
             if 'txt_posFacts' in datum:
-                for fa in datum['txt_posFacts']:
-                    gold_text_facts.append(pre_caption(fa['fact'], self.cased, max_words=40))
+                gold_text_facts += self.load_text_facts(qid, datum['txt_posFacts'])
             if 'txt_negFacts' in datum:
-                for fa in datum['txt_negFacts']:
-                    neg_text_facts.append(pre_caption(fa['fact'], self.cased, max_words=40))
-        return gold_text_facts, neg_text_facts
+                neg_text_facts += self.load_text_facts(qid, datum['txt_negFacts'])
 
-    def extract_img_facts_for_question(self, datum: dict):
+        # image
         gold_img_and_caps = []
         neg_img_and_caps = []
-
         if self.split == 'test':
-            for im in datum['img_Facts']:
-                gold_img_and_caps.append(self.load_image_fact(im))
+            gold_img_and_caps += self.load_image_facts(qid, datum['img_Facts'])
         else:
             if 'img_posFacts' in datum:
-                for im in datum['img_posFacts']:
-                    gold_img_and_caps.append(self.load_image_fact(im))
+                gold_img_and_caps += self.load_image_facts(qid, datum['img_posFacts'])
             if 'img_negFacts' in datum:
-                for im in datum['img_negFacts']:
-                    neg_img_and_caps.append(self.load_image_fact(im))
+                neg_img_and_caps += self.load_image_facts(qid, datum['img_negFacts'])
 
-        return gold_img_and_caps, neg_img_and_caps
+        return gold_text_facts, neg_text_facts, gold_img_and_caps, neg_img_and_caps
 
-    def load_image_fact(self, im: dict):
-        image_feature_path = os.path.join(self.image_dir, f"{im['image_id']}.jpg")
-        cap = im['caption'].strip()
-        return image_feature_path, pre_caption(cap, self.cased, max_words=40)
+    def load_text_facts(self, qid: str, txt: List[dict]):
+        return [self.clean_text(t['fact']) for t in txt]
+
+    def load_image_facts(self, qid: str, im: List[dict]):
+        return [
+            (
+                os.path.join(self.image_dir, f"{m['image_id']}.jpg"),
+                self.clean_text(m['caption'].strip()),
+            ) for m in im
+        ]
 
     @staticmethod
     def check_image_feature_path(facts):
@@ -119,16 +124,8 @@ class WebQADataset(Dataset):
     def __len__(self):
         return len(self.instance_list)
 
-    def __getitem__(self, index):
-        """
-        :return:
-            images: (n_facts, channel, H, W)
-            captions: a list of strings
-            questions: a list of strings
-            answers: a list of strings
-            retrieval_labels: list of 1 or 0s, 1 means gold facts, 0 means negative/distractor facts
-        """
-        text, neg_text, img_caps, neg_img_caps, Q, A, question_id, qcate = self.instance_list[index]
+    def get_item_from_instance(self, instance):
+        text, neg_text, img_caps, neg_img_caps, Q, A, question_id, qcate = instance
 
         if self.split != 'test':
             n_neg_facts = random.randint(0, self.max_n_neg_facts)
@@ -164,6 +161,17 @@ class WebQADataset(Dataset):
             retrieval_labels,
         )
 
+    def __getitem__(self, index):
+        """
+        :return:
+            images: (n_facts, channel, H, W)
+            captions: a list of strings
+            questions: a list of strings
+            answers: a list of strings
+            retrieval_labels: list of 1 or 0s, 1 means gold facts, 0 means negative/distractor facts
+        """
+        return self.get_item_from_instance(self.instance_list[index])
+
     @staticmethod
     def shuffle_facts_and_retr_labels(facts: list, retr_labels: torch.Tensor):
         shuff_idx = list(range(len(facts)))
@@ -180,9 +188,98 @@ class WebQADataset(Dataset):
             - questions: a batch of questions
             - answers: a batch of answers
             - n_facts: a list of integers
+            - retr_labels: a batch of list of 1 and 0
+        """
+        pad_max_len = 0
+        (
+            image_lists, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels
+        ) = [], [], [], [], [], [], [], []
+        for image, caption, question, answer, qid, qcate, retr in batch:
+            if image is None:  # placeholder for samples without image facts
+                image_lists.append(torch.zeros(1, 3, 480, 480))
+                n_facts.append(0)  # set to 0 so the placeholder is masked
+                pad_max_len = max(pad_max_len, 1)
+            else:
+                image_lists.append(image)
+                if self.no_img_input:
+                    n_facts.append(0)
+                else:
+                    n_facts.append(image.size(0))
+                pad_max_len = max(pad_max_len, image.size(0))
 
-        NOTE: Only support batch size of 1 because for text-based questions, we don't use cross attention,
-        which means we cannot mix text-based and image-based questions in a batch
+            caption_lists.append(caption)
+            questions.append(question)
+            answers.append(answer)
+
+            question_ids.append(qid)
+            qcates.append(qcate)
+
+            retr_labels.append(retr)
+
+        image_pad = [
+            F.pad(img, (0, 0, 0, 0, 0, 0, 0, pad_max_len - img.size(0)))
+            for img in image_lists
+        ]
+        image_pad = torch.stack(image_pad)
+
+        return image_pad, caption_lists, questions, answers, n_facts, question_ids, qcates, retr_labels
+
+
+class WebQADatasetWithOFARankingScore(WebQADataset):
+    def __init__(self, ranking_score_json: str, *args, **kwargs):
+        with open(ranking_score_json, encoding='utf-8') as f:
+            self.ranking_scores = json.load(f)
+        for qid in self.ranking_scores.items():
+            data = self.ranking_scores[qid]
+            src_scores = {}
+            for src in data['sources']:
+                src_scores[src[0]] = src[1]
+            self.ranking_scores[qid] = src_scores
+
+        super().__init__(*args, **kwargs)
+
+    def load_text_facts(self, qid: str, txt: List[dict]):
+        return [
+            (
+                self.clean_text(t['fact']),  # text
+                self.ranking_scores[qid][t['snippet_id']],  # ranking score
+            ) for t in txt
+            if t['snippet_id'] in self.ranking_scores[qid]
+        ]
+
+    def load_image_facts(self, qid: str, im: List[dict]):
+        return [
+            (
+                os.path.join(self.image_dir, f"{m['image_id']}.jpg"),  # image path
+                self.clean_text(m['caption'].strip()),  # image caption
+                self.ranking_scores[qid][m['image_id']],  # ranking score
+            ) for m in im
+            if m['image_id'] in self.ranking_scores[qid]
+        ]
+
+    @staticmethod
+    def check_image_feature_path(facts):
+        for path, _ in facts:
+            if not os.path.exists(path):
+                print(f'Cannot find image at {path}')
+                return False
+        return True
+
+    def get_item_from_instance(self, instance):
+        ret = super().get_item_from_instance(instance)
+        img_caps, neg_img_caps = instance[2], instance[3]
+        ret += (img_ranking_scores,)
+
+    def collate_fn(self, batch):
+        """
+        :return:
+            - image_pad: (batch, n_facts, channel, H, W), with 0 padded to the end of n_facts dimension
+            - caption_lists: a batch of list of captions
+            - questions: a batch of questions
+            - answers: a batch of answers
+            - n_facts: a list of integers
+            - retr_labels: a batch of list of 1 and 0
+            - ranking_scores: a batch of tensors with padded ranking scores
         """
         pad_max_len = 0
         (
