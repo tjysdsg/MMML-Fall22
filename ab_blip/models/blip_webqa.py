@@ -1,8 +1,9 @@
 from typing import List
-import torch
-from torch import nn
+
 import numpy as np
+import torch
 import torch.nn.functional as F
+from torch import nn
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -126,28 +127,30 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
 
 
 class BLIP_VQA(nn.Module):
-    def __init__(self,
-                 med_config='configs/med_config.json',
-                 image_size=480,
-                 cased=True,
-                 vit='base',
-                 vit_grad_ckpt=False,
-                 vit_ckpt_layer=0,
-                 multitask_qcate=True,
-                 ):
+    def __init__(
+        self,
+        med_config="configs/med_config.json",
+        image_size=480,
+        cased=True,
+        vit="base",
+        vit_grad_ckpt=False,
+        vit_ckpt_layer=0,
+        multitask_qcate=True,
+    ):
         """
         Args:
             med_config (str): path for the mixture of encoder-decoder model's configuration file
             image_size (int): input image size
             vit (str): model size of vision transformer
         """
-        from models.med import BertConfig, BertModel, BertLMHeadModel
         from models.blip import create_vit, init_tokenizer
+        from models.med import BertConfig, BertLMHeadModel, BertModel
 
         super().__init__()
 
-        self.visual_encoder, vision_width = create_vit(vit, image_size, vit_grad_ckpt, vit_ckpt_layer,
-                                                       drop_path_rate=0.1)
+        self.visual_encoder, vision_width = create_vit(
+            vit, image_size, vit_grad_ckpt, vit_ckpt_layer, drop_path_rate=0.1
+        )
         self.tokenizer = init_tokenizer(cased)
 
         encoder_config = BertConfig.from_json_file(med_config)
@@ -165,7 +168,7 @@ class BLIP_VQA(nn.Module):
             self.multitask_ffn = nn.Linear(encoder_config.hidden_size, 6)
 
         # TODO: add use_bottleneck flag
-        self.use_bottleneck = True
+        self.use_bottleneck = False
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
@@ -177,23 +180,29 @@ class BLIP_VQA(nn.Module):
         """
         batch_size, max_n_facts, C, H, W = images.shape
         images = images.view(-1, C, H, W)
-        image_embeds = self.visual_encoder(images)  # (batch * n_facts, seq_len, embed_size)
+        image_embeds = self.visual_encoder(
+            images
+        )  # (batch * n_facts, seq_len, embed_size)
 
         n_facts = [nf * image_embeds.size(1) for nf in n_facts]
-        image_embeds = image_embeds.view(batch_size, max_n_facts * image_embeds.size(1), image_embeds.size(2))
+        image_embeds = image_embeds.view(
+            batch_size, max_n_facts * image_embeds.size(1), image_embeds.size(2)
+        )
         return image_embeds, n_facts
 
     def enable_med(self):
-        tie_encoder_decoder_weights(self.text_encoder, self.text_decoder.bert, '', '/attention')
+        tie_encoder_decoder_weights(
+            self.text_encoder, self.text_decoder.bert, "", "/attention"
+        )
 
     def forward(
-            self,
-            image: torch.Tensor,
-            captions: List[List[str]],
-            question: List[str],
-            answer: List[str],
-            n_img_facts: List[int],
-            train=True,
+        self,
+        image: torch.Tensor,
+        captions: List[List[str]],
+        question: List[str],
+        answer: List[str],
+        n_img_facts: List[int],
+        train=True,
     ):
         """
         :param image: (batch, n_img_facts, channel, H, W)
@@ -203,34 +212,46 @@ class BLIP_VQA(nn.Module):
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
         """
-         
+
         bs, max_n_facts, C, H, W = image.shape
-        
+
         image_embeds, lengths = self.encode_images(image, n_img_facts)
         image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
-        question = self.tokenizer(question, padding='longest', return_tensors="pt").to(image.device)
+        question = self.tokenizer(question, padding="longest", return_tensors="pt").to(
+            image.device
+        )
         question.input_ids[:, 0] = self.tokenizer.enc_token_id
 
         # concatenate captions and tokenize them
-        captions = [f' {self.tokenizer.sep_token} '.join(cap) for cap in captions]
-        captions = self.tokenizer(captions, padding='longest', return_tensors="pt").to(image.device)
+        captions = [f" {self.tokenizer.sep_token} ".join(cap) for cap in captions]
+        captions = self.tokenizer(captions, padding="longest", return_tensors="pt").to(
+            image.device
+        )
         # mask the first token since we already have a sep_token_id set to the last token of question
         captions.input_ids[:, 0] = self.tokenizer.pad_token_id
         captions.attention_mask[:, 0] = 0
 
         # image-grounded text encoder
         input_ids = torch.cat([question.input_ids, captions.input_ids], dim=-1)
-        attention_mask = torch.cat([question.attention_mask, captions.attention_mask], dim=-1)
+        attention_mask = torch.cat(
+            [question.attention_mask, captions.attention_mask], dim=-1
+        )
         input_ids = input_ids[:, :512]
         attention_mask = attention_mask[:, :512]
 
-        cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float) # Why cross attention all ones. Why not just same as attention_mask? Just ones? Any better way to initialize cross attention?
-        cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0 # didn't seem to make a difference. What does this do?
+        cross_attention_weight = torch.ones_like(
+            input_ids, dtype=torch.float
+        )  # Why cross attention all ones. Why not just same as attention_mask? Just ones? Any better way to initialize cross attention?
+        cross_attention_weight[
+            torch.as_tensor(n_img_facts, dtype=torch.long) == 0
+        ] = 0.0  # didn't seem to make a difference. What does this do?
 
+        # import pdb; pdb.set_trace()
         # TODO: unify variable name of states output w/o bottleneck attention
         if not self.use_bottleneck:
-            question_output = self.text_encoder(
+            # TODO: look into question_output. Compare to bottleneck output
+            encoder_hidden_states = self.text_encoder(
                 input_ids,
                 attention_mask=attention_mask,
                 encoder_hidden_states=image_embeds,
@@ -250,29 +271,28 @@ class BLIP_VQA(nn.Module):
             text_embeds = self.text_encoder.embeddings(input_ids)
 
             # checkpoint 2: try to access the layers above
-            num_layers = 12 # according to config
+            num_layers = 12  # according to config
 
             bottleneck = None
             # TODO: add bottleneck attention mask
-            n_bottleneck = 4 # TODO: add n_bottleneck into self. API
+            n_bottleneck = 4  # TODO: add n_bottleneck into self. API
 
             # checkpoint 3: initialize bottleneck
-            bottleneck = torch.empty((bs, n_bottleneck, 768))
+            bottleneck = torch.empty((bs, n_bottleneck, 768)).to(image.device)
             nn.init.normal_(bottleneck, std=0.2)
             # init bottleneck attention mask
-            ba_mask = torch.ones_like(torch.empty(bs, n_bottleneck))
+            ba_mask = torch.ones_like(torch.empty(bs, n_bottleneck)).to(image.device)
 
             # checkpoint 4: check whether each layer can properly encode
             # TODO: add a official way to get num_layers, as mentioned in checkpoint 2.
             for i in range(num_layers):
                 bottle = []
 
-                import pdb; pdb.set_trace()
                 v_in = torch.concat([image_embeds, bottleneck], dim=1)
                 v_out = vit_layers[i](v_in)
                 # checkpoint 6: check output dimension
-                v_bottled = F.interpolate(v_out, (bs, n_bottleneck, 768))
-                bottle.append(v_out[:,-n_bottleneck:,:])
+                # v_bottled = F.interpolate(v_out, (bs, n_bottleneck, 768))
+                bottle.append(v_out[:, -n_bottleneck:, :])
                 # bottle.append(v_bottled)
 
                 t_in = torch.concat([text_embeds, bottleneck], dim=1)
@@ -280,50 +300,93 @@ class BLIP_VQA(nn.Module):
                 t_mask = torch.concat([attention_mask, ba_mask], dim=-1)
                 # TODO: resolve the bug on shape
                 # t_out = text_layers[i].get_attention(t_in, t_mask)
-                t_out = text_layers[i].get_attention(t_in) 
-                t_bottled = F.interpolate(t_out, (bs, n_bottleneck, 768))
-                bottle.append(t_out[:,-n_bottleneck:,:])
+                t_out = text_layers[i].get_attention(t_in)
+                # t_bottled = F.interpolate(t_out, (bs, n_bottleneck, 768))
+                bottle.append(t_out[:, -n_bottleneck:, :])
                 # bottle.append(t_bottled)
 
                 bottleneck = torch.mean(torch.stack(bottle, dim=-1), dim=-1)
 
                 # checkpoint 5: check bottleneck states and shape
 
+            encoder_hidden_states = bottleneck
+        import pdb
+
+        pdb.set_trace()
         # (batch, num_heads, question_len, image_embeds_len)
-        multimodal_cross_atts = None # Still None, what does it do here
+        multimodal_cross_atts = None  # Still None, what does it do here
         if train:
             if self.multitask_qcate:
-                mt_res = self.multitask_ffn(question_output.pooler_output)
+                if not self.use_bottleneck:
+                    mt_res = self.multitask_ffn(encoder_hidden_states.pooler_output)
+                else:
+                    mt_res = self.multitask_ffn(
+                        torch.mean(encoder_hidden_states, dim=1)
+                    )
             else:
                 mt_res = None
 
-            '''
+            """
             n: number of answers for each question
             weights: weight for each answer
-            '''
-            answer = self.tokenizer(answer, padding='longest', return_tensors="pt").to(image.device)
+            """
+            answer = self.tokenizer(answer, padding="longest", return_tensors="pt").to(
+                image.device
+            )
             answer.input_ids[:, 0] = self.tokenizer.bos_token_id
-            answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100)
+            answer_targets = answer.input_ids.masked_fill(
+                answer.input_ids == self.tokenizer.pad_token_id, -100
+            )
 
             # TODO: use bottleneck as output hidden states for decoding.
-            answer_output = self.text_decoder(answer.input_ids,
-                                              attention_mask=answer.attention_mask,
-                                              encoder_hidden_states=question_output.last_hidden_state,
-                                              encoder_attention_mask=attention_mask,
-                                              labels=answer_targets,
-                                              return_dict=True,
-                                              reduction='none',
-                                              )
+            if not self.use_bottleneck:
+                answer_output = self.text_decoder(
+                    answer.input_ids,
+                    attention_mask=answer.attention_mask,
+                    encoder_hidden_states=encoder_hidden_states.last_hidden_state,
+                    encoder_attention_mask=attention_mask,
+                    labels=answer_targets,
+                    return_dict=True,
+                    reduction="none",
+                )
+            else:
+                answer_output = self.text_decoder(
+                    answer.input_ids,
+                    attention_mask=answer.attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=ba_mask,
+                    labels=answer_targets,
+                    return_dict=True,
+                    reduction="none",
+                )
 
             loss = answer_output.loss
             loss = loss.sum() / image.size(0)
             return loss, mt_res, multimodal_cross_atts
         else:
             num_beams = 10
-            question_states = question_output.last_hidden_state.repeat_interleave(num_beams, dim=0)
-            question_atts = attention_mask.repeat_interleave(num_beams, dim=0).to(question_states.device)
+            if not self.use_bottleneck:
+                question_states = (
+                    encoder_hidden_states.last_hidden_state.repeat_interleave(
+                        num_beams, dim=0
+                    )
+                )
+                question_atts = attention_mask.repeat_interleave(num_beams, dim=0).to(
+                    question_states.device
+                )
+            else:
+                question_states = encoder_hidden_states.repeat_interleave(
+                    num_beams, dim=0
+                )
+                question_atts = ba_mask.repeat_interleave(num_beams, dim=0).to(
+                    question_states.device
+                )
 
-            bos_ids = torch.full((image.size(0), 1), fill_value=self.tokenizer.bos_token_id, device=image.device)
+            bos_ids = torch.full(
+                (image.size(0), 1),
+                fill_value=self.tokenizer.bos_token_id,
+                device=image.device,
+            )
 
             outputs = self.text_decoder.generate(
                 input_ids=bos_ids,
@@ -343,7 +406,7 @@ class BLIP_VQA(nn.Module):
             return answers
 
 
-def blip_vqa(pretrained='', **kwargs):
+def blip_vqa(pretrained="", **kwargs):
     from models.blip import load_checkpoint
 
     model = BLIP_VQA(**kwargs)
@@ -357,11 +420,15 @@ def tile(x, dim, n_tile):
     repeat_idx = [1] * x.dim()
     repeat_idx[dim] = n_tile
     x = x.repeat(*(repeat_idx))
-    order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
+    order_index = torch.LongTensor(
+        np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)])
+    )
     return torch.index_select(x, dim, order_index.to(x.device))
 
 
-def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key: str):
+def tie_encoder_decoder_weights(
+    encoder: nn.Module, decoder: nn.Module, base_model_prefix: str, skip_key: str
+):
     """
     https://github.com/salesforce/BLIP/blob/main/models/blip_pretrain.py
     """
@@ -373,12 +440,12 @@ def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_mod
         )
 
     def tie_encoder_to_decoder_recursively(
-            decoder_pointer: nn.Module,
-            encoder_pointer: nn.Module,
-            module_name: str,
-            uninitialized_encoder_weights: List[str],
-            skip_key: str,
-            depth=0,
+        decoder_pointer: nn.Module,
+        encoder_pointer: nn.Module,
+        module_name: str,
+        uninitialized_encoder_weights: List[str],
+        skip_key: str,
+        depth=0,
     ):
         assert isinstance(decoder_pointer, nn.Module) and isinstance(
             encoder_pointer, nn.Module
@@ -389,25 +456,28 @@ def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_mod
             if hasattr(decoder_pointer, "bias"):
                 assert hasattr(encoder_pointer, "bias")
                 encoder_pointer.bias = decoder_pointer.bias
-            print(module_name + ' is tied')
+            print(module_name + " is tied")
             return
 
         encoder_modules = encoder_pointer._modules
         decoder_modules = decoder_pointer._modules
         if len(decoder_modules) > 0:
             assert (
-                    len(encoder_modules) > 0
+                len(encoder_modules) > 0
             ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
-            all_encoder_weights = set([module_name + "/" + sub_name for sub_name in encoder_modules.keys()])
+            all_encoder_weights = set(
+                [module_name + "/" + sub_name for sub_name in encoder_modules.keys()]
+            )
             encoder_layer_pos = 0
             for name, module in decoder_modules.items():
                 if name.isdigit():
                     encoder_name = str(int(name) + encoder_layer_pos)
                     decoder_name = name
-                    if not isinstance(decoder_modules[decoder_name], type(encoder_modules[encoder_name])) and len(
-                            encoder_modules
-                    ) != len(decoder_modules):
+                    if not isinstance(
+                        decoder_modules[decoder_name],
+                        type(encoder_modules[encoder_name]),
+                    ) and len(encoder_modules) != len(decoder_modules):
                         # this can happen if the name corresponds to the position in a list module list of layers
                         # in this case the decoder has added a cross-attention that the encoder does not have
                         # thus skip this step and subtract one layer pos from encoder
@@ -435,4 +505,6 @@ def tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_mod
             uninitialized_encoder_weights += list(all_encoder_weights)
 
     # tie weights recursively
-    tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights, skip_key)
+    tie_encoder_to_decoder_recursively(
+        decoder, encoder, base_model_prefix, uninitialized_encoder_weights, skip_key
+    )
