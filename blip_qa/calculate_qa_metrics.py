@@ -4,7 +4,7 @@ from webqa_eval import webqa_fl, webqa_acc_approx
 
 
 def main():
-    with open('val_pred.json') as f:
+    with open('val_pred_img_only_multitask_med.json') as f:
         data = json.load(f)
 
     preds = []

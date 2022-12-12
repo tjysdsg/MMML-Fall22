@@ -10,23 +10,6 @@ Adapted from https://github.com/salesforce/BLIP
 
 # Train
 
-**Modify wandb API Key in `train_webqa.py`**
-
-```python
-def init_wandb(output_dir: str):
-    # need to change to your own API when using
-    os.environ['EXP_NUM'] = 'WebQA'
-    os.environ['WANDB_NAME'] = time.strftime(
-        '%Y-%m-%d %H:%M:%S',
-        time.localtime(int(round(time.time() * 1000)) / 1000)
-    )
-    os.environ['WANDB_API_KEY'] = 'b6bb57b85f5b5386441e06a96b564c28e96d0733'  # <----
-    os.environ['WANDB_DIR'] = output_dir
-    wandb.init(project="blip_webqa_qa_img_only")
-```
-
-**Train**
-
 ```bash
 python train_webqa.py
 python train_webqa.py --resume output/WebQA/checkpoint09.pth
@@ -106,6 +89,24 @@ Beam size = 10
   "acc": 0.5726921550810953,
   "fl": 0.4019844845903144,
   "qa": 0.23021336078919047
+}
+```
+
+### Validation set with only image-based questions + multitask qcate prediction + MED
+
+```json
+{
+  "color": 0.4980712955573291,
+  "shape": 0.23198198198198194,
+  "YesNo": 0.499597423510467,
+  "number": 0.39703989703989695,
+  "Others": 0.690406249036845,
+  "choose": 0.7012273309806671,
+  "f1": 0.46479211087420025,
+  "recall": 0.695045175711311,
+  "acc": 0.5721701829268717,
+  "fl": 0.34005613064036044,
+  "qa": 0.19456997847389923
 }
 ```
 
