@@ -68,7 +68,7 @@ class WebQATestDataset(Dataset):
                     #fact_input = self.tokenizer.decode(self.tokenizer.encode(data['img_fact']['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
                     question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
                     #text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
-                    text_input = 'is what described in the image related to text " {} " ?'.format(question_input)
+                    text_input = 'is " what does the image describe " related to text " {} " ?'.format(question_input)
                     source = self.tokenizer.encode(text_input, add_special_tokens=True)
                     data['source'] = torch.LongTensor(source)
                     data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
@@ -206,7 +206,7 @@ class WebQAValDataset(Dataset):
                     #fact_input = self.tokenizer.decode(self.tokenizer.encode(data['img_fact']['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
                     question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
                     #text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
-                    text_input = 'is what described in the image related to text " {} " ?'.format(question_input)
+                    text_input = 'is " what does the image describe " related to text " {} " ?'.format(question_input)
                     source = self.tokenizer.encode(text_input, add_special_tokens=True)
                     data['source'] = torch.LongTensor(source)
                     data['prev_output'] = torch.LongTensor([self.tokenizer.bos_token_id])
@@ -362,7 +362,7 @@ class WebQATrainDataset(Dataset):
                     #fact_input = self.tokenizer.decode(self.tokenizer.encode(pos_img_fact['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
                     question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
                     #text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
-                    text_input = 'is what described in the image related to text " {} " ?'.format(question_input)
+                    text_input = 'is " what does the image describe " related to text " {} " ?'.format(question_input)
                     source = self.tokenizer.encode(text_input, add_special_tokens=True)
                     pos_img_fact['source'] = source
                     pos_img_fact['prev_output'] = prev_output
@@ -371,7 +371,7 @@ class WebQATrainDataset(Dataset):
                     #fact_input = self.tokenizer.decode(self.tokenizer.encode(neg_img_fact['caption'], truncation=True, max_length=self.args.fact_max_length, add_special_tokens=False))
                     question_input = self.tokenizer.decode(self.tokenizer.encode(question, truncation=True, max_length=self.args.question_max_length, add_special_tokens=False))
                     #text_input = 'is text1 " {} " related to text2 " {} " ?'.format(fact_input, question_input)
-                    text_input = 'is what described in the image related to text " {} " ?'.format(question_input)
+                    text_input = 'is " what does the image describe " related to text " {} " ?'.format(question_input)
                     source = self.tokenizer.encode(text_input, add_special_tokens=True)
                     neg_img_fact['source'] = source
                     neg_img_fact['prev_output'] = prev_output
