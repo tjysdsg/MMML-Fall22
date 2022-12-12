@@ -2,7 +2,7 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
-import jax.numpy as jnp
+import torch.nn.functional as F
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -228,8 +228,6 @@ class BLIP_VQA(nn.Module):
         cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float) # Why cross attention all ones. Why not just same as attention_mask? Just ones? Any better way to initialize cross attention?
         cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0 # didn't seem to make a difference. What does this do?
 
-        import pdb; pdb.set_trace()
-
         # TODO: unify variable name of states output w/o bottleneck attention
         if not self.use_bottleneck:
             question_output = self.text_encoder(
@@ -247,31 +245,47 @@ class BLIP_VQA(nn.Module):
             # checkpoint 1: check if the layers can be accessed
             vit_layers = self.visual_encoder.blocks
             text_layers = self.text_encoder.encoder.layer
+            model_embeddings = self.text_encoder.embeddings
+            # init text embeds, to go through each layer
+            text_embeds = self.text_encoder.embeddings(input_ids)
 
             # checkpoint 2: try to access the layers above
             num_layers = 12 # according to config
 
             bottleneck = None
+            # TODO: add bottleneck attention mask
             n_bottleneck = 4 # TODO: add n_bottleneck into self. API
 
             # checkpoint 3: initialize bottleneck
-            bottleneck = self.param('bottleneck', nn.initializers.normal(stddev=0.02), (1, n_bottleneck, C))
-            bottleneck = jnp.tile(bottleneck, [bs, 1, 1])
+            bottleneck = torch.empty((bs, n_bottleneck, 768))
+            nn.init.normal_(bottleneck, std=0.2)
+            # init bottleneck attention mask
+            ba_mask = torch.ones_like(torch.empty(bs, n_bottleneck))
 
             # checkpoint 4: check whether each layer can properly encode
             # TODO: add a official way to get num_layers, as mentioned in checkpoint 2.
             for i in range(num_layers):
                 bottle = []
 
-                v_in = torch.concact([image_embeds, bottleneck], dim=-1)
+                import pdb; pdb.set_trace()
+                v_in = torch.concat([image_embeds, bottleneck], dim=1)
                 v_out = vit_layers[i](v_in)
-                bottle.append(v_out)
+                # checkpoint 6: check output dimension
+                v_bottled = F.interpolate(v_out, (bs, n_bottleneck, 768))
+                bottle.append(v_out[:,-n_bottleneck:,:])
+                # bottle.append(v_bottled)
 
-                t_in = torch.concact([input_ids, bottleneck], dim=-1)
-                t_out = text_layers[i](t_in)
-                bottle.append(t_out)
+                t_in = torch.concat([text_embeds, bottleneck], dim=1)
+                # TODO: add text attention masks
+                t_mask = torch.concat([attention_mask, ba_mask], dim=-1)
+                # TODO: resolve the bug on shape
+                # t_out = text_layers[i].get_attention(t_in, t_mask)
+                t_out = text_layers[i].get_attention(t_in) 
+                t_bottled = F.interpolate(t_out, (bs, n_bottleneck, 768))
+                bottle.append(t_out[:,-n_bottleneck:,:])
+                # bottle.append(t_bottled)
 
-                bottleneck = jnp.mean(jnp.stack(bottle, axis=-1), axis=-1)
+                bottleneck = torch.mean(torch.stack(bottle, dim=-1), dim=-1)
 
                 # checkpoint 5: check bottleneck states and shape
 
