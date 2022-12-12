@@ -134,10 +134,9 @@ def train(
         # evaluation
         if utils.is_main_process():
             metric = evaluation(model, val_loader, device)
-
             wandb.log({'eval_acc': metric['acc'], 'step': global_step})
             wandb.log({'eval_FL': metric['fl'], 'step': global_step})
-            wandb.log({'eval_qa': metric['acc'] * metric['fl'], 'step': global_step})
+            wandb.log({'eval_qa': metric['qa'], 'step': global_step})
 
 
 @torch.no_grad()

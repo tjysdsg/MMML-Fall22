@@ -16,7 +16,6 @@ def main():
         qcates.append(d['qcate'])
 
     metrics = calc_qa_metrics(preds, refs, qcates)
-    metrics['qa'] = metrics['fl'] * metrics['acc']
     print(metrics)
 
 
@@ -48,6 +47,12 @@ def calc_qa_metrics(preds: List[str], refs: List[str], qcates: List[str]):
         else:
             ret['recall'].append(eval_output)
         ret['acc'].append(eval_output)
+
+    qa_scores = []
+    assert len(bart_scores['scores']) == len(ret['acc'])
+    for fl, acc in zip(bart_scores['scores'], ret['acc']):
+        qa_scores.append(fl * acc)
+    ret['qa'] = qa_scores
 
     for key, value in ret.items():
         if key == 'fl':
