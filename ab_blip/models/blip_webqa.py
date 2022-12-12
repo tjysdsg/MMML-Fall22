@@ -5,6 +5,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from einops import rearrange
+
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
     """Make mask tensor containing indices of padded part.
@@ -168,7 +170,7 @@ class BLIP_VQA(nn.Module):
             self.multitask_ffn = nn.Linear(encoder_config.hidden_size, 6)
 
         # TODO: add use_bottleneck flag
-        self.use_bottleneck = False
+        self.use_bottleneck = True
 
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
@@ -262,6 +264,7 @@ class BLIP_VQA(nn.Module):
             )
 
         if self.use_bottleneck:
+            layer_norm = nn.LayerNorm(768)
 
             # checkpoint 1: check if the layers can be accessed
             vit_layers = self.visual_encoder.blocks
@@ -276,6 +279,8 @@ class BLIP_VQA(nn.Module):
             bottleneck = None
             # TODO: add bottleneck attention mask
             n_bottleneck = 4  # TODO: add n_bottleneck into self. API
+            text_bottle = nn.Linear(text_embeds.shape[1]+n_bottleneck, n_bottleneck, device=image.device)
+            image_bottle = nn.Linear(image_embeds.shape[1]+n_bottleneck, n_bottleneck, device=image.device)
 
             # checkpoint 3: initialize bottleneck
             bottleneck = torch.empty((bs, n_bottleneck, 768)).to(image.device)
@@ -286,33 +291,37 @@ class BLIP_VQA(nn.Module):
             # checkpoint 4: check whether each layer can properly encode
             # TODO: add a official way to get num_layers, as mentioned in checkpoint 2.
             for i in range(num_layers):
+                # bottle = nn.ModuleList()
                 bottle = []
 
-                v_in = torch.concat([image_embeds, bottleneck], dim=1)
-                v_out = vit_layers[i](v_in)
+                v_in = torch.concat([image_embeds, bottleneck], dim=1).to(image.device)
+                v_out = vit_layers[i](v_in).to(image.device)
                 # checkpoint 6: check output dimension
                 # v_bottled = F.interpolate(v_out, (bs, n_bottleneck, 768))
-                bottle.append(v_out[:, -n_bottleneck:, :])
-                # bottle.append(v_bottled)
+                # bottle.append(v_out[:, -n_bottleneck:, :])
+                v_out = rearrange(v_out, 'b t c -> b c t').to(image.device)
+                v_bottled = rearrange(image_bottle(v_out), 'b c t -> b t c').to(image.device)
+                bottle.append(v_bottled)
 
-                t_in = torch.concat([text_embeds, bottleneck], dim=1)
+                t_in = torch.concat([text_embeds, bottleneck], dim=1).to(image.device)
                 # TODO: add text attention masks
-                t_mask = torch.concat([attention_mask, ba_mask], dim=-1)
+                t_mask = torch.concat([attention_mask, ba_mask], dim=-1).to(image.device)
                 # TODO: resolve the bug on shape
                 # t_out = text_layers[i].get_attention(t_in, t_mask)
-                t_out = text_layers[i].get_attention(t_in)
-                # t_bottled = F.interpolate(t_out, (bs, n_bottleneck, 768))
-                bottle.append(t_out[:, -n_bottleneck:, :])
-                # bottle.append(t_bottled)
+                t_out = text_layers[i].get_attention(t_in).to(image.device)
+                t_out = rearrange(t_out, 'b t c -> b c t').to(image.device)
+                t_bottled = rearrange(text_bottle(t_out), 'b c t -> b t c').to(image.device)
+                bottle.append(t_bottled)
+                # bottle.append(t_out[:, -n_bottleneck:, :])
 
-                bottleneck = torch.mean(torch.stack(bottle, dim=-1), dim=-1)
+                bottleneck = torch.mean(torch.stack(bottle, dim=-1), dim=-1).to(image.device)
 
                 # checkpoint 5: check bottleneck states and shape
 
             encoder_hidden_states = bottleneck
         import pdb
 
-        pdb.set_trace()
+        # pdb.set_trace()
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None  # Still None, what does it do here
         if train:
