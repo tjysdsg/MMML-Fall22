@@ -41,7 +41,7 @@ def save_dataset(dataset, output_file_name):
 
 
 if __name__ == '__main__':
-    retrieved_submit_results = '../text-retriever/data/WebQA_test_data/submission_test.json'
+    retrieved_submit_results = '../ofa-retriever/data/WebQA_test_data/submission.json'
     full_test_dataset = './data/WebQA_test_data/test.jsonl'
     retrieved_dataset = get_retrieved_dataset(retrieved_submit_results, full_test_dataset)
     save_dataset(retrieved_dataset, './data/WebQA_test_data/retrieved_test.jsonl')

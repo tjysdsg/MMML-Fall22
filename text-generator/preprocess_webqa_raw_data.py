@@ -8,6 +8,7 @@ def generate_dataset_from_raw_WebQA(file_name, split):
         dataset = []
         for data_id, data in raw_dataset.items():
             if data['split'] == split:
+                Q_id = data['Guid']
                 Qcate = data['Qcate']
                 Q = data['Q'].replace('"', "")
                 A = data['A'][0].replace('"', "")
@@ -40,6 +41,7 @@ def generate_dataset_from_raw_WebQA(file_name, split):
                             fact['label'] = 0
                             neg_img_facts.append(fact)
                 dataset.append({
+                    'Q_id': Q_id,
                     'Q': Q, 
                     'A': A, 
                     'topic': topic,
@@ -91,21 +93,21 @@ def write_dataset(dataset, output_file_name):
 
 if __name__ == '__main__':
     # for deliberately split small-size WebQA subdata
-    file_name = './raw_data/WebQA_subdata/train_subWebqa.json'
+    file_name = '../text-retriever/raw_data/WebQA_subdata/train_subWebqa.json'
     train_dataset = generate_dataset_from_raw_WebQA(file_name, split='train')
-    file_name = './raw_data/WebQA_subdata/val_subWebqa.json'
+    file_name = '../text-retriever/raw_data/WebQA_subdata/val_subWebqa.json'
     val_dataset = generate_dataset_from_raw_WebQA(file_name, split='val')
     write_dataset(train_dataset, './data/WebQA_sub_data/train.jsonl')
     write_dataset(val_dataset, './data/WebQA_sub_data/val.jsonl')
 
     # for full-size WebQA data
-    file_name = './raw_data/WebQA_data_first_release/WebQA_train_val.json'
+    file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_train_val.json'
     train_dataset = generate_dataset_from_raw_WebQA(file_name, split='train')
     val_dataset = generate_dataset_from_raw_WebQA(file_name, split='val')
     write_dataset(train_dataset, './data/WebQA_full_data/train.jsonl')
     write_dataset(val_dataset, './data/WebQA_full_data/val.jsonl')
 
     # for full-size WebQA test data
-    file_name = './raw_data/WebQA_data_first_release/WebQA_test.json'
+    file_name = '../text-retriever/raw_data/WebQA_data_first_release/WebQA_test.json'
     test_dataset = generate_test_dataset_from_raw_WebQA(file_name)
     write_dataset(test_dataset, './data/WebQA_test_data/test.jsonl')

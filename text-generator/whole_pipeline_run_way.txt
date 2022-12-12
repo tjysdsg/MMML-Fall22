@@ -18,7 +18,7 @@ python preprocess_webqa_raw_data (different from the one used in text retrieval 
 
 sh webqa_finetune.sh --> get the model checkpoint 
 
-python get_retrieved_webqa.py --> get retrieved_test.jsonl from the retrieval results submission.json 
+python get_retrieved_webqa.py --> get retrieved_test.jsonl from the retrieval results submission.json (the submission.json is the submission.json file generated in the retriever outcome)
 
 sh webqa_inference.sh --> use the retrieved_test.jsonl and submission.json to construct final_submission.json 
 
