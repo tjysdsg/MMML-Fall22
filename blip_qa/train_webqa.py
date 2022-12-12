@@ -63,17 +63,17 @@ def train(
                 qa_loss, mt_res, _ = model(images, captions, question, answer, n_img_facts, train=True)
 
                 # Retrieval loss
-                if config['multitask_qcate']:
-                    # retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
-                    # retr_preds = [retr[i, :nf] for i, nf in enumerate(n_img_facts)]
-                    # retr_preds = torch.cat(retr_preds)
-                    # retr_loss = F.binary_cross_entropy_with_logits(
-                    #     retr_preds, retr_labels, reduction='sum'
-                    # ) / images.size(0)
-
-                    mt_labels = torch.as_tensor([qcate2index[qc] for qc in qcates], dtype=torch.long, device=device)
-                    mt_res = F.softmax(mt_res, dim=-1)
-                    mt_loss = F.cross_entropy(mt_res, mt_labels)
+                # if config['multitask_qcate']:
+                #     mt_labels = torch.as_tensor([qcate2index[qc] for qc in qcates], dtype=torch.long, device=device)
+                #     mt_res = F.softmax(mt_res, dim=-1)
+                #     mt_loss = F.cross_entropy(mt_res, mt_labels)
+                if config['multitask_retr']:
+                    retr_labels = torch.cat(retr_labels).to(device, non_blocking=True)
+                    retr_preds = [mt_res[i, :nf] for i, nf in enumerate(n_img_facts)]
+                    retr_preds = torch.cat(retr_preds)
+                    mt_loss = F.binary_cross_entropy_with_logits(
+                        retr_preds, retr_labels, reduction='sum'
+                    ) / images.size(0)
 
                     # overall loss
                     loss = (1 - alpha) * qa_loss + alpha * mt_loss
@@ -202,8 +202,7 @@ def main(args, config):
     print("Creating WebQA datasets")
     datasets = create_dataset(
         config,
-        # max_n_neg_facts=4 if config['multitask_retr'] else 0,
-        max_n_neg_facts=0,
+        max_n_neg_facts=4 if config['multitask_retr'] else 0,
         cased=config['cased'],
         image_only=config.get('image_only', True),
         no_img_input=config.get('no_img_input', False),
@@ -240,7 +239,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask_qcate=config['multitask_qcate'],
+            multitask_qcate=config['multitask_retr'],
         )
         model, _ = load_blip_state_dict(model, obj['model'])
         optimizer_state = obj['optimizer']
@@ -252,7 +251,7 @@ def main(args, config):
             vit=config['vit'],
             vit_grad_ckpt=config['vit_grad_ckpt'],
             vit_ckpt_layer=config['vit_ckpt_layer'],
-            multitask_qcate=config['multitask_qcate'],
+            multitask_qcate=config['multitask_retr'],
         )
 
     if config['med']:
