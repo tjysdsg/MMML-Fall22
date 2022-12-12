@@ -2,6 +2,7 @@ from typing import List
 import torch
 from torch import nn
 import numpy as np
+import jax.numpy as jnp
 
 
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
@@ -163,6 +164,9 @@ class BLIP_VQA(nn.Module):
             # self.retr_ffn = nn.Linear(self.num_patches, 1)
             self.multitask_ffn = nn.Linear(encoder_config.hidden_size, 6)
 
+        # TODO: add use_bottleneck flag
+        self.use_bottleneck = True
+
     def encode_images(self, images: torch.Tensor, n_facts: List[int]):
         """
         :param images: (batch, n_facts, channel, H, W)
@@ -199,7 +203,9 @@ class BLIP_VQA(nn.Module):
         :param n_img_facts: Batch of number of image facts
         :param train: train or inference
         """
-        import pdb; pdb.set_trace()
+         
+        bs, max_n_facts, C, H, W = image.shape
+        
         image_embeds, lengths = self.encode_images(image, n_img_facts)
         image_atts = ~make_pad_mask(lengths, image_embeds[:, :, 0], 1).to(image.device)
 
@@ -221,28 +227,58 @@ class BLIP_VQA(nn.Module):
 
         cross_attention_weight = torch.ones_like(input_ids, dtype=torch.float) # Why cross attention all ones. Why not just same as attention_mask? Just ones? Any better way to initialize cross attention?
         cross_attention_weight[torch.as_tensor(n_img_facts, dtype=torch.long) == 0] = 0.0 # didn't seem to make a difference. What does this do?
-        question_output = self.text_encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            cross_attention_weight=cross_attention_weight,
-            # output_attentions=True,
-            return_dict=True,
-        )
+
+        import pdb; pdb.set_trace()
+
+        # TODO: unify variable name of states output w/o bottleneck attention
+        if not self.use_bottleneck:
+            question_output = self.text_encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_atts,
+                cross_attention_weight=cross_attention_weight,
+                # output_attentions=True,
+                return_dict=True,
+            )
+
+        if self.use_bottleneck:
+
+            # checkpoint 1: check if the layers can be accessed
+            vit_layers = self.visual_encoder.blocks
+            text_layers = self.text_encoder.encoder.layer
+
+            # checkpoint 2: try to access the layers above
+            num_layers = 12 # according to config
+
+            bottleneck = None
+            n_bottleneck = 4 # TODO: add n_bottleneck into self. API
+
+            # checkpoint 3: initialize bottleneck
+            bottleneck = self.param('bottleneck', nn.initializers.normal(stddev=0.02), (1, n_bottleneck, C))
+            bottleneck = jnp.tile(bottleneck, [bs, 1, 1])
+
+            # checkpoint 4: check whether each layer can properly encode
+            # TODO: add a official way to get num_layers, as mentioned in checkpoint 2.
+            for i in range(num_layers):
+                bottle = []
+
+                v_in = torch.concact([image_embeds, bottleneck], dim=-1)
+                v_out = vit_layers[i](v_in)
+                bottle.append(v_out)
+
+                t_in = torch.concact([input_ids, bottleneck], dim=-1)
+                t_out = text_layers[i](t_in)
+                bottle.append(t_out)
+
+                bottleneck = jnp.mean(jnp.stack(bottle, axis=-1), axis=-1)
+
+                # checkpoint 5: check bottleneck states and shape
 
         # (batch, num_heads, question_len, image_embeds_len)
         multimodal_cross_atts = None # Still None, what does it do here
         if train:
             if self.multitask_qcate:
-                # multimodal_cross_atts = question_output.cross_attentions[-1]  # last layer's cross attention
-                # atts = torch.sum(multimodal_cross_atts, dim=2)  # (batch, num_heads, image_embeds_len)
-                # atts = torch.sum(atts, dim=1)  # (batch, image_embeds_len)
-
-                # # (batch, n_facts, num_patches)
-                # atts = atts.view(atts.shape[0], -1, self.num_patches)
-                # retr = self.retr_ffn(atts).squeeze(dim=-1)  # (batch, n_facts)
-
                 mt_res = self.multitask_ffn(question_output.pooler_output)
             else:
                 mt_res = None
@@ -255,6 +291,7 @@ class BLIP_VQA(nn.Module):
             answer.input_ids[:, 0] = self.tokenizer.bos_token_id
             answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100)
 
+            # TODO: use bottleneck as output hidden states for decoding.
             answer_output = self.text_decoder(answer.input_ids,
                                               attention_mask=answer.attention_mask,
                                               encoder_hidden_states=question_output.last_hidden_state,
