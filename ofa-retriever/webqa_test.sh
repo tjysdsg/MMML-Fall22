@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=0 python main.py --test \
+CUDA_VISIBLE_DEVICES=2 python main.py --test \
 --cache_dir ./cache/WebQA_test_data_cache/ \
 --image_dir ../../utils/webqa_data/images/ \
 --task webqa-finetune-mm \
