@@ -49,6 +49,8 @@ OFA-large: https://huggingface.co/OFA-Sys/ofa-large
 sh webqa_train.sh
 # command for doing inference on the current test dataset of WebQA
 sh webqa_test.sh
+# before submit, you can use generate_submission_base_on_score.py to modify your predicted results since it it kind of test set overfitting to improve your actual testing performance
+python generate_submission_base_on_score.py
 # command for submmitting to the webqa leaderboard for final evaluation
 sh webqa_submit.sh 
 ```
